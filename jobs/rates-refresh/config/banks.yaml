@@ -1,0 +1,41 @@
+# fetch: http = try plain HTTP first (falls back to browser if blocked); browser = always Playwright.
+banks:
+  - bank_id: kiwibank
+    name: Kiwibank
+    source_url: https://www.kiwibank.co.nz/personal-banking/home-loans/rates-and-fees/
+    fetch: http
+    mechanism: standard_rate
+    lem_base: null
+    fhl: {lender: true, lmi_passthrough_pct: 1.00}
+
+  - bank_id: westpac
+    name: Westpac NZ
+    source_url: https://www.westpac.co.nz/home-loans-mortgages/interest-rates/
+    fetch: browser   # fixed-rate table is JS-rendered; plain HTTP only returns floating + LEM bands
+    mechanism: lem
+    lem_base: unverified
+    fhl: {lender: true, lmi_passthrough_pct: null}
+
+  - bank_id: anz
+    name: ANZ NZ
+    source_url: https://www.anz.co.nz/rates-fees-agreements/home-loans/
+    fetch: browser   # rates sit in collapsed accordions
+    mechanism: standard_rate
+    lem_base: null
+    fhl: {lender: false, lmi_passthrough_pct: null}
+
+  - bank_id: asb
+    name: ASB
+    source_url: https://www.asb.co.nz/home-loans-mortgages/interest-rates-fees.html
+    fetch: http
+    mechanism: lem
+    lem_base: special
+    fhl: {lender: true, lmi_passthrough_pct: 1.2}
+
+  - bank_id: bnz
+    name: BNZ
+    source_url: https://www.bnz.co.nz/personal-banking/home-loans/compare-bnz-home-loan-rates
+    fetch: http
+    mechanism: lem
+    lem_base: special
+    fhl: {lender: false, lmi_passthrough_pct: null}

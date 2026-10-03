@@ -1,0 +1,34 @@
+# Build all three images in parallel. Run from the repo root:
+#   gcloud builds submit --config cloudbuild.yaml \
+#     --substitutions=_REGION=australia-southeast1,_REPO=REPO,SHORT_SHA=$(git rev-parse --short HEAD) .
+# (SHORT_SHA is only auto-filled by build triggers, so pass it for manual submits.)
+substitutions:
+  _REGION: australia-southeast1
+  _REPO: nz-buyer-report
+
+steps:
+  - id: rules-api
+    name: gcr.io/cloud-builders/docker
+    args: ['build', '-f', 'services/rules-api/Dockerfile',
+           '-t', '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/rules-api:${SHORT_SHA}', '.']
+    waitFor: ['-']
+
+  - id: kb-refresh
+    name: gcr.io/cloud-builders/docker
+    args: ['build', '-f', 'jobs/kb-refresh/Dockerfile',
+           '-t', '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/kb-refresh:${SHORT_SHA}', '.']
+    waitFor: ['-']
+
+  - id: rates-refresh
+    name: gcr.io/cloud-builders/docker
+    args: ['build', '-f', 'jobs/rates-refresh/Dockerfile',
+           '-t', '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/rates-refresh:${SHORT_SHA}', '.']
+    waitFor: ['-']
+
+images:
+  - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/rules-api:${SHORT_SHA}'
+  - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/kb-refresh:${SHORT_SHA}'
+  - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/rates-refresh:${SHORT_SHA}'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
