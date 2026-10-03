@@ -2,6 +2,8 @@
 
 ## Monorepo structure and ownership
 
+A and B share this one repo; the submission is a single GitHub link.
+
 | Directory | Owner | Notes |
 |---|---|---|
 | `services/property-api/` | A | calls rules-api (see section 11) |
@@ -116,7 +118,7 @@ gcloud run jobs create rates-refresh \
   --set-env-vars=DATA_BACKEND=firestore,GEMINI_MODEL=gemini-2.5-flash \
   --set-secrets=GEMINI_API_KEY=GEMINI_API_KEY:latest
 
-# kb-refresh (add the job's own env vars/secrets here if it needs any)
+# kb-refresh: same DATA_BACKEND=firestore as the rates job; it needs no Gemini secret (only DATA_BACKEND is read)
 gcloud run jobs create kb-refresh \
   --image=$IMG/kb-refresh:$TAG --region=$REGION \
   --service-account=$(SA jobs-sa) \
