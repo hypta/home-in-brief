@@ -130,6 +130,6 @@ banks:
     tos_note: "Terms allow standard web browsers only and name scraping and automation as prohibited methods (terms cover nzhl.co.nz; rates URL is on asb.co.nz, treated conservatively)."
     mechanism: lem
     lem_base: special
-    fhl: {lender: true, lmi_passthrough_pct: 1.2, special_applies: null}
+    fhl: {lender: true, lmi_passthrough_pct: null, special_applies: null}
     notes:
       - "NZHL-arranged loans are written by ASB; fixed rates match ASB but the floating rate differs."

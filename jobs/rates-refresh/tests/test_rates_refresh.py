@@ -328,7 +328,7 @@ def test_bank_filter_cli_keeps_other_banks(monkeypatch, capsys):
     monkeypatch.setattr(job, "make_store", lambda: store)
     monkeypatch.setattr(job, "load_banks", lambda: [bank("b1"), bank("b2"), bank("b3", tos="unclear")])
     monkeypatch.setattr(job, "fetch_bank", ok_fetcher)
-    monkeypatch.setattr(job, "gemini_extractor", lambda t, b: ext({"1y": 4.95}))
+    monkeypatch.setattr(job, "gemini_extractor", lambda t, b: ext({"1y": 4.95, "2y": 4.85}))
     assert job.main(["--bank", "b2"]) == 0
     banks = {b["bank_id"]: b for b in store.snapshots[0][1]["banks"]}
     assert set(banks) == {"b1", "b2", "b3"}
@@ -396,7 +396,7 @@ def test_same_host_https_redirect_is_followed():
 
 def test_http_fetch_reports_redirect_as_blocked(monkeypatch):
     from rates_refresh.fetch import RedirectBlocked
-    monkeypatch.setattr(fetchmod, "safe_get", lambda url: (_ for _ in ()).throw(RedirectBlocked("x")))
+    monkeypatch.setattr(fetchmod, "safe_get", lambda url, **k: (_ for _ in ()).throw(RedirectBlocked("x")))
     r = fetchmod.http_fetch("https://a.example/rates")
     assert r.blocked and r.block_reason.startswith("redirect_blocked")
 
@@ -502,3 +502,77 @@ def test_same_second_runs_get_distinct_ids_and_snapshot_keys():
     snaps = [k for k in db.data if k.startswith("rates_snapshots/")]
     assert len(runs) == 2 and len(snaps) == 2  # nothing overwritten (random suffix; 1-in-65536 clash is tolerable)
     assert all(re.fullmatch(r"job_runs/\d{8}T\d{6}Z-[0-9a-f]{4}", k) for k in runs)
+
+
+def test_carried_values_keep_original_capture_time():
+    prev = _prev_full()
+    prev["captured_at"] = "2026-09-01T00:00:00+12:00"
+    e = ext({"1y": 5.05})  # special 1y only; special 2y/3y and standard come from the old row
+    e.bands = []
+    e.floating = None
+    rec, _ = build_bank(bank(), e, "h", prev, "2026-10-04T06:00:00+13:00")
+    assert rec["captured_at"] == "2026-09-01T00:00:00+12:00"  # not refreshed
+    assert rec["last_fetched_at"] == "2026-10-04T06:00:00+13:00"
+    prov = rec["carried_over_captured_at"]
+    assert prov["special.2y"] == prov["standard.1y"] == prov["floating"] == "2026-09-01T00:00:00+12:00"
+    # a second partial refresh must not reset the clock of a value that is still carried
+    rec2, _ = build_bank(bank(), e, "h2", rec, "2026-10-05T06:00:00+13:00")
+    assert rec2["captured_at"] == "2026-09-01T00:00:00+12:00"
+    assert rec2["carried_over_captured_at"]["special.2y"] == "2026-09-01T00:00:00+12:00"
+    assert rec2["special"]["1y"] == 5.05 and rec2["special"]["2y"] == 4.9
+
+
+def test_carried_row_without_own_capture_time_uses_snapshot_time():
+    prev = _prev_full()
+    prev.pop("captured_at", None)
+    e = ext({"1y": 5.05})
+    rec, _ = build_bank(bank(), e, "h", prev, "2026-10-04T06:00:00+13:00", "2026-08-15T00:00:00+12:00")
+    assert rec["captured_at"] == "2026-08-15T00:00:00+12:00"
+
+
+def test_complete_extraction_refreshes_time_and_clears_provenance():
+    prev = _prev_full()
+    prev["carried_over_captured_at"] = {"special.3y": "2026-09-01T00:00:00+12:00"}
+    prev["notes"] = ["stale_since: 2026-09-30", "carried_over: special.3y kept from previous snapshot"]
+    full = ext({"1y": 5.0, "2y": 4.9, "3y": 4.8}, standard={"1y": 5.8, "2y": 5.7})
+    full.bands = [Band(lvr_from=80.01, lvr_to=85, margin_pct=0.3)]
+    rec, _ = build_bank(bank(), full, "h", prev, "2026-10-04T06:00:00+13:00")
+    assert rec["captured_at"] == "2026-10-04T06:00:00+13:00"
+    assert "carried_over_captured_at" not in rec and rec["notes"] == []
+
+
+def test_missing_lem_bands_keep_old_ones():
+    prev = _prev_full()
+    prev["low_equity"]["bands"] = [
+        {"lvr_from": 80.01, "lvr_to": 85, "margin_pct": 0.3},
+        {"lvr_from": 85.01, "lvr_to": 90, "margin_pct": 0.75},
+    ]
+    e = ext({"1y": 5.0, "2y": 4.9, "3y": 4.8}, standard={"1y": 5.8, "2y": 5.7})
+    e.bands = [Band(lvr_from=80.01, lvr_to=85, margin_pct=0.4)]  # only the first band extracted
+    rec, _ = build_bank(bank(), e, "h", prev, "t")
+    assert rec["low_equity"]["bands"] == [
+        {"lvr_from": 80.01, "lvr_to": 85, "margin_pct": 0.4},
+        {"lvr_from": 85.01, "lvr_to": 90, "margin_pct": 0.75},
+    ]
+    assert "low_equity.bands[85.01-90]" in rec["carried_over_captured_at"]
+    assert any(n.startswith("carried_over:") and "bands[85.01-90]" in n for n in rec["notes"])
+
+
+def test_redirect_hop_is_checked_against_robots():
+    from rates_refresh.fetch import RedirectBlocked, safe_get
+
+    def handler(req):
+        if req.url.path == "/rates":
+            return httpx.Response(302, headers={"location": "/private/rates"})
+        return httpx.Response(200, text="ok")
+
+    seen = []
+
+    def allow(url):
+        seen.append(url)
+        return (False, "robots_disallow") if "/private/" in url else (True, "ok")
+
+    with pytest.raises(RedirectBlocked, match="robots_disallow"):
+        safe_get("https://a.example/rates", client=_client(handler), allow=allow)
+    assert seen == ["https://a.example/private/rates"]
+    assert safe_get("https://a.example/rates", client=_client(handler), allow=lambda u: (True, "ok")).text == "ok"

@@ -108,8 +108,9 @@ def _host(url: str) -> str:
     return (urlsplit(url).hostname or "").lower()
 
 
-def safe_get(url: str, max_hops: int = 3, client=None) -> httpx.Response:
-    """GET without auto-redirects: every hop must be https and on the host the terms review covered."""
+def safe_get(url: str, max_hops: int = 3, client=None, allow=None) -> httpx.Response:
+    """GET without auto-redirects: every hop must be https, on the approved host, and (if `allow` is given)
+    pass allow(url) -> (ok, reason), e.g. a robots.txt check for the new path."""
     approved = _host(url)
     own = client is None
     client = client or httpx.Client(follow_redirects=False, timeout=20,
@@ -122,6 +123,10 @@ def safe_get(url: str, max_hops: int = 3, client=None) -> httpx.Response:
             url = str(httpx.URL(url).join(r.headers.get("location", "")))
             if urlsplit(url).scheme != "https" or _host(url) != approved:
                 raise RedirectBlocked(f"redirect to {_host(url) or 'unknown'} (approved host {approved})")
+            if allow is not None:
+                ok, why = allow(url)
+                if not ok:
+                    raise RedirectBlocked(f"redirect target not allowed: {why}")
         raise RedirectBlocked("too many redirects")
     finally:
         if own:
@@ -130,7 +135,7 @@ def safe_get(url: str, max_hops: int = 3, client=None) -> httpx.Response:
 
 def http_fetch(url: str) -> FetchResult:
     try:
-        r = safe_get(url)
+        r = safe_get(url, allow=robots_allows)
     except RedirectBlocked as e:
         return FetchResult("", "http", None, True, f"redirect_blocked: {e}")
     text = html_to_text(r.text)
@@ -169,6 +174,10 @@ def browser_fetch(url: str) -> FetchResult:
             status = resp.status if resp else None
             if _host(page.url) != _host(url) or urlsplit(page.url).scheme != "https":
                 return FetchResult("", "browser", status, True, f"redirect_blocked: landed on {_host(page.url)}")
+            if page.url != url:  # followed a redirect inside the browser: robots must allow the new path too
+                ok, why = robots_allows(page.url)
+                if not ok:
+                    return FetchResult("", "browser", status, True, f"redirect_blocked: {why}")
             # stop before any interaction if the site is refusing us
             first = page.inner_text("body")
             reason = detect_guard(status, first)

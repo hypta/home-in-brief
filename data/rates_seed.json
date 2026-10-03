@@ -36,7 +36,9 @@
         "lmi_passthrough_pct": 1.0,
         "special_applies": true
       },
-      "notes": [],
+      "notes": [
+        "FHL source (team research read 2026-09-27, paraphrased, not re-read since): Kainga Ora charges the bank 1.20% and the bank charges the customer 1.00% (lmi_passthrough_pct 1.0); special rates apply with 20%+ equity or a First Home Loan (special_applies true). Page: https://www.kiwibank.co.nz/personal-banking/home-loans/rates-and-fees/"
+      ],
       "captured_at": "2026-09-27T00:00:00+12:00"
     },
     {
@@ -191,7 +193,8 @@
         "special_applies": null
       },
       "notes": [
-        "First Home Loan is not charged LEM."
+        "First Home Loan is not charged LEM.",
+        "FHL source (team research read 2026-09-27, paraphrased, not re-read since): First Home Loan LMI is 1.2% and is passed through in full (lmi_passthrough_pct 1.2). special_applies is null: no statement found that First Home Loans get special rates. Page: https://www.asb.co.nz/home-loans-mortgages/interest-rates-fees.html"
       ],
       "captured_at": "2026-09-27T00:00:00+12:00"
     },
@@ -285,7 +288,7 @@
       },
       "notes": [
         "Floating: special 6.29, standard 7.09 (<20% deposit).",
-        "Seed compiled by hand from fetch-only page text, 2026-10-03"
+        "Rates captured on 2026-10-03 by a one-off automated fetch of the public rates page (before the terms review) and typed in by hand; no automated refresh since. Re-check by hand, see RATES_UPDATE.md."
       ],
       "captured_at": "2026-10-03T00:00:00+13:00"
     },
@@ -327,7 +330,8 @@
       },
       "notes": [
         "Low equity premium is 0.20-1.00% p.a. above 80% LVR; per-LVR bands are not published on the rates page, so bands are empty.",
-        "Seed compiled by hand from fetch-only page text, 2026-10-03"
+        "Rates captured on 2026-10-03 by a one-off automated fetch of the public rates page (before the terms review) and typed in by hand; no automated refresh since. Re-check by hand, see RATES_UPDATE.md.",
+        "FHL source (rates page, read 2026-10-03): \"Owner Occupied rates will apply with Owner Occupied lending where there is a minimum of 20% equity in the property or First Home Loans.\" and \"For Kainga Ora First Home Loans, a Lenders Mortgage Insurance premium is payable which is 1.2% of the loan balance. This can be added to the loan balance.\" Page: https://www.co-operativebank.co.nz/rates"
       ],
       "captured_at": "2026-10-03T00:00:00+13:00"
     },
@@ -370,7 +374,8 @@
       "notes": [
         "Special rates need 20% equity (30% for investors) or a First Home Loan with 5% equity.",
         "Floating effective for new lending 8 September 2026.",
-        "Seed compiled by hand from fetch-only page text, 2026-10-03"
+        "Rates captured on 2026-10-03 by a one-off automated fetch of the public rates page (before the terms review) and typed in by hand; no automated refresh since. Re-check by hand, see RATES_UPDATE.md.",
+        "FHL source (rates page, read 2026-10-03): \"These rates are only available for Residential Home Loans with at least 20% equity and Residential Investing Lending with at least 30% equity, or First Home Loans with at least 5% equity.\" and \"(including a 1.20% First Home Loan Premium Fee for First Home Loans)\". Page: https://www.sbsbank.co.nz/rates"
       ],
       "captured_at": "2026-10-03T00:00:00+13:00"
     },
@@ -407,7 +412,8 @@
       "notes": [
         "Only 6m, 1y, 18m and 2y terms. Special rates need salary credited to a Unity account (First Home Loans also get special rates).",
         "Excludes the 12-month First Home Buyer special of 4.15%.",
-        "Seed compiled by hand from fetch-only page text, 2026-10-03"
+        "Rates captured on 2026-10-03 by a one-off automated fetch of the public rates page (before the terms review) and typed in by hand; no automated refresh since. Re-check by hand, see RATES_UPDATE.md.",
+        "FHL source (rates page, read 2026-10-03): \"Special rates also apply to First Home Loans, supported by Kāinga Ora - Homes & Communities.\" LMI pass-through is not stated, so lmi_passthrough_pct is null. Page: https://unitymoney.co.nz/about-us/interest-rates/"
       ],
       "captured_at": "2026-10-03T00:00:00+13:00"
     },
@@ -442,7 +448,8 @@
       "notes": [
         "Only 6m, 1y and 2y terms.",
         "Standard = published rates for <20% equity.",
-        "Seed compiled by hand from fetch-only page text, 2026-10-03"
+        "Rates captured on 2026-10-03 by a one-off automated fetch of the public rates page (before the terms review) and typed in by hand; no automated refresh since. Re-check by hand, see RATES_UPDATE.md.",
+        "FHL source (rates and fees page, read 2026-10-03), under \"Kāinga Ora First Home Loan fees\": \"Lenders mortgage insurance premium 1.20% p.a. of the loan amount\". special_applies is null: not stated. Page: https://www.nbs.co.nz/interest-rates-and-fees"
       ],
       "captured_at": "2026-10-03T00:00:00+13:00"
     },
@@ -492,12 +499,13 @@
       },
       "fhl": {
         "lender": true,
-        "lmi_passthrough_pct": 1.2,
+        "lmi_passthrough_pct": null,
         "special_applies": null
       },
       "notes": [
         "NZHL-arranged loans are written by ASB; fixed rates match ASB but the floating rate differs.",
-        "Seed compiled by hand from fetch-only page text, 2026-10-03"
+        "Rates captured on 2026-10-03 by a one-off automated fetch of the public rates page (before the terms review) and typed in by hand; no automated refresh since. Re-check by hand, see RATES_UPDATE.md.",
+        "FHL: the NZHL-arranged rates page read on 2026-10-03 does not state LMI pass-through or whether First Home Loans get special rates, so both are null (ASB's own 1.2% is not assumed to apply). Page: https://www.asb.co.nz/lending/nzhl-interest-rates-fees.html"
       ],
       "captured_at": "2026-10-03T00:00:00+13:00"
     }

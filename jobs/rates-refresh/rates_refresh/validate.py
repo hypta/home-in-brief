@@ -54,24 +54,14 @@ def validate(special: dict, standard: dict | None, floating: float | None,
     return problems
 
 
-def _carry_missing(new: dict | None, old: dict | None, label: str, carried: list[str]) -> dict | None:
-    """Keep previous terms that the new extraction did not return (partial extraction must not delete data)."""
-    if not old:
-        return new
-    merged = dict(new or {})
-    for term, v in old.items():
-        if term not in merged:
-            merged[term] = v
-            carried.append(f"{label}.{term}")
-    return merged
-
-
-def build_bank(bank: dict, ext: Extracted, page_sha256: str, prev: dict | None, captured_at: str | None = None):
+def build_bank(bank: dict, ext: Extracted, page_sha256: str, prev: dict | None, captured_at: str | None = None,
+               prev_snapshot_captured_at: str | None = None):
     """Return (record, problems). record is None when validation fails.
 
     Only machine-extracted fields are replaced. Everything curated by hand in the previous row (fhl.*, notes,
-    name, mechanism ...) is kept; terms/floating/bands missing from the new extraction fall back to the old values
-    and are listed in a `carried_over:` note.
+    name, mechanism ...) is kept. Terms, floating or LEM bands missing from the new extraction fall back to the old
+    values; `carried_over_captured_at` maps each kept value to its original capture time, and a row that still
+    contains carried values keeps its old `captured_at` (and stale_since) instead of looking freshly captured.
     """
     special = to_rate_map(ext.special)
     standard = to_rate_map(ext.standard) or None
@@ -98,23 +88,51 @@ def build_bank(bank: dict, ext: Extracted, page_sha256: str, prev: dict | None, 
     old_le = (prev or {}).get("low_equity") or {}
     rec["low_equity"] = {**base["low_equity"], **old_le}
     rec["fhl"] = {**base["fhl"], **((prev or {}).get("fhl") or {})}
-    rec["notes"] = [n for n in rec["notes"] if not n.startswith(("stale_since:", "carried_over:"))]
 
-    carried: list[str] = []
-    rec["special"] = _carry_missing(special, (prev or {}).get("special"), "special", carried)
-    rec["standard"] = _carry_missing(standard, (prev or {}).get("standard"), "standard", carried)
+    prev_when = (prev or {}).get("captured_at") or prev_snapshot_captured_at or captured_at
+    prev_prov = (prev or {}).get("carried_over_captured_at") or {}
+
+    def when(label: str) -> str:  # a value carried again keeps the time it was first captured
+        return prev_prov.get(label) or prev_when
+
+    carried: dict[str, str] = {}
+    for group, new_vals in (("special", special), ("standard", standard)):
+        old_vals = (prev or {}).get(group) or {}
+        merged = dict(new_vals or {})
+        for term, v in old_vals.items():
+            if term not in merged:
+                merged[term] = v
+                carried[f"{group}.{term}"] = when(f"{group}.{term}")
+        rec[group] = merged if (merged or group == "special") else None
     floating = ext.floating
     if floating is None and (prev or {}).get("floating") is not None:
         floating = prev["floating"]
-        carried.append("floating")
+        carried["floating"] = when("floating")
     rec["floating"] = floating
-    if not bands and old_le.get("bands"):
-        bands = old_le["bands"]
-        carried.append("low_equity.bands")
-    rec["low_equity"]["bands"] = bands
-    rec["captured_at"] = captured_at
+    old_bands = old_le.get("bands") or []
+    merged_bands = list(bands)
+    for o in old_bands:
+        key = (o["lvr_from"], o["lvr_to"])
+        if any((n["lvr_from"], n["lvr_to"]) == key for n in bands):
+            continue
+        if any(n["lvr_from"] <= o["lvr_to"] and o["lvr_from"] <= n["lvr_to"] for n in bands):
+            continue  # a differently-cut new band covers it: the new data supersedes
+        merged_bands.append(o)
+        carried[f"low_equity.bands[{o['lvr_from']}-{o['lvr_to']}]"] = when(f"low_equity.bands[{o['lvr_from']}-{o['lvr_to']}]")
+    rec["low_equity"]["bands"] = sorted(merged_bands, key=lambda b: b["lvr_from"])
+
+    notes = [n for n in rec["notes"] if not n.startswith("carried_over:")]
+    if not carried:
+        notes = [n for n in notes if not n.startswith("stale_since:")]
+    rec["notes"] = notes
     rec["page_sha256"] = page_sha256
     rec["page_effective_date"] = ext.page_effective_date
+    rec["last_fetched_at"] = captured_at
     if carried:
+        rec["captured_at"] = prev_when
+        rec["carried_over_captured_at"] = carried
         rec["notes"].append("carried_over: " + ", ".join(carried) + " kept from previous snapshot")
+    else:
+        rec["captured_at"] = captured_at
+        rec.pop("carried_over_captured_at", None)
     return rec, []

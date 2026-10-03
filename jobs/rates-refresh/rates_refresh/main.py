@@ -57,7 +57,8 @@ def run(banks, store, extractor=None, fetcher=None, now: datetime | None = None)
                 reason = f"fetch blocked via {page.method}: {page.block_reason}"
             else:
                 ext = extractor(page.text, bank)
-                record, problems = build_bank(bank, ext, page.sha256, prev_by_id.get(bid), now.isoformat())
+                record, problems = build_bank(bank, ext, page.sha256, prev_by_id.get(bid), now.isoformat(),
+                                              prev.get("captured_at"))
                 if problems:
                     reason = "validation: " + "; ".join(problems)
         except Exception as e:  # one bank must never take down the others

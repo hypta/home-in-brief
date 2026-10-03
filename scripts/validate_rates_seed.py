@@ -83,6 +83,9 @@ def validate(snap: dict) -> list[str]:
             errs.append(f"{tag}: fhl.lender must be true/false")
         if fhl.get("special_applies") not in (True, False, None):
             errs.append(f"{tag}: fhl.special_applies must be true, false or null")
+        if (fhl.get("lmi_passthrough_pct") is not None or fhl.get("special_applies") is True) and not any(
+                str(n).startswith("FHL source") for n in b.get("notes") or []):
+            errs.append(f"{tag}: fhl.lmi_passthrough_pct / special_applies set but no note starting 'FHL source' gives the evidence")
         if not isinstance(b.get("notes", []), list):
             errs.append(f"{tag}: notes must be a list")
     return errs
