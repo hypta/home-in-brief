@@ -5,6 +5,10 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+def _n(v) -> str:
+    return " ".join(str(v).split()).casefold()
+
+
 log = logging.getLogger("rules-api.select")
 
 
@@ -24,7 +28,7 @@ def _check(key: str, arg: Any, ctx: SelectContext) -> Optional[bool]:
     if key == "always":
         return bool(arg)
     if key == "title_type":
-        return ctx.title_type is not None and ctx.title_type in arg
+        return ctx.title_type is not None and _n(ctx.title_type) in {_n(t) for t in arg}
     if key == "hazard_status":
         return any(
             h["priority"] == "primary" and h["status"] == arg for h in ctx.hazards
@@ -39,9 +43,7 @@ def _check(key: str, arg: Any, ctx: SelectContext) -> Optional[bool]:
         lo, hi = arg
         return ctx.year_range is not None and ctx.year_range[0] <= hi and lo <= ctx.year_range[1]
     if key == "cladding_in":
-        return ctx.cladding is not None and ctx.cladding.lower() in {
-            str(c).lower() for c in arg
-        }
+        return ctx.cladding is not None and _n(ctx.cladding) in {_n(c) for c in arg}
     return None
 
 

@@ -7,7 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
-from conftest import hashed
+from kbhelpers import hashed
 from app import calc
 from app.main import app
 from app.repo import LocalRepo
@@ -48,17 +48,17 @@ def test_api_422_names_field():
     c = TestClient(app)
     r = c.post("/v1/rules", content=b'{"user_inputs": {"rate_pct": -1200}}',
                headers={"content-type": "application/json"})
-    assert r.status_code == 422 and "rate_pct" in json.dumps(r.json()["detail"])
+    assert r.status_code == 422 and "rate_pct" in json.dumps(r.json()["error"]["fields"])
     r = c.post("/v1/rules", content=b'{"user_inputs": {"deposit": NaN}}',
                headers={"content-type": "application/json"})
-    assert r.status_code == 422 and "deposit" in json.dumps(r.json()["detail"])
+    assert r.status_code == 422 and "deposit" in json.dumps(r.json()["error"]["fields"])
 
 
 def test_api_deposit_over_price_422():
     r = TestClient(app).post("/v1/rules", json={"user_inputs": {"price_override": 500000, "deposit": 600000}})
     assert r.status_code == 422
-    d = r.json()["detail"][0]
-    assert d["loc"][-1] == "deposit" and "exceed" in d["msg"]
+    d = r.json()["error"]["fields"][0]
+    assert d["field"] == "user_inputs.deposit" and "exceed" in d["message"]
 
 
 def test_payment_numerically_stable():
@@ -119,7 +119,7 @@ def test_year_decade_and_int():
 # ---- 3. rounding consistency ----
 def test_lvr_80_04_uses_unrounded():
     out = run({"property": {"cv": found(1_000_000)}}, deposit=199_600)
-    assert out.lvr_pct == 80.0
+    assert out.lvr_pct == 80.04
     assert "lvr_over_80" in {f.id for f in out.flags}
     _, raw, _ = calc.compute_with_raw(PropertyContext(), UserInputs(price_override=1e6, deposit=199_600), SNAP, NOW)
     assert raw.lvr > 80 and matches({"lvr_over": 80}, SelectContext(lvr_pct=raw.lvr))

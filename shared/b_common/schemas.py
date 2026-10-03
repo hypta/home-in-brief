@@ -42,9 +42,11 @@ class Property(_Lenient):
 
 class Hazard(_Lenient):
     layer: str
-    priority: Literal["primary", "secondary"] = "secondary"
-    # Unknown strings are accepted here and mapped to "unavailable" by the engine.
-    status: str = "unavailable"
+    # null or unknown values are accepted here; the engine maps them to "secondary" /
+    # "unavailable" and adds a warning.
+    priority: Optional[str] = "secondary"
+    status: Optional[str] = "unavailable"
+    reason: Optional[str] = None
 
 
 class PropertyContext(_Lenient):
@@ -58,15 +60,17 @@ class ChatSupplied(_Lenient):
     cladding: Optional[str] = None
 
 
+MAX_AMOUNT = 1e10
+MAX_RATE_PCT = 30
 Amount = Annotated[float, Field(allow_inf_nan=False)]
 
 
 class UserInputs(_Lenient):
-    price_override: Optional[Amount] = Field(None, gt=0)
-    deposit: Optional[Amount] = Field(None, ge=0)
-    household_income: Optional[Amount] = Field(None, gt=0)
-    existing_debts: Optional[Amount] = Field(None, ge=0)
-    rate_pct: Optional[Amount] = Field(None, ge=0, le=100)
+    price_override: Optional[Amount] = Field(None, gt=0, le=MAX_AMOUNT)
+    deposit: Optional[Amount] = Field(None, ge=0, le=MAX_AMOUNT)
+    household_income: Optional[Amount] = Field(None, gt=0, le=MAX_AMOUNT)
+    existing_debts: Optional[Amount] = Field(None, ge=0, le=MAX_AMOUNT)
+    rate_pct: Optional[Amount] = Field(None, ge=0, le=MAX_RATE_PCT)
     household_type: Optional[
         Literal["single", "single_with_dependants", "multiple"]
     ] = None
@@ -182,6 +186,7 @@ class BankStandardScenario(BaseModel):
     monthly_range: list[int]
     fortnightly_range: list[int]
     stress_monthly: int
+    stress_delta_monthly: int  # stress_monthly minus the monthly payment at the highest rate
     per_bank: list[BankRate]
     source_ids: list[str] = Field(default_factory=lambda: ["bank_rates_snapshot", "rbnz_lvr"])
 
@@ -192,6 +197,7 @@ class UserRateScenario(BaseModel):
     monthly: int
     fortnightly: int
     stress_monthly: int
+    stress_delta_monthly: int
 
 
 class CandidateRates(BaseModel):
@@ -213,6 +219,7 @@ class FhlLender(BaseModel):
     monthly: Optional[int] = None
     fortnightly: Optional[int] = None
     stress_monthly: Optional[int] = None
+    stress_delta_monthly: Optional[int] = None
     monthly_if_full_premium: Optional[int] = None
 
 
@@ -223,12 +230,22 @@ class FirstHomeLoanScenario(BaseModel):
     income_caps: dict[str, int] = Field(default_factory=dict)
     lmi_amount: float  # full 1.2% premium; lenders may pass on less
     lmi_note: str = ""
+    # Section 6.4 top-level fields, kept for compatibility. Always null: see lenders[]
+    # for each lender's figures and monthly_range / stress_monthly_range for ranges.
+    monthly: Optional[int] = Field(
+        None, description="Always null. Per-lender figures are in lenders[]; the range is in monthly_range.")
+    stress_monthly: Optional[int] = Field(
+        None, description="Always null. Per-lender figures are in lenders[]; the range is in stress_monthly_range.")
+    stress_delta_monthly: Optional[int] = Field(
+        None, description="Always null. See lenders[].stress_delta_monthly.")
     lenders: list[FhlLender] = Field(default_factory=list)
     # Over lenders with a known rate; each uses its own pass-through where known,
     # otherwise the full premium.
     monthly_range: Optional[list[int]] = None
     fortnightly_range: Optional[list[int]] = None
     stress_monthly_range: Optional[list[int]] = None
+    # Lenders whose pass-through is unknown, so the ranges assume the full 1.2% premium.
+    full_premium_assumed_for: list[str] = Field(default_factory=list)
     source_ids: list[str] = Field(
         default_factory=lambda: ["kainga_ora_fhl_brochure", "kainga_ora_fhl"]
     )
@@ -239,6 +256,18 @@ Scenario = Annotated[
     Union[BankStandardScenario, UserRateScenario, FirstHomeLoanScenario],
     Field(discriminator="id"),
 ]
+
+
+DISCLAIMER = (
+    "Information only, not financial or legal advice. Figures come from published sources "
+    "on the dates shown; confirm with the lender or provider before deciding."
+)
+
+
+class HazardGap(BaseModel):
+    layer: str
+    status: str
+    reason: Optional[str] = None
 
 
 class RulesOutput(BaseModel):
@@ -253,9 +282,14 @@ class RulesOutput(BaseModel):
     rates_snapshot_date: Optional[str] = None
     stress_add_pp: float = 2.0
     scenarios: list[Scenario] = Field(default_factory=list)
-    flags: list[Flag] = Field(default_factory=list)
+    flags: list[Flag] = Field(
+        default_factory=list, description="Active flags only. Codes are listed in CODES.md.")
+    hazard_gaps: list[HazardGap] = Field(
+        default_factory=list, description="Primary hazard layers that could not be checked, with the original reason.")
     kb_items: list[str] = Field(default_factory=list)
     kb_includes_draft: bool = False
     kb_items_from_user_input: list[str] = Field(default_factory=list)
     kb_empty_reason: Optional[str] = None
-    warnings: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(
+        default_factory=list, description="Machine-readable warning codes. Codes are listed in CODES.md.")
+    disclaimer: str = DISCLAIMER

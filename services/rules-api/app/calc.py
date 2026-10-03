@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import math
 import re
+from zoneinfo import ZoneInfo
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Union
@@ -14,6 +15,7 @@ from b_common.schemas import (
     FhlLender,
     FirstHomeLoanScenario,
     Flag,
+    HazardGap,
     PriceUsed,
     PropertyContext,
     RatesSnapshot,
@@ -39,6 +41,8 @@ TERM_YEARS = 30
 MONTHLY, FORTNIGHTLY = 12, 26
 STALE_DAYS = 30
 HAZARD_STATUSES = {"intersects", "none", "unavailable", "not_found"}
+HAZARD_PRIORITIES = {"primary", "secondary"}
+NZ_TZ = ZoneInfo("Pacific/Auckland")
 
 
 class InputError(ValueError):
@@ -78,6 +82,7 @@ class Normalized:
     year_range: Optional[tuple[int, int]] = None
     cladding: Optional[str] = None
     hazards: list[dict] = field(default_factory=list)
+    hazard_gaps: list[HazardGap] = field(default_factory=list)
 
 
 @dataclass
@@ -141,11 +146,20 @@ def normalize(ctx: PropertyContext, ui: UserInputs, warnings: list[str]) -> Norm
         n.cladding = chat.cladding
 
     for h in ctx.hazards:
-        status = h.status
-        if status not in HAZARD_STATUSES:
+        status, priority = h.status, h.priority
+        if status is None:
+            warnings.append(f"hazard_status_missing:{h.layer}")
+            status = "unavailable"
+        elif status not in HAZARD_STATUSES:
             warnings.append(f"hazard_status_unknown:{h.layer}")
             status = "unavailable"
-        n.hazards.append({"layer": h.layer, "priority": h.priority, "status": status})
+        if priority is None or priority not in HAZARD_PRIORITIES:
+            warnings.append(f"hazard_priority_unknown:{h.layer}")
+            priority = "secondary"
+        n.hazards.append({"layer": h.layer, "priority": priority, "status": status})
+        if priority == "primary" and status in ("unavailable", "not_found"):
+            warnings.append(f"hazards_partial:{h.layer}")
+            n.hazard_gaps.append(HazardGap(layer=h.layer, status=status, reason=h.reason))
     primary = [h for h in n.hazards if h["priority"] == "primary"]
     if not primary or all(h["status"] == "unavailable" for h in primary):
         warnings.append("hazards_unavailable")
@@ -212,6 +226,7 @@ def bank_standard(
         monthly_range=[payment(loan, lo, MONTHLY), payment(loan, hi, MONTHLY)],
         fortnightly_range=[payment(loan, lo, FORTNIGHTLY), payment(loan, hi, FORTNIGHTLY)],
         stress_monthly=payment(loan, hi + STRESS_ADD_PP, MONTHLY),
+        stress_delta_monthly=payment(loan, hi + STRESS_ADD_PP, MONTHLY) - payment(loan, hi, MONTHLY),
         per_bank=per_bank,
     )
 
@@ -239,6 +254,7 @@ def _fhl_lender(bank, loan: float) -> FhlLender:
         if lmi is not None:
             lender.loan_with_lmi = loan + lmi
             lender.monthly, lender.fortnightly, lender.stress_monthly = _pay_set(loan + lmi, rate)
+            lender.stress_delta_monthly = lender.stress_monthly - lender.monthly
     return lender
 
 
@@ -277,8 +293,10 @@ def first_home_loan(
         return None
     known = [x for x in lenders if x.rate_pct is not None]
     # lenders with an unknown pass-through use the full premium in the ranges
-    m, f, s = [], [], []
+    m, f, s, assumed = [], [], [], []
     for x in known:
+        if x.lmi_amount is None:
+            assumed.append(x.bank_id)
         lmi = x.lmi_amount if x.lmi_amount is not None else x.lmi_amount_if_full_premium
         mm, ff, ss = _pay_set(loan + lmi, x.rate_pct)
         m.append(mm); f.append(ff); s.append(ss)
@@ -290,6 +308,7 @@ def first_home_loan(
         lmi_note=FHL_LMI_NOTE,
         lenders=lenders,
         monthly_range=_range(m), fortnightly_range=_range(f), stress_monthly_range=_range(s),
+        full_premium_assumed_for=assumed,
     )
 
 
@@ -310,7 +329,7 @@ def compute_with_raw(
         stress_add_pp=STRESS_ADD_PP,
     )
     if out.rates_snapshot_date:
-        age = now.date() - datetime.fromisoformat(out.rates_snapshot_date).date()
+        age = now.astimezone(NZ_TZ).date() - datetime.fromisoformat(out.rates_snapshot_date).date()
         if age > timedelta(days=STALE_DAYS):
             warnings.append("rates_snapshot_stale")
     income, debts = ui.household_income, ui.existing_debts or 0.0
@@ -326,9 +345,11 @@ def compute_with_raw(
         if ui.deposit > price:
             raise InputError("deposit", "must not exceed the price used (%s)" % price)
         loan = price - ui.deposit
+        if loan == 0:
+            warnings.append("cash_purchase_no_loan")
         lvr = raw.lvr = loan / price * 100
         out.loan_amount = round(loan, 2)
-        out.lvr_pct = round(lvr, 1)
+        out.lvr_pct = round(lvr, 2)
         if lvr > 80:
             flags.append(Flag(id="lvr_over_80", source_ids=["rbnz_lvr"]))
         if income is not None:
@@ -344,13 +365,16 @@ def compute_with_raw(
                 scenarios.append(bank_standard(loan, lvr, snap, warnings, ui.rate_pct))
             if ui.rate_pct is not None:
                 m, f, s = _pay_set(loan, ui.rate_pct)
-                scenarios.append(UserRateScenario(rate_pct=ui.rate_pct, monthly=m, fortnightly=f, stress_monthly=s))
+                scenarios.append(UserRateScenario(
+                    rate_pct=ui.rate_pct, monthly=m, fortnightly=f, stress_monthly=s,
+                    stress_delta_monthly=s - m))
             if snap is not None and lvr > 80:
                 scenarios.append(first_home_loan(ui.deposit, price, loan, ui, snap, flags, warnings))
             out.scenarios = [x for x in scenarios if x is not None]
             raw.fhl_eligible = any(x.id == "first_home_loan" for x in out.scenarios)
     if snap is None:
         warnings.append("rates_unavailable")
+    out.hazard_gaps = norm.hazard_gaps
     out.flags = flags
     out.warnings = warnings
     return out, raw, norm

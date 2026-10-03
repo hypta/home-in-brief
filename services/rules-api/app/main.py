@@ -9,6 +9,7 @@ from typing import Optional
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from b_common.content_hash import content_hash
 from b_common.schemas import (
@@ -39,6 +40,11 @@ def _visible(items: list[KbItem], warnings: Optional[list[str]] = None) -> list[
     for i in items:
         if i.status not in allowed:
             continue
+        if i.status == "verified" and not (i.verified_by and i.verified_at):
+            log.warning("kb item %s is verified without verified_by/verified_at", i.id)
+            if warnings is not None:
+                warnings.append(f"kb_verification_incomplete:{i.id}")
+            continue
         if i.status == "verified" and i.verified_content_hash != content_hash(i.model_dump()):
             log.warning("kb hash mismatch for %s", i.id)
             if warnings is not None:
@@ -53,23 +59,40 @@ def healthz() -> dict:
     return {"status": "ok"}
 
 
+def _error(status: int, code: str, message: str, fields: Optional[list[dict]] = None) -> JSONResponse:
+    """The single error shape for every 4xx/5xx: {"error": {code, message, fields}}."""
+    return JSONResponse(
+        status_code=status,
+        content={"error": {"code": code, "message": message, "fields": fields or []}},
+    )
+
+
 @app.exception_handler(RequestValidationError)
 def _validation_error(_: Request, exc: RequestValidationError) -> JSONResponse:
-    # drop "input"/"ctx": echoing NaN or Infinity back is not valid JSON
-    detail = [{"loc": list(e["loc"]), "msg": e["msg"], "type": e["type"]} for e in exc.errors()]
-    return JSONResponse(status_code=422, content={"detail": detail})
+    # "input" and "ctx" are dropped: echoing NaN or Infinity back is not valid JSON
+    fields = [
+        {"field": ".".join(str(x) for x in e["loc"] if x != "body"), "message": e["msg"]}
+        for e in exc.errors()
+    ]
+    return _error(422, "validation_error", "Request validation failed.", fields)
 
 
 @app.exception_handler(calc.InputError)
 def _input_error(_: Request, exc: calc.InputError) -> JSONResponse:
-    return JSONResponse(
-        status_code=422,
-        content={"detail": [{
-            "loc": ["body", "user_inputs", exc.field_name],
-            "msg": exc.reason,
-            "type": "value_error",
-        }]},
-    )
+    return _error(422, "validation_error", "Request validation failed.",
+                  [{"field": f"user_inputs.{exc.field_name}", "message": exc.reason}])
+
+
+@app.exception_handler(StarletteHTTPException)
+def _http_error(_: Request, exc: StarletteHTTPException) -> JSONResponse:
+    code = {404: "not_found", 405: "method_not_allowed"}.get(exc.status_code, "http_error")
+    return _error(exc.status_code, code, str(exc.detail))
+
+
+@app.exception_handler(Exception)
+def _unhandled(_: Request, exc: Exception) -> JSONResponse:
+    log.exception("unhandled error")
+    return _error(500, "internal_error", "Internal server error.")
 
 
 def _safe(fn, default, warnings: list[str], tag: str):

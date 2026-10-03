@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from conftest import hashed
+from kbhelpers import hashed
 from app import calc
 from app.main import app
 from app.repo import LocalRepo

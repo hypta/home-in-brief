@@ -359,6 +359,10 @@
             "type": "integer",
             "title": "Stress Monthly"
           },
+          "stress_delta_monthly": {
+            "type": "integer",
+            "title": "Stress Delta Monthly"
+          },
           "per_bank": {
             "items": {
               "$ref": "#/components/schemas/BankRate"
@@ -380,6 +384,7 @@
           "monthly_range",
           "fortnightly_range",
           "stress_monthly",
+          "stress_delta_monthly",
           "per_bank"
         ],
         "title": "BankStandardScenario"
@@ -632,6 +637,17 @@
             ],
             "title": "Stress Monthly"
           },
+          "stress_delta_monthly": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stress Delta Monthly"
+          },
           "monthly_if_full_premium": {
             "anyOf": [
               {
@@ -696,6 +712,42 @@
             "title": "Lmi Note",
             "default": ""
           },
+          "monthly": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Monthly",
+            "description": "Always null. Per-lender figures are in lenders[]; the range is in monthly_range."
+          },
+          "stress_monthly": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stress Monthly",
+            "description": "Always null. Per-lender figures are in lenders[]; the range is in stress_monthly_range."
+          },
+          "stress_delta_monthly": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stress Delta Monthly",
+            "description": "Always null. See lenders[].stress_delta_monthly."
+          },
           "lenders": {
             "items": {
               "$ref": "#/components/schemas/FhlLender"
@@ -744,6 +796,13 @@
               }
             ],
             "title": "Stress Monthly Range"
+          },
+          "full_premium_assumed_for": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Full Premium Assumed For"
           },
           "source_ids": {
             "items": {
@@ -806,18 +865,39 @@
             "title": "Layer"
           },
           "priority": {
-            "type": "string",
-            "enum": [
-              "primary",
-              "secondary"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
             ],
             "title": "Priority",
             "default": "secondary"
           },
           "status": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Status",
             "default": "unavailable"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
           }
         },
         "type": "object",
@@ -825,6 +905,35 @@
           "layer"
         ],
         "title": "Hazard"
+      },
+      "HazardGap": {
+        "properties": {
+          "layer": {
+            "type": "string",
+            "title": "Layer"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "layer",
+          "status"
+        ],
+        "title": "HazardGap"
       },
       "KbItem": {
         "properties": {
@@ -1254,7 +1363,16 @@
               "$ref": "#/components/schemas/Flag"
             },
             "type": "array",
-            "title": "Flags"
+            "title": "Flags",
+            "description": "Active flags only. Codes are listed in CODES.md."
+          },
+          "hazard_gaps": {
+            "items": {
+              "$ref": "#/components/schemas/HazardGap"
+            },
+            "type": "array",
+            "title": "Hazard Gaps",
+            "description": "Primary hazard layers that could not be checked, with the original reason."
           },
           "kb_items": {
             "items": {
@@ -1291,7 +1409,13 @@
               "type": "string"
             },
             "type": "array",
-            "title": "Warnings"
+            "title": "Warnings",
+            "description": "Machine-readable warning codes. Codes are listed in CODES.md."
+          },
+          "disclaimer": {
+            "type": "string",
+            "title": "Disclaimer",
+            "default": "Information only, not financial or legal advice. Figures come from published sources on the dates shown; confirm with the lender or provider before deciding."
           }
         },
         "type": "object",
@@ -1446,6 +1570,7 @@
             "anyOf": [
               {
                 "type": "number",
+                "maximum": 10000000000.0,
                 "exclusiveMinimum": 0.0
               },
               {
@@ -1458,6 +1583,7 @@
             "anyOf": [
               {
                 "type": "number",
+                "maximum": 10000000000.0,
                 "minimum": 0.0
               },
               {
@@ -1470,6 +1596,7 @@
             "anyOf": [
               {
                 "type": "number",
+                "maximum": 10000000000.0,
                 "exclusiveMinimum": 0.0
               },
               {
@@ -1482,6 +1609,7 @@
             "anyOf": [
               {
                 "type": "number",
+                "maximum": 10000000000.0,
                 "minimum": 0.0
               },
               {
@@ -1494,7 +1622,7 @@
             "anyOf": [
               {
                 "type": "number",
-                "maximum": 100.0,
+                "maximum": 30.0,
                 "minimum": 0.0
               },
               {
@@ -1549,6 +1677,10 @@
           "stress_monthly": {
             "type": "integer",
             "title": "Stress Monthly"
+          },
+          "stress_delta_monthly": {
+            "type": "integer",
+            "title": "Stress Delta Monthly"
           }
         },
         "type": "object",
@@ -1556,7 +1688,8 @@
           "rate_pct",
           "monthly",
           "fortnightly",
-          "stress_monthly"
+          "stress_monthly",
+          "stress_delta_monthly"
         ],
         "title": "UserRateScenario"
       },
