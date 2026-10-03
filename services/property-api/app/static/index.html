@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Home Buyer Copilot - property lookup (dev)</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<style>
+:root { --bg:#fff; --fg:#16202a; --muted:#5b6770; --line:#d7dde2; --card:#f6f8f9; --warn:#8a4b00; --warnbg:#fff1dc; --ok:#1d5c3a; --okbg:#e4f4ea; --na:#4a5560; --nabg:#e9edf0; --link:#0b5cad; }
+@media (prefers-color-scheme: dark) { :root { --bg:#12161a; --fg:#e6eaed; --muted:#9aa6b0; --line:#2c343b; --card:#1a2026; --warn:#ffc57a; --warnbg:#3d2a12; --ok:#8fd3a6; --okbg:#17321f; --na:#b8c1c9; --nabg:#262d34; --link:#7db7f0; } }
+* { box-sizing:border-box }
+body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.5 system-ui,sans-serif }
+main { max-width:860px; margin:0 auto; padding:24px 16px 64px }
+h1 { font-size:1.4rem; margin:0 0 4px } h2 { font-size:1.1rem; margin:28px 0 8px }
+p { margin:4px 0 } .muted { color:var(--muted); font-size:.9rem }
+/* scoped to the search box so the map's own controls keep their layout */
+label[for=q] { display:block; font-weight:600; margin-top:16px }
+#q { width:100%; padding:12px; font:inherit; color:inherit; background:var(--card); border:1px solid var(--line); border-radius:8px }
+#suggestions { list-style:none; margin:4px 0 0; padding:0 }
+#suggestions button { width:100%; min-height:44px; text-align:left; padding:10px 12px; font:inherit; color:inherit; background:var(--card); border:1px solid var(--line); border-radius:8px; margin-top:4px; cursor:pointer }
+#suggestions button:hover, #suggestions button:focus { border-color:var(--link) }
+.row { display:flex; gap:12px; align-items:baseline; padding:10px 12px; border:1px solid var(--line); border-radius:8px; margin-top:6px; background:var(--card); flex-wrap:wrap }
+.row b { flex:1 1 200px } .row span.detail { flex:2 1 260px }
+.tag { font-size:.8rem; font-weight:600; padding:2px 10px; border-radius:999px; white-space:nowrap }
+.intersects { color:var(--warn); background:var(--warnbg) } .found { color:var(--ok); background:var(--okbg) }
+/* "none" is neutral on purpose: not mapped is not the same as safe */
+.none,.unavailable,.not_found { color:var(--na); background:var(--nabg) }
+a { color:var(--link) } ul.links { padding-left:1.2em }
+.leaflet-container { color:#16202a; font:13px/1.4 system-ui,sans-serif }
+#map { height:420px; border:1px solid var(--line); border-radius:8px; margin-top:8px }
+.swatch { display:inline-block; width:12px; height:12px; border-radius:3px; margin-right:6px; vertical-align:-1px }
+details { margin-top:8px } pre { overflow-x:auto; background:var(--card); padding:12px; border-radius:8px; font-size:.8rem }
+</style>
+</head>
+<body>
+<main>
+<h1>Property lookup</h1>
+<p class="muted">Development page for property-api. Auckland addresses only. Information, not advice.</p>
+
+<label for="q">Auckland address</label>
+<input id="q" type="search" autocomplete="off" placeholder="Start typing, e.g. 44 Lorne Street" aria-describedby="status">
+<ul id="suggestions"></ul>
+<p id="status" class="muted" role="status" aria-live="polite"></p>
+<div id="report"></div>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const LAYERS = {flood_plain:"Flood plains", flood_prone_area:"Flood prone areas", overland_flow_path:"Overland flow paths",
+  coastal_inundation:"Coastal inundation (1% AEP)", landslide_shallow:"Landslide susceptibility - shallow",
+  landslide_large_scale:"Landslide susceptibility - large scale", liquefaction:"Liquefaction vulnerability",
+  tsunami_evacuation_zone:"Tsunami evacuation zone", coastal_erosion:"Coastal erosion (ASCIE 2130, RCP8.5+)"};
+const STATUS = {intersects:"mapped on parcel", none:"not mapped here", unavailable:"unavailable", not_found:"not found", found:"found"};
+const money = v => "$" + Number(v).toLocaleString("en-NZ");
+const getJSON = async url => {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("HTTP " + res.status);
+  return res.json();
+};
+const legend = (title, colours) => title + ": " + Object.entries(colours).map(([name, colour]) =>
+  `<span class="swatch" style="background:${colour}"></span>${name}`).join(" &nbsp; ");
+const notFound = f => `Not found (${esc(f.reason || f.status)})`;
+
+function hazardDetail(h) {
+  if (h.status === "unavailable" || h.status === "not_found") return notFound(h);
+  if (h.status === "none") return "The council does not show this layer on this parcel. This is not a statement that there is no risk.";
+  const bits = [];
+  if (h.susceptibility) bits.push("Highest class on the parcel: " + esc(h.susceptibility));
+  else if (h.classes.length) bits.push("Class on the parcel: " + h.classes.map(esc).join(", "));
+  if (h.overlap_pct != null) bits.push(`Covers ${h.overlap_pct}% of the parcel`);
+  if (h.crosses_parcel) bits.push("Crosses the parcel");
+  if (h.reason && h.reason.startsWith("point_method")) bits.push("Checked at the address point only; parcel coverage not calculated");
+  return bits.join(". ") || "Mapped on this parcel";
+}
+
+function render(c) {
+  const p = c.property, rows = [];
+  rows.push(["Capital value (CV)", p.cv, p.cv.status === "found" ? `${money(p.cv.value)} as at ${esc(p.cv.valuation_date)}. A council rating valuation, not a market value.` : null]);
+  rows.push(["Annual rates", p.annual_rates, p.annual_rates.status === "found" ? `${money(p.annual_rates.value)} for ${esc(p.annual_rates.rating_year)}` : null]);
+  rows.push(["Title type", p.title_type, p.title_type.value ? esc(p.title_type.value) : (p.title_type.linz_types || []).length ? `LINZ records: ${p.title_type.linz_types.map(esc).join(", ")} (${esc(p.title_type.reason)})` : null]);
+  const r = p.year_built.decade_range;
+  rows.push(["Decade built", p.year_built, r ? (r[0] ? `${r[0]}-${r[1]}` : `Before ${r[1] + 1}`) + " (from the council property category)" : null]);
+  const fact = (name, f, fmt = esc) => rows.push([name, f, f.status === "found" ? fmt(f.value) : null]);
+  const m2 = v => Number(v).toLocaleString("en-NZ") + " m²";
+  fact("Land value", p.land_value, money); fact("Value of improvements", p.improvements_value, money);
+  fact("Rateability", p.rateability); fact("Improvements", p.improvement_description);
+  fact("Land use", p.land_use); fact("Land area", p.land_area_m2, m2); fact("Total floor area", p.floor_area_m2, m2);
+  fact("Building site coverage", p.building_site_coverage_m2, m2); fact("Legal description", p.legal_description);
+  fact("Record of title", p.record_of_title); fact("Valuation number", p.valuation_number); fact("Local board", p.local_board);
+  rows.push(["Cladding", p.cladding, p.cladding.value ? esc(p.cladding.value) : null]);
+  rows.push(["Last sale", p.last_sale, p.last_sale.price ? `${money(p.last_sale.price)} on ${esc(p.last_sale.date)}` : null]);
+  const srcById = Object.fromEntries(c.sources.map(s => [s.id, s]));
+  $("report").innerHTML = `
+    <h2>${esc(c.address.matched || "Address not found")}</h2>
+    <p class="muted">${c.address.status === "found" ? `Parcel ${esc(c.parcel.parcel_id ?? "not matched")} · method: ${esc(c.parcel.spatial_method)} · generated ${esc(c.generated_at)}` : notFound(c.address)}</p>
+    <h2>Map</h2>
+    <div id="map" role="img" aria-label="Map of the parcel and nearby council hazard layers"></div>
+    <p id="mapnote" class="muted">Loading map…</p>
+    <p class="muted">${legend("Landslide classes", LANDSLIDE)}<br>${legend("Liquefaction classes", CLASS_COLOURS.liquefaction)}</p>
+    <h2>Hazard layers</h2>
+    ${c.hazards.map(h => `<div class="row"><b>${esc(LAYERS[h.layer] || h.layer)}</b><span class="tag ${h.status}">${esc(STATUS[h.status] || h.status)}</span>
+      <span class="detail">${hazardDetail(h)}<br><span class="muted">${h.data_date ? "Data date " + esc(h.data_date) + " · " : ""}${esc(srcById[h.source_id]?.title || h.source_id)}</span></span></div>`).join("")}
+    <h2>Property facts</h2>
+    ${rows.map(([name, f, text]) => `<div class="row"><b>${name}</b><span class="tag ${text ? "found" : f.status}">${text ? "found" : esc(STATUS[f.status] || f.status)}</span><span class="detail">${text || notFound(f)}</span></div>`).join("")}
+    <h2>Check the originals</h2>
+    <ul class="links">${c.links.map(l => `<li><a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.label)}</a>${{direct: " (opens this property)", site_search: " (opens a Google search for this address on that site)", home: " (search for the address there)"}[l.kind]}</li>`).join("")}</ul>
+    <details><summary>Sources and credits (${c.sources.length})</summary><ul>${c.sources.map(s => `<li><a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title)}</a> · ${esc(s.licence)}<br><span class="muted">${esc(s.attribution)}</span></li>`).join("")}</ul></details>
+    <details><summary>PropertyContext JSON</summary><pre>${esc(JSON.stringify(c, null, 1))}</pre></details>`;
+}
+
+const MAP_STYLE = {
+  flood_plain: {color:"#1f6fd1", fillOpacity:.35, weight:1}, flood_prone_area: {color:"#7b3fc4", fillOpacity:.3, weight:1, dashArray:"4 3"},
+  overland_flow_path: {color:"#0b3d91", weight:2, dashArray:"6 4", fillOpacity:0}, coastal_inundation: {color:"#0e8a7d", fillOpacity:.35, weight:1},
+  tsunami_evacuation_zone: {color:"#d9730d", fillOpacity:.25, weight:1}, coastal_erosion: {color:"#7a4a12", fillOpacity:.3, weight:1, dashArray:"1 4"}, parcel: {color:"#111", weight:3, fillOpacity:0}};
+// region-wide layers: coloured by class (light = lower), switched off at first
+const LANDSLIDE = {"Very Low":"#ffffb2", "Low":"#fecc5c", "Moderate":"#fd8d3c", "High":"#f03b20", "Very High":"#bd0026"};
+const CLASS_COLOURS = {landslide_shallow: LANDSLIDE, landslide_large_scale: LANDSLIDE,
+  liquefaction: {"Very Low":"#ffffb2", "Unlikely":"#fecc5c", "Possible":"#f03b20"}};
+let map, lookupSeq = 0;
+async function drawMap(request, mine) {
+  if (!window.L) { $("mapnote").textContent = "Map library could not be loaded."; return; }
+  if (map) { map.remove(); map = null; }
+  try {
+    const g = await request, [w, s, e, n] = g.bbox;
+    if (mine !== lookupSeq) return;  // a newer lookup owns the page
+    map = L.map("map").fitBounds([[s, w], [n, e]]);
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors · Hazard layers: Auckland Council · Parcel: LINZ (CC BY 4.0)'}).addTo(map);
+    // outline the queried window: layers are cut at its edge
+    L.rectangle([[s, w], [n, e]], {color: "#555", weight: 1, dashArray: "2 5", fill: false, interactive: false}).addTo(map);
+    const overlays = {}, counts = {};
+    for (const [layer, style] of Object.entries(MAP_STYLE)) {
+      const feats = g.features.filter(f => f.properties.layer === layer);
+      counts[layer] = feats.length;
+      if (!feats.length) continue;
+      const name = layer === "parcel" ? "Parcel boundary" : (LAYERS[layer] || layer);
+      overlays[`<span class="swatch" style="background:${style.color}"></span>${esc(name)}`] = L.geoJSON(feats, {style}).addTo(map);
+    }
+    for (const [layer, colours] of Object.entries(CLASS_COLOURS)) {
+      const feats = g.features.filter(f => f.properties.layer === layer);
+      if (!feats.length) continue;
+      overlays[esc(LAYERS[layer]) + " (by class)"] = L.geoJSON(feats, {
+        style: f => ({stroke: false, fillColor: colours[f.properties.class] || "#888", fillOpacity: .55}),
+        onEachFeature: (f, l) => l.bindPopup(esc(LAYERS[layer]) + ": " + esc(f.properties.class || "not classed"))});
+    }
+    const pt = g.features.find(f => f.properties.layer === "address");
+    if (pt) L.circleMarker([pt.geometry.coordinates[1], pt.geometry.coordinates[0]], {radius: 6, color: "#111", fillColor: "#fff", fillOpacity: 1}).addTo(map);
+    L.control.layers(null, overlays, {collapsed: false}).addTo(map);
+    const nearby = Object.keys(MAP_STYLE).filter(l => l !== "parcel" && counts[l]).map(l => LAYERS[l]);
+    $("mapnote").textContent = (nearby.length ? "Shown within about 120 m: " + nearby.join(", ") + "." : "No flood, coastal or tsunami layer is mapped within about 120 m.")
+      + " The dotted box is the area checked; layers are cut off at its edge. Landslide and liquefaction can be switched on in the layer list (click an area for its class)."
+      + (g.unavailable.length ? " Could not load: " + g.unavailable.join(", ") + "." : "");
+  } catch (e) { if (mine === lookupSeq) $("mapnote").textContent = "Map failed: " + e.message; }
+}
+
+async function lookup(a) {
+  const mine = ++lookupSeq;
+  clearTimeout(timer); ++seq;  // drop any address search still pending
+  $("suggestions").innerHTML = ""; $("q").value = a.full_address; $("report").innerHTML = "";
+  $("status").textContent = "Looking up council and LINZ data…";
+  const mapRequest = getJSON("/v1/map?address_id=" + a.address_id);  // runs alongside the lookup
+  mapRequest.catch(() => {});
+  try {
+    const ctx = await getJSON(`/v1/property-context?address_id=${a.address_id}&input=${encodeURIComponent(lastTyped)}`);
+    if (mine !== lookupSeq) return;  // a newer lookup owns the page
+    render(ctx);
+    $("status").textContent = "";
+    drawMap(mapRequest, mine);
+  } catch (e) { if (mine === lookupSeq) $("status").textContent = "Lookup failed: " + e.message; }
+}
+
+let timer, lastTyped = "", seq = 0;
+$("q").addEventListener("input", () => {
+  clearTimeout(timer);
+  const q = $("q").value.trim();
+  if (q.length < 3) { $("suggestions").innerHTML = ""; return; }
+  timer = setTimeout(async () => {
+    const mine = ++seq; lastTyped = q; $("status").textContent = "Searching addresses…";
+    try {
+      const list = await getJSON("/v1/addresses?q=" + encodeURIComponent(q));
+      if (mine !== seq) return;  // a newer search is in flight
+      $("status").textContent = list.length ? "" : "No Auckland address starts with that text.";
+      $("suggestions").innerHTML = "";
+      for (const a of list) {
+        const li = document.createElement("li"), b = document.createElement("button");
+        b.type = "button"; b.textContent = a.full_address; b.onclick = () => lookup(a);
+        li.append(b); $("suggestions").append(li);
+      }
+    } catch (e) { if (mine === seq) $("status").textContent = "Address search failed: " + e.message; }
+  }, 400);
+});
+</script>
+</body>
+</html>
