@@ -5,8 +5,7 @@
     "applies_when": {
       "cladding_in": [
         "monolithic",
-        "plaster",
-        "stucco"
+        "plaster"
       ]
     },
     "claim_en": "Settled.govt.nz links higher leak risk to plaster-style monolithic cladding systems on buildings from the late 1980s to the mid-2000s.",

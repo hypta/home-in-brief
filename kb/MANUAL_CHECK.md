@@ -22,7 +22,8 @@ everywhere (validator, seeding, kb-refresh) until it is reviewed again.
 3. Check that `claim_en` says no more than the quote and the page support (no added numbers, dates,
    conditions or advice).
 4. If correct, in the seed file set `status` to `verified`, `verified_by` to your name and `verified_at`
-   to today, then compute the hash and paste it into `verified_content_hash`:
+   to the current time as a full ISO timestamp (`date -u +%Y-%m-%dT%H:%M:%SZ`; a date-only value counts as
+   the start of that day), then compute the hash and paste it into `verified_content_hash`:
 
    ```
    python kb/validate.py --hash <item id>
@@ -37,7 +38,20 @@ everywhere (validator, seeding, kb-refresh) until it is reviewed again.
 
 What re-seeding does with existing Firestore documents: the git seed wins for content. A verified
 document stays verified only while its content hash still matches; a changed text becomes `needs_review`.
-Ids removed from the seed become `retired` and are no longer served. `last_check` is kept.
+`last_check` is kept. Withdrawals are never undone by re-seeding:
+
+- If kb-refresh moved an item to `needs_review` (it records `demoted_at` and `demoted_content_hash`), the
+  item stays `needs_review` as long as the content is the same, even if the seed says `verified`. It is
+  cleared only by a new review: the seed's `verified_at` must be strictly later than `demoted_at` and the
+  hash must match. Re-verify after looking at the page again, with a fresh timestamp.
+- A kb-refresh check that started before a newer review of the same content cannot demote that review.
+- Ids removed from the seed become `retired` (with `retired_at`) and are no longer served. A retired id
+  that reappears in the seed stays retired unless the seed item sets `"reinstate": true`, or is verified
+  with a `verified_at` later than `retired_at`. A seed item with `"status": "retired"` always retires.
+
+`published_or_updated` in `sources.json` is the date marked on the source page (publication date for
+settled.govt.nz, "last updated" for RBNZ and Auckland Council, the document date for PDFs), as
+`YYYY`, `YYYY-MM` or `YYYY-MM-DD`, or null if the page shows none. Re-check it when you re-verify.
 
 ## Items that need manual checks
 

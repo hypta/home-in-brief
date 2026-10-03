@@ -9,7 +9,8 @@
     "attribution": "Source: Real Estate Authority (settled.govt.nz); state the page publication date. Not a Creative Commons licence.",
     "tos_status": "unclear",
     "tos_url": "https://www.settled.govt.nz/terms-of-use-and-privacy/",
-    "tos_checked_at": "2026-10-03"
+    "tos_checked_at": "2026-10-03",
+    "published_or_updated": "2017-12-12"
   },
   {
     "id": "src_settled_insurance",
@@ -21,7 +22,8 @@
     "attribution": "Source: Real Estate Authority (settled.govt.nz); state the page publication date. Not a Creative Commons licence.",
     "tos_status": "unclear",
     "tos_url": "https://www.settled.govt.nz/terms-of-use-and-privacy/",
-    "tos_checked_at": "2026-10-03"
+    "tos_checked_at": "2026-10-03",
+    "published_or_updated": "2018-11-09"
   },
   {
     "id": "src_nhc_about",
@@ -33,7 +35,8 @@
     "attribution": "Source: naturalhazards.govt.nz, owned by Natural Hazards Commission Toka Tū Ake, used under CC BY-NC 4.0 (non-commercial).",
     "tos_status": "allowed",
     "tos_url": "https://www.naturalhazards.govt.nz/disclaimer/",
-    "tos_checked_at": "2026-10-03"
+    "tos_checked_at": "2026-10-03",
+    "published_or_updated": null
   },
   {
     "id": "src_settled_leaky",
@@ -45,7 +48,8 @@
     "attribution": "Source: Real Estate Authority (settled.govt.nz); state the page publication date. Not a Creative Commons licence.",
     "tos_status": "unclear",
     "tos_url": "https://www.settled.govt.nz/terms-of-use-and-privacy/",
-    "tos_checked_at": "2026-10-03"
+    "tos_checked_at": "2026-10-03",
+    "published_or_updated": "2017-12-12"
   },
   {
     "id": "rbnz_lvr",
@@ -57,7 +61,8 @@
     "attribution": "Source: Reserve Bank of New Zealand (rbnz.govt.nz), copyright RBNZ.",
     "tos_status": "prohibited",
     "tos_url": "https://www.rbnz.govt.nz/about-our-site/terms-of-use",
-    "tos_checked_at": "2026-10-03"
+    "tos_checked_at": "2026-10-03",
+    "published_or_updated": "2025-12-19"
   },
   {
     "id": "rbnz_dti",
@@ -69,7 +74,8 @@
     "attribution": "Source: Reserve Bank of New Zealand (rbnz.govt.nz), copyright RBNZ.",
     "tos_status": "prohibited",
     "tos_url": "https://www.rbnz.govt.nz/about-our-site/terms-of-use",
-    "tos_checked_at": "2026-10-03"
+    "tos_checked_at": "2026-10-03",
+    "published_or_updated": "2025-12-23"
   },
   {
     "id": "kainga_ora_fhl",
@@ -81,7 +87,8 @@
     "attribution": "Source: Kāinga Ora - Homes and Communities (kaingaora.govt.nz), copyright Kāinga Ora.",
     "tos_status": "allowed",
     "tos_url": "https://kaingaora.govt.nz/en_NZ/copyright-statement/",
-    "tos_checked_at": "2026-10-03"
+    "tos_checked_at": "2026-10-03",
+    "published_or_updated": "2025-05-22"
   },
   {
     "id": "src_akl_rating_valuation",
@@ -93,7 +100,8 @@
     "attribution": "Source: Auckland Council (ourauckland.aucklandcouncil.govt.nz), copyright Auckland Council.",
     "tos_status": "unclear",
     "tos_url": "https://www.aucklandcouncil.govt.nz/en/terms-and-conditions.html",
-    "tos_checked_at": "2026-10-03"
+    "tos_checked_at": "2026-10-03",
+    "published_or_updated": "2025-08-28"
   },
   {
     "id": "src_settled_ownership",
@@ -105,7 +113,8 @@
     "attribution": "Source: Real Estate Authority (settled.govt.nz); state the page publication date. Not a Creative Commons licence.",
     "tos_status": "unclear",
     "tos_url": "https://www.settled.govt.nz/terms-of-use-and-privacy/",
-    "tos_checked_at": "2026-10-03"
+    "tos_checked_at": "2026-10-03",
+    "published_or_updated": "2017-11-29"
   },
   {
     "id": "src_unittitles_guide",
@@ -117,7 +126,8 @@
     "attribution": "Source: Unit Titles (unittitles.govt.nz), Ministry of Business, Innovation and Employment, Crown copyright; reproduce the guide's disclaimers.",
     "tos_status": "allowed",
     "tos_url": "https://www.unittitles.govt.nz/about-us/copyright/",
-    "tos_checked_at": "2026-10-03"
+    "tos_checked_at": "2026-10-03",
+    "published_or_updated": "2024-05"
   },
   {
     "id": "bank_rates_snapshot",
@@ -129,7 +139,8 @@
     "attribution": "Source: each bank's published home loan rates page (URL per bank in rates_latest source_url).",
     "tos_status": "unclear",
     "tos_url": "see jobs/rates-refresh/config/banks.yaml",
-    "tos_checked_at": "2026-10-03"
+    "tos_checked_at": "2026-10-03",
+    "published_or_updated": null
   },
   {
     "id": "kainga_ora_fhl_brochure",
@@ -141,6 +152,7 @@
     "attribution": "Source: Kāinga Ora - Homes and Communities (kaingaora.govt.nz), copyright Kāinga Ora.",
     "tos_status": "allowed",
     "tos_url": "https://kaingaora.govt.nz/en_NZ/copyright-statement/",
-    "tos_checked_at": "2026-10-03"
+    "tos_checked_at": "2026-10-03",
+    "published_or_updated": "2026-05"
   }
 ]

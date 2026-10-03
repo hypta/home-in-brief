@@ -6,6 +6,7 @@ Any edit to a hashed field therefore silently turns a verified item back into ne
 """
 import hashlib
 import json
+from datetime import datetime, timezone
 import re
 import unicodedata
 
@@ -43,3 +44,16 @@ def effective_status(item: dict) -> str:
     """The status to trust: a verified item with unsound verification counts as needs_review."""
     status = item.get("status", "draft")
     return "needs_review" if status == "verified" and verification_problems(item) else status
+
+
+def parse_ts(value) -> datetime | None:
+    """ISO 8601 date or datetime -> aware UTC datetime. A date-only value means the START of that day
+    (UTC), so a same-day date-only verified_at never counts as later than a demotion on that day.
+    Returns None if absent or unparseable."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        dt = datetime.fromisoformat(value.strip())
+    except ValueError:
+        return None
+    return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt.astimezone(timezone.utc)

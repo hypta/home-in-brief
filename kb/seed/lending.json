@@ -5,7 +5,7 @@
     "applies_when": {
       "lvr_over": 80
     },
-    "claim_en": "The Reserve Bank explainer states that up to 25% of new loans can have an LVR above 80% (the explainer lists this under owner-occupiers).",
+    "claim_en": "The Reserve Bank explainer states that up to 25% of new loans can have an LVR above 80%.",
     "quote": "Up to 25% of new loans can have an LVR above 80%",
     "source_id": "rbnz_lvr",
     "source_url": "https://www.rbnz.govt.nz/education/explainers/loan-to-value-restrictions-explained",
@@ -173,6 +173,26 @@
     "source_type": "official",
     "licence": "Copyright Kāinga Ora; may be reproduced free of charge without further permission if accurate and not misleading, acknowledging the source and copyright status",
     "next_step_en": "Check the First Home Loan income criteria with a participating lender.",
+    "verified_by": null,
+    "verified_at": null,
+    "verified_content_hash": null,
+    "status": "draft",
+    "last_check": null
+  },
+  {
+    "id": "kb_low_deposit_higher_rates",
+    "topic": "lending",
+    "applies_when": {
+      "lvr_over": 80
+    },
+    "claim_en": "The Reserve Bank LVR explainer states that borrowers may pay higher interest rates and fees, such as a low equity premium or margin.",
+    "quote": "you may pay higher interest rates and fees, like a low equity premium or margin",
+    "source_id": "rbnz_lvr",
+    "source_url": "https://www.rbnz.govt.nz/education/explainers/loan-to-value-restrictions-explained",
+    "source_title": "Understanding loan-to-value restrictions - Reserve Bank of New Zealand",
+    "source_type": "official",
+    "licence": "Copyright Reserve Bank of New Zealand; may be reproduced without permission if RBNZ is acknowledged as source and owner (not Creative Commons)",
+    "next_step_en": "Ask each lender what interest rate and fees apply at your deposit level.",
     "verified_by": null,
     "verified_at": null,
     "verified_content_hash": null,

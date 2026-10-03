@@ -243,15 +243,15 @@ def test_firestore_verified_goes_needs_review_and_logs():
     db.data["sources/s_ok"] = {"id": "s_ok", "tos_status": "allowed", "url": URL}
     db.data["kb_items/a"] = make_item("verified", id="a")
     db.data["kb_items/b"] = make_item("draft", id="b")
-    job, code = run_job(FirestoreStore(db), fetch=page("redesigned page"), clock=lambda: "20260101T000000Z",
+    job, code = run_job(FirestoreStore(db), fetch=page("redesigned page"), clock=lambda: "20261101T000000Z",
                         rand=lambda: "ab12")
     assert code == 0 and job["checked"] == 2 and job["changed"] == 1
     assert db.data["kb_items/a"]["status"] == "needs_review"
     assert db.data["kb_items/b"]["status"] == "draft"
     assert db.data["kb_items/b"]["last_check"]["quote_found"] is False
     runs = [k for k in db.data if k.startswith("kb_source_checks/a/runs/")]
-    assert runs == ["kb_source_checks/a/runs/20260101T000000Z-ab12"]
-    assert db.data["job_runs/20260101T000000Z-ab12"]["job"] == "kb-refresh"
+    assert runs == ["kb_source_checks/a/runs/20261101T000000Z-ab12"]
+    assert db.data["job_runs/20261101T000000Z-ab12"]["job"] == "kb-refresh"
 
 
 def test_non_allowed_sources_are_not_fetched_and_status_unchanged(tmp_path):
@@ -439,5 +439,34 @@ def test_oversized_response_is_aborted(monkeypatch):
 
 def test_run_ids_have_random_suffix_and_are_unique_within_a_second():
     from main import make_run_id
-    ids = {make_run_id(lambda: "20260101T000000Z") for _ in range(50)}
+    ids = {make_run_id(lambda: "20261101T000000Z") for _ in range(50)}
     assert len(ids) > 40 and all(re.fullmatch(RUN_ID_RE, i) for i in ids)
+
+
+# ---- F27: a newer review of the same content beats an older check -------------------------------
+
+def _record(db, current, item, at):
+    run = check_item(item, fetch=page("quote is gone"), now="t")
+    run.update(run_id="r1", at=at)
+    FirestoreStore(db).record(item, run, next_status(item, run))
+    return db.data["kb_items/a"], db.data["kb_source_checks/a/runs/r1"]
+
+
+def test_review_after_the_check_started_is_not_demoted_by_that_check():
+    item = make_item("verified", id="a")
+    db = FakeDB()
+    reviewed = dict(item, verified_at="2026-10-04T12:00:00+00:00")
+    reviewed["verified_content_hash"] = content_hash(reviewed)  # same content, re-verified later
+    db.data["kb_items/a"] = reviewed
+    doc, rec = _record(db, reviewed, item, at="2026-10-04T10:00:00+00:00")  # check ran before the review
+    assert doc["status"] == "verified" and "demoted_at" not in doc
+    assert rec["superseded_by_review"] is True and doc["last_check"]["quote_found"] is False
+
+
+def test_check_after_the_review_demotes_and_records_when_and_what():
+    item = make_item("verified", id="a")
+    db = FakeDB()
+    db.data["kb_items/a"] = item  # verified_at 2026-10-04 (start of day)
+    doc, rec = _record(db, item, item, at="2026-10-04T10:00:00+00:00")
+    assert doc["status"] == "needs_review" and rec["superseded_by_review"] is False
+    assert doc["demoted_at"] == "2026-10-04T10:00:00+00:00" and doc["demoted_content_hash"] == content_hash(item)

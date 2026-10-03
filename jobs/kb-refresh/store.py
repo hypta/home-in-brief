@@ -9,7 +9,7 @@ SEED_DIR = Path(os.environ.get("KB_SEED_DIR") or ROOT / "kb" / "seed")
 OUT_DIR = Path(os.environ.get("OUT_DIR") or ROOT / "out")
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "kb"))
-from content_hash import content_hash  # noqa: E402
+from content_hash import content_hash, parse_ts  # noqa: E402
 
 
 def load_seed_items(seed_dir: Path = SEED_DIR) -> list[dict]:
@@ -46,6 +46,11 @@ class LocalStore:
             json.dumps(self.report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
+def _review_is_newer(current: dict, checked_at: str | None) -> bool:
+    reviewed, checked = parse_ts(current.get("verified_at")), parse_ts(checked_at)
+    return bool(reviewed and checked and reviewed >= checked)
+
+
 class FirestoreStore:
     def __init__(self, client=None, transactional=None):
         if client is None:
@@ -65,9 +70,11 @@ class FirestoreStore:
     def record(self, item: dict, run: dict, new_status: str) -> None:
         """Write the run, and update the item only if its content is still the version that was checked.
 
-        If a person edited or re-verified the item while the job was running, the run is kept for
-        audit with stale_content=True and the item is left alone. The status is changed only if it
-        is still what the job read.
+        If a person edited the item while the job was running, the run is kept for audit with
+        stale_content=True and the item is left alone. If the same content was re-verified at or after
+        the time of this check, the check cannot demote it (superseded_by_review=True). The status is
+        changed only if it is still what the job read; a demotion records demoted_at and
+        demoted_content_hash.
         """
         run_id = run.get("run_id") or run["at"]
         item_ref = self.db.collection("kb_items").document(item["id"])
@@ -78,13 +85,21 @@ class FirestoreStore:
             snap = item_ref.get(transaction=tx)
             current = snap.to_dict() if snap.exists else None
             stale = current is None or content_hash(current) != run.get("content_hash")
-            rec = dict(run, stale_content=stale)
+            # A review of the same content made after this check started is newer evidence than the check.
+            superseded = (not stale and new_status != item.get("status")
+                          and _review_is_newer(current, run.get("at")))
+            rec = dict(run, stale_content=stale, superseded_by_review=superseded)
             tx.set(run_ref, rec)
             if stale:
                 return
             update = {"last_check": rec}
-            if new_status != item.get("status") and current.get("status") == item.get("status"):
+            if (new_status != item.get("status") and current.get("status") == item.get("status")
+                    and not superseded):
                 update["status"] = new_status
+                if new_status == "needs_review":
+                    # lets kb/seed re-seeding tell a withdrawal from a review
+                    update["demoted_at"] = run.get("at")
+                    update["demoted_content_hash"] = run.get("content_hash")
             tx.update(item_ref, update)
 
         apply(self.db.transaction())

@@ -57,7 +57,7 @@ def seed_dir(tmp_path, items, sources=None):
     (d / "sources.json").write_text(json.dumps(sources or [{
         "id": "s", "title": "T", "url": "https://e.test/p", "licence": "L", "accessed_at": "2026-10-04",
         "source_type": "official", "attribution": "A", "tos_status": "allowed", "tos_url": "u",
-        "tos_checked_at": "2026-10-04"}]))
+        "tos_checked_at": "2026-10-04", "published_or_updated": None}]))
     (d / "a.json").write_text(json.dumps(items))
     return d
 
@@ -150,3 +150,99 @@ def test_seed_does_not_mutate_inputs():
     s0, e0 = copy.deepcopy(s), copy.deepcopy(e)
     seed.merge_doc(s, e)
     assert (s, e) == (s0, e0)
+
+
+# ---- re-seeding never undoes a withdrawal -------------------------------------------------------
+
+def demoted(it, at="2026-10-05T01:00:00+00:00"):
+    return dict(it, status="needs_review", demoted_at=at, demoted_content_hash=content_hash(it),
+                last_check={"quote_found": False, "at": at})
+
+
+def reverified(at, **kw):
+    it = verified(**kw)
+    it["verified_at"] = at
+    return it
+
+
+def test_reseed_does_not_undo_a_kb_refresh_demotion():
+    old = verified()  # verified_at 2026-10-04 (date only)
+    existing = demoted(old)
+    for seed_item in (old, reverified("2026-10-05"), reverified("2026-10-04T23:59:59+00:00"),
+                      reverified("2026-10-05T01:00:00+00:00")):  # not strictly later than the demotion
+        doc = seed.merge_doc(seed_item, existing)
+        assert doc["status"] == "needs_review", seed_item["verified_at"]
+        assert doc["demoted_at"] == existing["demoted_at"] and doc["last_check"] == existing["last_check"]
+
+
+def test_a_review_after_the_demotion_clears_it():
+    existing = demoted(verified())
+    doc = seed.merge_doc(reverified("2026-10-06T09:00:00+13:00"), existing)  # 2026-10-05T20:00Z
+    assert doc["status"] == "verified" and doc["verified_at"] == "2026-10-06T09:00:00+13:00"
+    assert doc["last_check"] == existing["last_check"]
+    assert seed.merge_doc(reverified("2026-10-07"), existing)["status"] == "verified"
+
+
+def test_demotion_of_other_content_does_not_block_a_fresh_verification():
+    old = verified()
+    existing = demoted(old)
+    new_text = reverified("2026-10-04", claim_en="Corrected claim.")
+    assert seed.merge_doc(new_text, existing)["status"] == "verified"
+
+
+def test_draft_seed_keeps_demotion():
+    assert seed.merge_doc(item(), demoted(verified()))["status"] == "needs_review"
+
+
+def retired_doc(**kw):
+    return dict(item(**kw), status="retired", retired_at="2026-10-05T00:00:00+00:00")
+
+
+def test_reseed_does_not_reinstate_a_retired_id():
+    for seed_item in (item(), verified(), reverified("2026-10-04")):
+        doc = seed.merge_doc(seed_item, retired_doc())
+        assert doc["status"] == "retired" and doc["retired_at"] == "2026-10-05T00:00:00+00:00"
+
+
+def test_retired_id_comes_back_only_when_the_seed_says_so():
+    assert seed.merge_doc(dict(item(), reinstate=True), retired_doc())["status"] == "draft"
+    doc = seed.merge_doc(dict(verified(), reinstate=True), retired_doc())
+    assert doc["status"] == "verified" and "reinstate" not in doc and "retired_at" not in doc
+    assert seed.merge_doc(reverified("2026-10-06T00:00:00+00:00"), retired_doc())["status"] == "verified"
+    assert seed.merge_doc(reverified("2026-10-05"), retired_doc())["status"] == "retired"  # same day: not later
+
+
+def test_explicit_retirement_in_seed_is_authoritative():
+    existing = verified()
+    doc = seed.merge_doc(dict(existing, status="retired"), existing, now="2026-10-05T00:00:00Z")
+    assert doc["status"] == "retired" and doc["retired_at"] == "2026-10-05T00:00:00Z"
+    doc2 = seed.merge_doc(dict(existing, status="retired"), None, now="N")
+    assert doc2["status"] == "retired"
+
+
+def test_plan_stamps_retired_at_only_via_main_and_keeps_retired_ids_quiet():
+    writes, retired = seed.plan([item(id="a")], {"a": retired_doc(id="a"), "gone": retired_doc(id="gone")}, "N")
+    assert writes["a"]["status"] == "retired" and retired == []
+
+
+def test_validator_rejects_bad_formats_that_would_break_the_api(tmp_path, capsys):
+    for i, bad in enumerate([dict(item(), id="Has Space"), dict(item(), claim_en=None),
+                             dict(item(), quote=5), dict(item(), applies_when="always"),
+                             dict(verified(), verified_at="yesterday"), dict(item(), reinstate="yes"),
+                             dict(item(), source_type="blog")]):
+        sub = tmp_path / str(i)
+        sub.mkdir()
+        assert errs(sub, [bad], capsys), bad
+    ok = tmp_path / "ok"
+    ok.mkdir()
+    assert errs(ok, [dict(item(), reinstate=True)], capsys) == []
+
+
+def test_partial_publication_dates_are_checked(tmp_path, capsys):
+    d = seed_dir(tmp_path, [item()])
+    s = json.loads((d / "sources.json").read_text())
+    s[0]["published_or_updated"] = "May 2024"
+    (d / "sources.json").write_text(json.dumps(s))
+    out = V.validate(d)
+    capsys.readouterr()
+    assert any("published_or_updated" in e for e in out)

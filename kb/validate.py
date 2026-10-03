@@ -4,11 +4,18 @@ Usage: python kb/validate.py            (exit code 1 on any problem)
        python kb/validate.py --hash <id>  (print the content_hash to paste into verified_content_hash)
 """
 import json
+import re
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from content_hash import content_hash, verification_problems  # noqa: E402
+from content_hash import content_hash, parse_ts, verification_problems  # noqa: E402
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "shared"))
+try:  # the schema rules-api loads items with; skipped if shared/ is not present (e.g. in a job image)
+    from b_common.schemas import KbItem as RulesApiKbItem
+except Exception:  # pragma: no cover
+    RulesApiKbItem = None
 
 SEED = Path(__file__).resolve().parent / "seed"
 
@@ -19,7 +26,9 @@ ITEM_FIELDS = [
 ]
 STATUSES = {"draft", "verified", "needs_review", "retired"}
 SOURCE_FIELDS = ["id", "title", "url", "licence", "accessed_at", "source_type",
-                 "attribution", "tos_status", "tos_url", "tos_checked_at"]
+                 "attribution", "tos_status", "tos_url", "tos_checked_at", "published_or_updated"]
+PARTIAL_DATE = re.compile(r"^\d{4}(-\d{2}(-\d{2})?)?$")
+ID_RE = re.compile(r"^[a-z0-9_]+$")
 TOS_STATUSES = {"allowed", "unclear", "prohibited"}
 TOPICS = {"build_era", "cladding", "title_type", "insurance", "lending", "auction", "hazard", "valuation"}
 SOURCE_TYPES = {"official", "secondary"}
@@ -49,6 +58,9 @@ def validate(seed_dir: Path = SEED) -> list[str]:
         source_ids.add(s["id"])
         if s.get("source_type") not in SOURCE_TYPES:
             errors.append(f"source {s['id']}: bad source_type")
+        if "published_or_updated" in s and s["published_or_updated"] is not None and not (
+                isinstance(s["published_or_updated"], str) and PARTIAL_DATE.match(s["published_or_updated"])):
+            errors.append(f"source {s['id']}: published_or_updated must be null or YYYY, YYYY-MM or YYYY-MM-DD")
         for k in ("licence", "attribution", "tos_status", "tos_url", "tos_checked_at"):
             if not isinstance(s.get(k), str) or not s[k].strip():
                 errors.append(f"source {s['id']}: {k} is missing or empty")
@@ -64,8 +76,22 @@ def validate(seed_dir: Path = SEED) -> list[str]:
             count += 1
             iid = it.get("id")
             where = f"{path.name}:{iid}"
-            if set(it) != set(ITEM_FIELDS):
-                errors.append(f"{where}: field mismatch {sorted(set(it) ^ set(ITEM_FIELDS))}")
+            if set(it) - {"reinstate"} != set(ITEM_FIELDS):
+                errors.append(f"{where}: field mismatch {sorted((set(it) - {'reinstate'}) ^ set(ITEM_FIELDS))}")
+            if "reinstate" in it and not isinstance(it["reinstate"], bool):
+                errors.append(f"{where}: reinstate must be true or false")
+            if not isinstance(iid, str) or not ID_RE.match(iid):
+                errors.append(f"{where}: id must match [a-z0-9_]+")
+            for k in ("claim_en", "quote", "next_step_en", "source_title", "licence"):
+                if not isinstance(it.get(k), str) or not it[k].strip():
+                    errors.append(f"{where}: {k} must be a non-empty string")
+            if it.get("verified_at") is not None and parse_ts(it["verified_at"]) is None:
+                errors.append(f"{where}: verified_at must be an ISO 8601 date or datetime")
+            if RulesApiKbItem is not None:
+                try:
+                    RulesApiKbItem.model_validate({k: v for k, v in it.items() if k != "reinstate"})
+                except Exception as e:
+                    errors.append(f"{where}: rules-api would not load this item: {str(e).splitlines()[0]}")
             if iid in seen:
                 errors.append(f"{where}: duplicate id")
             seen.add(iid)
