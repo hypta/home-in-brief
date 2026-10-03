@@ -43,6 +43,7 @@ def rules(req: RulesRequest) -> RulesOutput:
     sctx = SelectContext(
         title_type=p.title_type.value,
         hazards=[h.model_dump() for h in ctx.hazards],
+        fhl_eligible=any(x.id == "first_home_loan" for x in out.scenarios),
         lvr_pct=out.lvr_pct,
         dti=out.dti,
         year_built=p.year_built.value if p.year_built.value is not None else ui.chat_supplied.year_built,

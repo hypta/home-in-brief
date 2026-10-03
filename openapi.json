@@ -165,6 +165,17 @@
           "basis": {
             "type": "string",
             "title": "Basis"
+          },
+          "captured_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captured At"
           }
         },
         "type": "object",
@@ -188,6 +199,17 @@
           "source_url": {
             "type": "string",
             "title": "Source Url"
+          },
+          "captured_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captured At"
           },
           "page_sha256": {
             "anyOf": [

@@ -35,7 +35,8 @@
         "lender": true,
         "lmi_passthrough_pct": 1.0
       },
-      "notes": []
+      "notes": [],
+      "captured_at": "2026-09-27T00:00:00+12:00"
     },
     {
       "bank_id": "westpac",
@@ -96,7 +97,8 @@
       "notes": [
         "Special rates require salary deposited to Westpac.",
         "The base rate that LEM stacks on is unverified."
-      ]
+      ],
+      "captured_at": "2026-09-27T00:00:00+12:00"
     },
     {
       "bank_id": "anz",
@@ -133,7 +135,8 @@
       },
       "notes": [
         "Page date label lags the actual rates."
-      ]
+      ],
+      "captured_at": "2026-09-27T00:00:00+12:00"
     },
     {
       "bank_id": "asb",
@@ -185,7 +188,8 @@
       },
       "notes": [
         "First Home Loan is not charged LEM."
-      ]
+      ],
+      "captured_at": "2026-09-27T00:00:00+12:00"
     },
     {
       "bank_id": "bnz",
@@ -235,7 +239,8 @@
         "lender": false,
         "lmi_passthrough_pct": null
       },
-      "notes": []
+      "notes": [],
+      "captured_at": "2026-09-27T00:00:00+12:00"
     },
     {
       "bank_id": "tsb",
@@ -275,7 +280,8 @@
       "notes": [
         "Floating: special 6.29, standard 7.09 (<20% deposit).",
         "seed 由 fetch-only 頁面文字人工整理，2026-10-03"
-      ]
+      ],
+      "captured_at": "2026-10-03T00:00:00+13:00"
     },
     {
       "bank_id": "coop",
@@ -315,7 +321,8 @@
       "notes": [
         "Low equity premium is 0.20-1.00% p.a. above 80% LVR; per-LVR bands are not published on the rates page, so bands are empty.",
         "seed 由 fetch-only 頁面文字人工整理，2026-10-03"
-      ]
+      ],
+      "captured_at": "2026-10-03T00:00:00+13:00"
     },
     {
       "bank_id": "sbs",
@@ -356,7 +363,8 @@
         "Special rates need 20% equity (30% for investors) or a First Home Loan with 5% equity.",
         "Floating effective for new lending 8 September 2026.",
         "seed 由 fetch-only 頁面文字人工整理，2026-10-03"
-      ]
+      ],
+      "captured_at": "2026-10-03T00:00:00+13:00"
     },
     {
       "bank_id": "unity",
@@ -391,7 +399,8 @@
         "Only 6m, 1y, 18m and 2y terms. Special rates need salary credited to a Unity account (First Home Loans also get special rates).",
         "Excludes the 12-month First Home Buyer special of 4.15%.",
         "seed 由 fetch-only 頁面文字人工整理，2026-10-03"
-      ]
+      ],
+      "captured_at": "2026-10-03T00:00:00+13:00"
     },
     {
       "bank_id": "nbs",
@@ -424,7 +433,8 @@
         "Only 6m, 1y and 2y terms.",
         "Standard = published rates for <20% equity.",
         "seed 由 fetch-only 頁面文字人工整理，2026-10-03"
-      ]
+      ],
+      "captured_at": "2026-10-03T00:00:00+13:00"
     },
     {
       "bank_id": "nzhl",
@@ -477,7 +487,8 @@
       "notes": [
         "NZHL-arranged loans are written by ASB; fixed rates match ASB but the floating rate differs.",
         "seed 由 fetch-only 頁面文字人工整理，2026-10-03"
-      ]
+      ],
+      "captured_at": "2026-10-03T00:00:00+13:00"
     }
   ]
 }

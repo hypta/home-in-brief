@@ -20,6 +20,7 @@ WHEN_KEYS = {
     "always": lambda v: v is True,
     "title_type": lambda v: isinstance(v, list) and v and all(isinstance(x, str) for x in v),
     "hazard_status": lambda v: v == "intersects",
+    "fhl_eligible": lambda v: v is True,
     "lvr_over": lambda v: isinstance(v, (int, float)) and not isinstance(v, bool),
     "dti_over": lambda v: isinstance(v, (int, float)) and not isinstance(v, bool),
     "year_built_between": lambda v: isinstance(v, list) and len(v) == 2 and all(isinstance(x, int) for x in v),

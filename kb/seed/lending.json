@@ -41,7 +41,7 @@
     "id": "kb_fhl_premium",
     "topic": "lending",
     "applies_when": {
-      "lvr_over": 80
+      "fhl_eligible": true
     },
     "claim_en": "Kāinga Ora states the First Home Loan insurance premium is 1.2% of the loan value and, from 1 July 2025, the Government no longer funds part of it; it can be paid upfront or across the loan.",
     "quote": "the Government will not provide funding to cover part of the insurance premium",

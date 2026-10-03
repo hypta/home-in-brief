@@ -16,6 +16,7 @@ class SelectContext:
     dti: Optional[float] = None
     year_built: Optional[int] = None  # already resolved (property, else chat)
     cladding: Optional[str] = None
+    fhl_eligible: bool = False  # first_home_loan scenario was produced
 
 
 def _check(key: str, arg: Any, ctx: SelectContext) -> Optional[bool]:
@@ -28,6 +29,8 @@ def _check(key: str, arg: Any, ctx: SelectContext) -> Optional[bool]:
         return any(
             h["priority"] == "primary" and h["status"] == arg for h in ctx.hazards
         )
+    if key == "fhl_eligible":
+        return ctx.fhl_eligible == bool(arg)
     if key == "lvr_over":
         return ctx.lvr_pct is not None and ctx.lvr_pct > arg
     if key == "dti_over":

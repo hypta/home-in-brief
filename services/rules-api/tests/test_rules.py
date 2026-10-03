@@ -38,7 +38,7 @@ def test_team_spec_example():
     out = run(ctx, deposit=120000, household_income=150000, existing_debts=30000,
               household_type="multiple")
     assert out.price_used.basis == "cv" and out.price_used.valuation_date == "2024-05-01"
-    assert out.rates_snapshot_date == "2026-09-27"
+    assert out.rates_snapshot_date == "2026-09-27"  # oldest per-bank captured_at
     assert out.loan_amount == 880000
     assert out.lvr_pct == 88.0
     assert out.dti == 6.07
@@ -110,6 +110,7 @@ CASES = [
     ({"hazard_status": "intersects"},
      C(hazards=[{"layer": "flood", "priority": "primary", "status": "intersects"}]),
      C(hazards=[{"layer": "flood", "priority": "secondary", "status": "intersects"}])),
+    ({"fhl_eligible": True}, C(fhl_eligible=True), C(fhl_eligible=False)),
     ({"lvr_over": 80}, C(lvr_pct=88.0), C(lvr_pct=80.0)),
     ({"dti_over": 6}, C(dti=6.07), C(dti=5.9)),
     ({"year_built_between": [1990, 2005]}, C(year_built=1990), C(year_built=2006)),
@@ -177,6 +178,21 @@ def test_api_include_draft(client, monkeypatch):
     assert "always_draft" in out["kb_items"] and out["kb_includes_draft"] is True
 
 
+def test_api_fhl_eligible_key(client, tmp_path):
+    (tmp_path / "kb" / "seed" / "b.json").write_text(json.dumps([dict(
+        id="fhl_k", topic="t", claim_en="c", source_id="s", status="verified",
+        applies_when={"fhl_eligible": True})]))
+    assert "fhl_k" not in client.post("/v1/rules", json={}).json()["kb_items"]
+    body = {"property_context": BODY["property_context"],
+            "user_inputs": {**BODY["user_inputs"], "household_type": "multiple"}}
+    assert "fhl_k" in client.post("/v1/rules", json=body).json()["kb_items"]
+
+
+def test_snapshot_date_is_oldest_bank():
+    assert calc.snapshot_date(SNAP) == "2026-09-27"
+    assert all(b.captured_at for b in SNAP.banks)
+
+
 def test_api_empty_body_no_exception(client):
     r = client.post("/v1/rules", json={})
     assert r.status_code == 200 and r.json()["price_used"]["basis"] == "none"
@@ -185,7 +201,7 @@ def test_api_empty_body_no_exception(client):
 def test_api_kb_items_rates_sources_health(client):
     assert client.get("/healthz").status_code == 200
     assert [i["id"] for i in client.get("/v1/kb/items?ids=lvr_ver,always_draft,nope").json()] == ["lvr_ver"]
-    assert len(client.get("/v1/rates/latest").json()["banks"]) == 5
+    assert len(client.get("/v1/rates/latest").json()["banks"]) == len(SNAP.banks) >= 5
     assert client.get("/v1/sources").json()[0]["id"] == "s"
 
 

@@ -43,6 +43,16 @@ def _pay_set(loan: float, rate_pct: float) -> tuple[int, int, int]:
     )
 
 
+def snapshot_date(snap: Optional[RatesSnapshot]) -> Optional[str]:
+    """Oldest per-bank captured_at (date part); falls back to the top-level one."""
+    if snap is None:
+        return None
+    dates = [b.captured_at[:10] for b in snap.banks if b.captured_at]
+    if dates:
+        return min(dates)
+    return snap.captured_at[:10] if snap.captured_at else None
+
+
 def resolve_price(ctx: PropertyContext, ui: UserInputs) -> PriceUsed:
     if ui.price_override is not None:
         return PriceUsed(value=ui.price_override, basis="user")
@@ -83,7 +93,7 @@ def bank_standard(loan: float, lvr: float, snap: RatesSnapshot, warnings: list[s
         if rate is None:
             warnings.append(f"bank_skipped:{bank.bank_id}")
             continue
-        per_bank.append(BankRate(bank_id=bank.bank_id, rate_pct=rate, basis=basis))
+        per_bank.append(BankRate(bank_id=bank.bank_id, rate_pct=rate, basis=basis, captured_at=bank.captured_at))
     if not per_bank:
         return None
     lo, hi = min(b.rate_pct for b in per_bank), max(b.rate_pct for b in per_bank)
@@ -138,7 +148,7 @@ def compute(ctx: PropertyContext, ui: UserInputs, snap: Optional[RatesSnapshot])
     out = RulesOutput(
         generated_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
         price_used=resolve_price(ctx, ui),
-        rates_snapshot_date=(snap.captured_at or "")[:10] or None if snap else None,
+        rates_snapshot_date=snapshot_date(snap),
         deposit=ui.deposit,
         stress_add_pp=STRESS_ADD_PP,
     )

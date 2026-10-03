@@ -92,6 +92,7 @@ class BankRates(BaseModel):
     bank_id: str
     name: str
     source_url: str
+    captured_at: Optional[str] = None
     page_sha256: Optional[str] = None
     page_effective_date: Optional[str] = None
     special: dict[str, float] = Field(default_factory=dict)
@@ -153,6 +154,7 @@ class BankRate(BaseModel):
     bank_id: str
     rate_pct: float
     basis: str
+    captured_at: Optional[str] = None
 
 
 class BankStandardScenario(BaseModel):
