@@ -16,6 +16,10 @@ def load_seed_items(seed_dir: Path = SEED_DIR) -> list[dict]:
     return items
 
 
+def load_seed_sources(seed_dir: Path = SEED_DIR) -> dict[str, dict]:
+    return {s["id"]: s for s in json.loads((seed_dir / "sources.json").read_text(encoding="utf-8"))}
+
+
 class LocalStore:
     def __init__(self, seed_dir: Path = SEED_DIR, out_dir: Path = OUT_DIR):
         self.seed_dir, self.out_dir = seed_dir, out_dir
@@ -23,6 +27,9 @@ class LocalStore:
 
     def load_items(self) -> list[dict]:
         return load_seed_items(self.seed_dir)
+
+    def load_sources(self) -> dict[str, dict]:
+        return load_seed_sources(self.seed_dir)
 
     def record(self, item: dict, run: dict, new_status: str) -> None:
         self.report["runs"].append({"id": item["id"], "source_url": item["source_url"],
@@ -45,6 +52,9 @@ class FirestoreStore:
 
     def load_items(self) -> list[dict]:
         return [d.to_dict() | {"id": d.id} for d in self.db.collection("kb_items").stream()]
+
+    def load_sources(self) -> dict[str, dict]:
+        return {d.id: d.to_dict() for d in self.db.collection("sources").stream()}
 
     def record(self, item: dict, run: dict, new_status: str) -> None:
         ts = run["at"]

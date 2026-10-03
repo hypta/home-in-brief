@@ -2,28 +2,24 @@
 import hashlib
 import io
 import re
-import time
+import urllib.robotparser
+from urllib.parse import urlsplit
 import unicodedata
 from dataclasses import dataclass
 from html.parser import HTMLParser
 
 import httpx
 
+USER_AGENT = "home-buyer-copilot/0.1 (+https://github.com/hypta/home-buyer-copilot)"
+ROBOTS_AGENT = "home-buyer-copilot"
 HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
-    ),
-    "Accept": "text/html,application/xhtml+xml,application/pdf,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.9",
-    "Sec-Fetch-Mode": "navigate",
-    "Upgrade-Insecure-Requests": "1",
+    "User-Agent": USER_AGENT,
+    "Accept": "text/html,application/xhtml+xml,application/pdf;q=0.9,*/*;q=0.5",
+    "Accept-Language": "en-NZ,en;q=0.9",
 }
 TIMEOUT = 20.0
 BLOCK_STATUSES = {401, 403, 406, 429, 503}
 MIN_TEXT_LEN = 500  # shorter HTML text is a JS shell or challenge, not the real page
-BROWSER_TIMEOUT_MS = 60000
-PDF_RETRY_DELAYS = (3.0, 8.0)  # PDF hosts block intermittently and the browser is not an option for PDFs
 # Markers of CDN bot-challenge pages: they return 200 but contain none of the real page.
 BLOCK_MARKERS = ("_incapsula_resource", "cf-browser-verification", "just a moment...", "attention required! | cloudflare")
 
@@ -85,8 +81,7 @@ class FetchResult:
     text: str | None  # extracted page text; None when fetch failed or was blocked
     error: str | None
     network_error: bool = True  # True: failure is the network's/CDN's, not ours
-    blocked: bool = False  # looks like a CDN block / challenge / empty JS shell: worth retrying in a browser
-    method: str = "http"  # "http" | "browser"
+    blocked: bool = False  # CDN block, challenge, empty JS shell or robots.txt: recorded, never worked around
 
 
 def http_fetch(url: str, client: httpx.Client | None = None) -> FetchResult:
@@ -104,7 +99,7 @@ def http_fetch(url: str, client: httpx.Client | None = None) -> FetchResult:
         try:
             is_pdf = resp.content[:5] == b"%PDF-"
             if not is_pdf and url.lower().split("?")[0].endswith(".pdf"):
-                # PDFs never go to the browser; a non-PDF body here is a block page
+                # a non-PDF body on a .pdf URL is a block page
                 return FetchResult(resp.status_code, None, "expected PDF, got non-PDF body (likely CDN block)", blocked=True)
             if is_pdf:
                 text = pdf_to_text(resp.content)
@@ -124,57 +119,52 @@ def http_fetch(url: str, client: httpx.Client | None = None) -> FetchResult:
             client.close()
 
 
-def browser_fetch(url: str) -> FetchResult:
-    """Render the page in headless chromium. Gives up (no CAPTCHA solving) if still blocked."""
-    try:
-        from playwright.sync_api import sync_playwright
+class Fetcher:
+    """httpx only. Honest User-Agent, robots.txt first, no retry or workaround when blocked."""
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
+    def __init__(self, client: httpx.Client | None = None):
+        self.client = client or httpx.Client(headers=HEADERS, timeout=TIMEOUT, follow_redirects=True)
+        self._robots: dict[str, urllib.robotparser.RobotFileParser | str] = {}
+
+    def _robots_for(self, origin: str):
+        if origin not in self._robots:
             try:
-                ctx = browser.new_context(user_agent=HEADERS["User-Agent"], locale="en-NZ",
-                                          viewport={"width": 1366, "height": 900})
-                page = ctx.new_page()
-                resp = page.goto(url, wait_until="domcontentloaded", timeout=BROWSER_TIMEOUT_MS)
-                try:
-                    page.wait_for_load_state("networkidle", timeout=20000)
-                except Exception:
-                    pass
-                page.wait_for_timeout(2000)
-                html = page.content()  # full DOM, includes collapsed accordion text
-                status = resp.status if resp else None
-            finally:
-                browser.close()
-    except Exception as e:
-        return FetchResult(None, None, f"browser failed: {type(e).__name__}: {e}", method="browser")
-    if status is not None and status >= 400:
-        return FetchResult(status, None, f"HTTP {status} (browser)", method="browser")
-    text = html_to_text(html)
-    if len(normalize(text)) < MIN_TEXT_LEN or (
-            any(m in html.lower() for m in BLOCK_MARKERS) and len(html) < 5000):
-        return FetchResult(status, None, "still blocked in browser", method="browser")
-    return FetchResult(status, text, None, method="browser")
+                r = self.client.get(origin + "/robots.txt")
+            except httpx.HTTPError as e:
+                self._robots[origin] = f"robots.txt unavailable: {type(e).__name__}"
+                return self._robots[origin]
+            rp = urllib.robotparser.RobotFileParser()
+            if r.status_code in (401, 403) or r.status_code >= 500:
+                self._robots[origin] = f"robots.txt unavailable: HTTP {r.status_code}"  # be conservative
+            elif r.status_code >= 400:
+                rp.parse([])  # no robots.txt: everything allowed
+                self._robots[origin] = rp
+            else:
+                rp.parse(r.text.splitlines())
+                self._robots[origin] = rp
+        return self._robots[origin]
+
+    def __call__(self, url: str) -> FetchResult:
+        u = urlsplit(url)
+        rp = self._robots_for(f"{u.scheme}://{u.netloc}")
+        if isinstance(rp, str):
+            return FetchResult(None, None, rp, blocked=True)
+        if not rp.can_fetch(ROBOTS_AGENT, url):
+            return FetchResult(None, None, "disallowed by robots.txt", blocked=True)
+        return http_fetch(url, self.client)
+
+    def close(self) -> None:
+        self.client.close()
 
 
-def fetch_page(url: str, client: httpx.Client | None = None, browser=browser_fetch) -> FetchResult:
-    """httpx first; blocked/challenge/too-short HTML (never PDF) is retried once in a browser."""
-    res = http_fetch(url, client)
-    if url.lower().split("?")[0].endswith(".pdf"):
-        for delay in PDF_RETRY_DELAYS:
-            if res.text is not None or not res.blocked:
-                break
-            time.sleep(delay)
-            res = http_fetch(url, client)
-        return res
-    if res.text is not None or not res.blocked:
-        return res
-    out = browser(url)
-    if out.text is None:
-        out.error = f"{res.error}; browser: {out.error}"
-    return out
+def manual_run(now: str, reason: str) -> dict:
+    """Run record for an item whose source we must not fetch automatically (no request is made)."""
+    return {"at": now, "http_status": None, "quote_found": None, "page_sha256": None,
+            "error": None, "network_error": False, "blocked": False,
+            "manual_check_required": True, "manual_reason": reason}
 
 
-def check_item(item: dict, fetch=fetch_page, now: str = "") -> dict:
+def check_item(item: dict, fetch=http_fetch, now: str = "") -> dict:
     """Run record: {at, http_status, quote_found, page_sha256, error, network_error}.
 
     quote_found is None when the page could not be read (not the same as False).
@@ -187,7 +177,8 @@ def check_item(item: dict, fetch=fetch_page, now: str = "") -> dict:
         "page_sha256": None,
         "error": res.error,
         "network_error": bool(res.error) and res.network_error,
-        "fetch_method": res.method,
+        "blocked": res.blocked,
+        "manual_check_required": False,
     }
     if res.text is not None:
         norm = normalize(res.text)

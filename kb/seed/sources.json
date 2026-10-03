@@ -3,17 +3,25 @@
     "id": "src_settled_auction",
     "title": "Buying by auction - settled.govt.nz",
     "url": "https://www.settled.govt.nz/buying-a-home/making-an-offer/buying-by-auction/",
-    "licence": "unverified",
+    "licence": "Copyright Real Estate Authority (not Creative Commons); may be reproduced free of charge for personal or in-house use only",
     "accessed_at": "2026-10-03",
-    "source_type": "official"
+    "source_type": "official",
+    "attribution": "Source: Real Estate Authority (settled.govt.nz); state the page publication date. Not a Creative Commons licence.",
+    "tos_status": "unclear",
+    "tos_url": "https://www.settled.govt.nz/terms-of-use-and-privacy/",
+    "tos_checked_at": "2026-10-03"
   },
   {
     "id": "src_settled_insurance",
     "title": "What property buyers need to know about insurance - settled.govt.nz",
     "url": "https://www.settled.govt.nz/blog/what-property-buyers-need-to-know-about-insurance/",
-    "licence": "unverified",
+    "licence": "Copyright Real Estate Authority (not Creative Commons); may be reproduced free of charge for personal or in-house use only",
     "accessed_at": "2026-10-03",
-    "source_type": "official"
+    "source_type": "official",
+    "attribution": "Source: Real Estate Authority (settled.govt.nz); state the page publication date. Not a Creative Commons licence.",
+    "tos_status": "unclear",
+    "tos_url": "https://www.settled.govt.nz/terms-of-use-and-privacy/",
+    "tos_checked_at": "2026-10-03"
   },
   {
     "id": "src_nhc_about",
@@ -21,70 +29,106 @@
     "url": "https://www.naturalhazards.govt.nz/insurance-and-claims/about-nhcover/",
     "licence": "CC BY-NC 4.0",
     "accessed_at": "2026-10-03",
-    "source_type": "official"
+    "source_type": "official",
+    "attribution": "Source: naturalhazards.govt.nz, owned by Natural Hazards Commission Toka Tū Ake, used under CC BY-NC 4.0 (non-commercial).",
+    "tos_status": "allowed",
+    "tos_url": "https://www.naturalhazards.govt.nz/disclaimer/",
+    "tos_checked_at": "2026-10-03"
   },
   {
     "id": "src_settled_leaky",
     "title": "Learning about leaky buildings - settled.govt.nz",
     "url": "https://www.settled.govt.nz/buying-a-home/researching-the-property/learning-about-leaky-buildings/",
-    "licence": "unverified",
+    "licence": "Copyright Real Estate Authority (not Creative Commons); may be reproduced free of charge for personal or in-house use only",
     "accessed_at": "2026-10-03",
-    "source_type": "official"
+    "source_type": "official",
+    "attribution": "Source: Real Estate Authority (settled.govt.nz); state the page publication date. Not a Creative Commons licence.",
+    "tos_status": "unclear",
+    "tos_url": "https://www.settled.govt.nz/terms-of-use-and-privacy/",
+    "tos_checked_at": "2026-10-03"
   },
   {
     "id": "rbnz_lvr",
     "title": "Understanding loan-to-value restrictions - Reserve Bank of New Zealand",
     "url": "https://www.rbnz.govt.nz/education/explainers/loan-to-value-restrictions-explained",
-    "licence": "unverified",
+    "licence": "Copyright Reserve Bank of New Zealand; may be reproduced without permission if RBNZ is acknowledged as source and owner (not Creative Commons)",
     "accessed_at": "2026-10-03",
-    "source_type": "official"
+    "source_type": "official",
+    "attribution": "Source: Reserve Bank of New Zealand (rbnz.govt.nz), copyright RBNZ.",
+    "tos_status": "prohibited",
+    "tos_url": "https://www.rbnz.govt.nz/about-our-site/terms-of-use",
+    "tos_checked_at": "2026-10-03"
   },
   {
     "id": "rbnz_dti",
     "title": "Understanding debt-to-income (DTI) restrictions - Reserve Bank of New Zealand",
     "url": "https://www.rbnz.govt.nz/education/explainers/dti",
-    "licence": "unverified",
+    "licence": "Copyright Reserve Bank of New Zealand; may be reproduced without permission if RBNZ is acknowledged as source and owner (not Creative Commons)",
     "accessed_at": "2026-10-03",
-    "source_type": "official"
+    "source_type": "official",
+    "attribution": "Source: Reserve Bank of New Zealand (rbnz.govt.nz), copyright RBNZ.",
+    "tos_status": "prohibited",
+    "tos_url": "https://www.rbnz.govt.nz/about-our-site/terms-of-use",
+    "tos_checked_at": "2026-10-03"
   },
   {
     "id": "kainga_ora_fhl",
     "title": "First Home Loan - Insurance Premium Changes FAQs (22 May 2025) - Kāinga Ora",
     "url": "https://kaingaora.govt.nz/assets/Home-ownership/First-Home-Loan-brochures/FHL-Insurance-Premium_FAQs.pdf",
-    "licence": "unverified",
+    "licence": "Copyright Kāinga Ora; may be reproduced free of charge without further permission if accurate and not misleading, acknowledging the source and copyright status",
     "accessed_at": "2026-10-03",
-    "source_type": "official"
+    "source_type": "official",
+    "attribution": "Source: Kāinga Ora - Homes and Communities (kaingaora.govt.nz), copyright Kāinga Ora.",
+    "tos_status": "allowed",
+    "tos_url": "https://kaingaora.govt.nz/en_NZ/copyright-statement/",
+    "tos_checked_at": "2026-10-03"
   },
   {
     "id": "src_akl_rating_valuation",
     "title": "Rating valuation - OurAuckland (Auckland Council)",
     "url": "https://ourauckland.aucklandcouncil.govt.nz/news/2025/06/rating-valuation/",
-    "licence": "unverified",
+    "licence": "Copyright Auckland Council; no open licence found",
     "accessed_at": "2026-10-03",
-    "source_type": "official"
+    "source_type": "official",
+    "attribution": "Source: Auckland Council (ourauckland.aucklandcouncil.govt.nz), copyright Auckland Council.",
+    "tos_status": "unclear",
+    "tos_url": "https://www.aucklandcouncil.govt.nz/en/terms-and-conditions.html",
+    "tos_checked_at": "2026-10-03"
   },
   {
     "id": "src_settled_ownership",
     "title": "Understanding the types of ownership - settled.govt.nz",
     "url": "https://www.settled.govt.nz/buying-a-home/finding-a-property/understanding-types-of-ownership/",
-    "licence": "unverified",
+    "licence": "Copyright Real Estate Authority (not Creative Commons); may be reproduced free of charge for personal or in-house use only",
     "accessed_at": "2026-10-03",
-    "source_type": "official"
+    "source_type": "official",
+    "attribution": "Source: Real Estate Authority (settled.govt.nz); state the page publication date. Not a Creative Commons licence.",
+    "tos_status": "unclear",
+    "tos_url": "https://www.settled.govt.nz/terms-of-use-and-privacy/",
+    "tos_checked_at": "2026-10-03"
   },
   {
     "id": "src_unittitles_guide",
     "title": "Short guide to unit titles (May 2024) - unittitles.govt.nz (MBIE)",
     "url": "https://www.unittitles.govt.nz/assets/unit-titles/short-guide-to-unit-titles-may-2024.pdf",
-    "licence": "unverified",
+    "licence": "Crown copyright (MBIE); reproduction for personal and non-commercial use permitted with the source indicated and disclaimers reproduced",
     "accessed_at": "2026-10-03",
-    "source_type": "official"
+    "source_type": "official",
+    "attribution": "Source: Unit Titles (unittitles.govt.nz), Ministry of Business, Innovation and Employment, Crown copyright; reproduce the guide's disclaimers.",
+    "tos_status": "allowed",
+    "tos_url": "https://www.unittitles.govt.nz/about-us/copyright/",
+    "tos_checked_at": "2026-10-03"
   },
   {
     "id": "bank_rates_snapshot",
     "title": "Bank published home loan rates (daily snapshot) - per-bank source_url in rates_latest",
     "url": "https://www.anz.co.nz/rates-fees-agreements/home-loans/",
-    "licence": "unverified",
+    "licence": "Varies by bank; see jobs/rates-refresh/config/banks.yaml",
     "accessed_at": "2026-10-03",
-    "source_type": "official"
+    "source_type": "official",
+    "attribution": "Source: each bank's published home loan rates page (URL per bank in rates_latest source_url).",
+    "tos_status": "unclear",
+    "tos_url": "see jobs/rates-refresh/config/banks.yaml",
+    "tos_checked_at": "2026-10-03"
   }
 ]

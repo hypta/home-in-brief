@@ -13,7 +13,9 @@ ITEM_FIELDS = [
     "source_title", "source_type", "licence", "next_step_en", "verified_by",
     "verified_at", "status", "last_check",
 ]
-SOURCE_FIELDS = ["id", "title", "url", "licence", "accessed_at", "source_type"]
+SOURCE_FIELDS = ["id", "title", "url", "licence", "accessed_at", "source_type",
+                 "attribution", "tos_status", "tos_url", "tos_checked_at"]
+TOS_STATUSES = {"allowed", "unclear", "prohibited"}
 TOPICS = {"build_era", "cladding", "title_type", "insurance", "lending", "auction", "hazard", "valuation"}
 SOURCE_TYPES = {"official", "secondary"}
 WHEN_KEYS = {
@@ -35,13 +37,18 @@ def validate(seed_dir: Path = SEED) -> list[str]:
     sources = json.loads(src_path.read_text(encoding="utf-8"))
     source_ids: set[str] = set()
     for s in sources:
-        if list(s) != SOURCE_FIELDS and set(s) != set(SOURCE_FIELDS):
+        if set(s) != set(SOURCE_FIELDS):
             errors.append(f"source {s.get('id')}: fields {sorted(s)} != {sorted(SOURCE_FIELDS)}")
         if s["id"] in source_ids:
             errors.append(f"duplicate source id {s['id']}")
         source_ids.add(s["id"])
         if s.get("source_type") not in SOURCE_TYPES:
             errors.append(f"source {s['id']}: bad source_type")
+        for k in ("licence", "attribution", "tos_status", "tos_url", "tos_checked_at"):
+            if not isinstance(s.get(k), str) or not s[k].strip():
+                errors.append(f"source {s['id']}: {k} is missing or empty")
+        if s.get("tos_status") not in TOS_STATUSES:
+            errors.append(f"source {s['id']}: tos_status must be one of {sorted(TOS_STATUSES)}")
 
     seen: set[str] = set()
     count = 0
@@ -68,6 +75,8 @@ def validate(seed_dir: Path = SEED) -> list[str]:
                 src = next(s for s in sources if s["id"] == it["source_id"])
                 if src["url"] != it.get("source_url"):
                     errors.append(f"{where}: source_url differs from sources.json")
+                if src["licence"] != it.get("licence"):
+                    errors.append(f"{where}: licence differs from sources.json")
             if it.get("source_type") not in SOURCE_TYPES:
                 errors.append(f"{where}: bad source_type")
             if it.get("status") != "draft" or it.get("verified_by") is not None \
