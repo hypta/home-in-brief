@@ -309,6 +309,17 @@
             "title": "Id",
             "default": "bank_standard"
           },
+          "rate_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rate Pct"
+          },
           "rate_range_pct": {
             "items": {
               "type": "number"
@@ -412,12 +423,43 @@
         "type": "object",
         "title": "CV"
       },
+      "CandidateRates": {
+        "properties": {
+          "special": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Special"
+          },
+          "standard": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Standard"
+          }
+        },
+        "type": "object",
+        "title": "CandidateRates"
+      },
       "ChatSupplied": {
         "properties": {
           "year_built": {
             "anyOf": [
               {
                 "type": "integer"
+              },
+              {
+                "type": "string"
               },
               {
                 "type": "null"
@@ -475,19 +517,17 @@
         ],
         "title": "Fhl"
       },
-      "FirstHomeLoanScenario": {
+      "FhlLender": {
         "properties": {
-          "id": {
+          "bank_id": {
             "type": "string",
-            "const": "first_home_loan",
-            "title": "Id",
-            "default": "first_home_loan"
+            "title": "Bank Id"
           },
-          "rate_pct": {
-            "type": "number",
-            "title": "Rate Pct"
+          "name": {
+            "type": "string",
+            "title": "Name"
           },
-          "lender_bank_id": {
+          "captured_at": {
             "anyOf": [
               {
                 "type": "string"
@@ -496,37 +536,214 @@
                 "type": "null"
               }
             ],
-            "title": "Lender Bank Id"
+            "title": "Captured At"
+          },
+          "rate_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rate Pct"
           },
           "rate_basis": {
             "type": "string",
             "enum": [
               "special",
-              "standard"
+              "standard",
+              "unknown"
             ],
             "title": "Rate Basis",
-            "default": "standard"
+            "default": "unknown"
+          },
+          "candidate_rates": {
+            "$ref": "#/components/schemas/CandidateRates"
+          },
+          "lmi_passthrough_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lmi Passthrough Pct"
+          },
+          "lmi_amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lmi Amount"
+          },
+          "lmi_amount_if_full_premium": {
+            "type": "number",
+            "title": "Lmi Amount If Full Premium"
+          },
+          "loan_with_lmi": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Loan With Lmi"
+          },
+          "monthly": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Monthly"
+          },
+          "fortnightly": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fortnightly"
+          },
+          "stress_monthly": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stress Monthly"
+          },
+          "monthly_if_full_premium": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Monthly If Full Premium"
+          }
+        },
+        "type": "object",
+        "required": [
+          "bank_id",
+          "name",
+          "lmi_amount_if_full_premium"
+        ],
+        "title": "FhlLender"
+      },
+      "FirstHomeLoanScenario": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "const": "first_home_loan",
+            "title": "Id",
+            "default": "first_home_loan"
+          },
+          "eligibility": {
+            "type": "string",
+            "enum": [
+              "eligible",
+              "conditional"
+            ],
+            "title": "Eligibility",
+            "default": "eligible"
+          },
+          "eligibility_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Eligibility Note"
+          },
+          "income_caps": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Income Caps"
           },
           "lmi_amount": {
             "type": "number",
             "title": "Lmi Amount"
           },
-          "lmi_capitalised": {
-            "type": "boolean",
-            "title": "Lmi Capitalised",
-            "default": true
+          "lmi_note": {
+            "type": "string",
+            "title": "Lmi Note",
+            "default": ""
           },
-          "loan_with_lmi": {
-            "type": "number",
-            "title": "Loan With Lmi"
+          "lenders": {
+            "items": {
+              "$ref": "#/components/schemas/FhlLender"
+            },
+            "type": "array",
+            "title": "Lenders"
           },
-          "monthly": {
-            "type": "integer",
-            "title": "Monthly"
+          "monthly_range": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Monthly Range"
           },
-          "fortnightly": {
-            "type": "integer",
-            "title": "Fortnightly"
+          "fortnightly_range": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fortnightly Range"
+          },
+          "stress_monthly_range": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stress Monthly Range"
           },
           "source_ids": {
             "items": {
@@ -545,11 +762,7 @@
         },
         "type": "object",
         "required": [
-          "rate_pct",
-          "lmi_amount",
-          "loan_with_lmi",
-          "monthly",
-          "fortnightly"
+          "lmi_amount"
         ],
         "title": "FirstHomeLoanScenario"
       },
@@ -603,14 +816,8 @@
           },
           "status": {
             "type": "string",
-            "enum": [
-              "intersects",
-              "none",
-              "unavailable",
-              "not_found"
-            ],
             "title": "Status",
-            "default": "none"
+            "default": "unavailable"
           }
         },
         "type": "object",
@@ -618,23 +825,6 @@
           "layer"
         ],
         "title": "Hazard"
-      },
-      "IntField": {
-        "properties": {
-          "value": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Value"
-          }
-        },
-        "type": "object",
-        "title": "IntField"
       },
       "KbItem": {
         "properties": {
@@ -884,7 +1074,7 @@
             "$ref": "#/components/schemas/StrField"
           },
           "year_built": {
-            "$ref": "#/components/schemas/IntField"
+            "$ref": "#/components/schemas/YearField"
           },
           "cladding": {
             "$ref": "#/components/schemas/StrField"
@@ -1067,6 +1257,24 @@
             "title": "Kb Includes Draft",
             "default": false
           },
+          "kb_items_from_user_input": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Kb Items From User Input"
+          },
+          "kb_empty_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kb Empty Reason"
+          },
           "warnings": {
             "items": {
               "type": "string"
@@ -1138,8 +1346,53 @@
             ],
             "title": "Source Type",
             "default": "official"
+          },
+          "attribution": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attribution"
+          },
+          "tos_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tos Status"
+          },
+          "tos_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tos Url"
+          },
+          "tos_checked_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tos Checked At"
           }
         },
+        "additionalProperties": true,
         "type": "object",
         "required": [
           "id",
@@ -1160,6 +1413,17 @@
               }
             ],
             "title": "Value"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
           }
         },
         "type": "object",
@@ -1170,7 +1434,8 @@
           "price_override": {
             "anyOf": [
               {
-                "type": "number"
+                "type": "number",
+                "exclusiveMinimum": 0.0
               },
               {
                 "type": "null"
@@ -1181,7 +1446,8 @@
           "deposit": {
             "anyOf": [
               {
-                "type": "number"
+                "type": "number",
+                "minimum": 0.0
               },
               {
                 "type": "null"
@@ -1192,7 +1458,8 @@
           "household_income": {
             "anyOf": [
               {
-                "type": "number"
+                "type": "number",
+                "exclusiveMinimum": 0.0
               },
               {
                 "type": "null"
@@ -1203,7 +1470,8 @@
           "existing_debts": {
             "anyOf": [
               {
-                "type": "number"
+                "type": "number",
+                "minimum": 0.0
               },
               {
                 "type": "null"
@@ -1214,7 +1482,9 @@
           "rate_pct": {
             "anyOf": [
               {
-                "type": "number"
+                "type": "number",
+                "maximum": 100.0,
+                "minimum": 0.0
               },
               {
                 "type": "null"
@@ -1318,6 +1588,38 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "YearField": {
+        "properties": {
+          "value": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "title": "YearField",
+        "description": "An int year, or a decade string such as \"1990s\"."
       }
     }
   }

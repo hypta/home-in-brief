@@ -23,23 +23,28 @@ class CV(_Lenient):
 
 class StrField(_Lenient):
     value: Optional[str] = None
+    status: Optional[str] = None
 
 
-class IntField(_Lenient):
-    value: Optional[int] = None
+class YearField(_Lenient):
+    """An int year, or a decade string such as "1990s"."""
+
+    value: Optional[Union[int, str]] = None
+    status: Optional[str] = None
 
 
 class Property(_Lenient):
     cv: CV = Field(default_factory=CV)
     title_type: StrField = Field(default_factory=StrField)
-    year_built: IntField = Field(default_factory=IntField)
+    year_built: YearField = Field(default_factory=YearField)
     cladding: StrField = Field(default_factory=StrField)
 
 
 class Hazard(_Lenient):
     layer: str
     priority: Literal["primary", "secondary"] = "secondary"
-    status: Literal["intersects", "none", "unavailable", "not_found"] = "none"
+    # Unknown strings are accepted here and mapped to "unavailable" by the engine.
+    status: str = "unavailable"
 
 
 class PropertyContext(_Lenient):
@@ -49,16 +54,19 @@ class PropertyContext(_Lenient):
 
 # ---- UserInputs -------------------------------------------------------------
 class ChatSupplied(_Lenient):
-    year_built: Optional[int] = None
+    year_built: Optional[Union[int, str]] = None
     cladding: Optional[str] = None
 
 
+Amount = Annotated[float, Field(allow_inf_nan=False)]
+
+
 class UserInputs(_Lenient):
-    price_override: Optional[float] = None
-    deposit: Optional[float] = None
-    household_income: Optional[float] = None
-    existing_debts: Optional[float] = None
-    rate_pct: Optional[float] = None
+    price_override: Optional[Amount] = Field(None, gt=0)
+    deposit: Optional[Amount] = Field(None, ge=0)
+    household_income: Optional[Amount] = Field(None, gt=0)
+    existing_debts: Optional[Amount] = Field(None, ge=0)
+    rate_pct: Optional[Amount] = Field(None, ge=0, le=100)
     household_type: Optional[
         Literal["single", "single_with_dependants", "multiple"]
     ] = None
@@ -114,12 +122,18 @@ class RatesSnapshot(BaseModel):
 
 # ---- Knowledge base ---------------------------------------------------------
 class Source(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
     id: str
     title: str
     url: str
     licence: Optional[str] = None
     accessed_at: Optional[str] = None
     source_type: Literal["official", "secondary"] = "official"
+    attribution: Optional[str] = None
+    tos_status: Optional[str] = None
+    tos_url: Optional[str] = None
+    tos_checked_at: Optional[str] = None
 
 
 class KbItem(BaseModel):
@@ -161,6 +175,7 @@ class BankRate(BaseModel):
 
 class BankStandardScenario(BaseModel):
     id: Literal["bank_standard"] = "bank_standard"
+    rate_pct: Optional[float] = None  # the user's own rate, if given
     rate_range_pct: list[float]
     low_equity_margin_pct: Optional[list[float]] = None
     monthly_range: list[int]
@@ -178,16 +193,41 @@ class UserRateScenario(BaseModel):
     stress_monthly: int
 
 
+class CandidateRates(BaseModel):
+    special: Optional[float] = None
+    standard: Optional[float] = None
+
+
+class FhlLender(BaseModel):
+    bank_id: str
+    name: str
+    captured_at: Optional[str] = None
+    rate_pct: Optional[float] = None  # null when it is not known which rate applies
+    rate_basis: Literal["special", "standard", "unknown"] = "unknown"
+    candidate_rates: CandidateRates = Field(default_factory=CandidateRates)
+    lmi_passthrough_pct: Optional[float] = None
+    lmi_amount: Optional[float] = None  # null when the pass-through is unknown
+    lmi_amount_if_full_premium: float
+    loan_with_lmi: Optional[float] = None
+    monthly: Optional[int] = None
+    fortnightly: Optional[int] = None
+    stress_monthly: Optional[int] = None
+    monthly_if_full_premium: Optional[int] = None
+
+
 class FirstHomeLoanScenario(BaseModel):
     id: Literal["first_home_loan"] = "first_home_loan"
-    rate_pct: float
-    lender_bank_id: Optional[str] = None
-    rate_basis: Literal["special", "standard"] = "standard"
-    lmi_amount: float
-    lmi_capitalised: bool = True
-    loan_with_lmi: float
-    monthly: int
-    fortnightly: int
+    eligibility: Literal["eligible", "conditional"] = "eligible"
+    eligibility_note: Optional[str] = None
+    income_caps: dict[str, int] = Field(default_factory=dict)
+    lmi_amount: float  # full 1.2% premium; lenders may pass on less
+    lmi_note: str = ""
+    lenders: list[FhlLender] = Field(default_factory=list)
+    # Over lenders with a known rate; each uses its own pass-through where known,
+    # otherwise the full premium.
+    monthly_range: Optional[list[int]] = None
+    fortnightly_range: Optional[list[int]] = None
+    stress_monthly_range: Optional[list[int]] = None
     source_ids: list[str] = Field(default_factory=lambda: ["kainga_ora_fhl"])
     note_ids: list[str] = Field(default_factory=lambda: ["fhl_passthrough_varies"])
 
@@ -213,4 +253,6 @@ class RulesOutput(BaseModel):
     flags: list[Flag] = Field(default_factory=list)
     kb_items: list[str] = Field(default_factory=list)
     kb_includes_draft: bool = False
+    kb_items_from_user_input: list[str] = Field(default_factory=list)
+    kb_empty_reason: Optional[str] = None
     warnings: list[str] = Field(default_factory=list)

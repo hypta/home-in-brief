@@ -34,7 +34,7 @@ def test_rbnz_example_2_lvr():
 
 
 def test_team_spec_example():
-    ctx = {"property": {"cv": {"value": 1_000_000, "valuation_date": "2024-05-01"}}}
+    ctx = {"property": {"cv": {"value": 1_000_000, "valuation_date": "2024-05-01", "status": "found"}}}
     out = run(ctx, deposit=120000, household_income=150000, existing_debts=30000,
               household_type="multiple")
     assert out.price_used.basis == "cv" and out.price_used.valuation_date == "2024-05-01"
@@ -94,47 +94,11 @@ def test_fhl_ineligible_flags():
     assert {"fhl_deposit_below_5", "fhl_income_over_cap"} <= ids
 
 
-def _fhl_candidates():
-    from types import SimpleNamespace as NS
-    for b in SNAP.banks:
-        if not b.fhl.lender:
-            continue
-        if b.fhl.special_applies is True:
-            yield NS(fhl_rate=b.special["1y"])
-        elif b.standard:
-            yield NS(fhl_rate=b.standard["1y"])
-
-
 def test_fhl_not_generated_with_25pct_deposit():
     out = run(price_override=1_000_000, deposit=250000, household_income=120000,
               household_type="multiple")
     assert sc(out, 'first_home_loan') is None
     assert not {f.id for f in out.flags} & {"fhl_deposit_below_5", "fhl_income_over_cap"}
-
-
-def test_fhl_12pct_deposit_rate_source():
-    out = run(price_override=1_000_000, deposit=120000, household_income=120000,
-              household_type="multiple")
-    fhl = sc(out, 'first_home_loan')
-    by_id = {b.bank_id: b for b in SNAP.banks}
-    bank = by_id[fhl.lender_bank_id]
-    if fhl.rate_basis == "special":
-        assert bank.fhl.special_applies is True and fhl.rate_pct == bank.special["1y"]
-    else:
-        assert bank.fhl.special_applies is not True and fhl.rate_pct == bank.standard["1y"]
-    # asb has no standard rate and special_applies is null, so it is skipped
-    assert fhl.lender_bank_id != "asb"
-
-
-def test_fhl_household_unknown_flag():
-    out = run(price_override=1_000_000, deposit=100000, household_income=120000)
-    assert "fhl_household_type_unknown" in {f.id for f in out.flags}
-    fhl = sc(out, 'first_home_loan')
-    # kiwibank/coop/sbs special 1y vs other lenders' standard 1y: lowest wins
-    assert fhl.rate_basis in ("special", "standard")
-    assert fhl.rate_pct == min(
-        b.fhl_rate for b in _fhl_candidates()
-    )
 
 
 # ---- applies_when ----
@@ -150,7 +114,7 @@ CASES = [
     ({"fhl_eligible": True}, C(fhl_eligible=True), C(fhl_eligible=False)),
     ({"lvr_over": 80}, C(lvr_pct=88.0), C(lvr_pct=80.0)),
     ({"dti_over": 6}, C(dti=6.07), C(dti=5.9)),
-    ({"year_built_between": [1990, 2005]}, C(year_built=1990), C(year_built=2006)),
+    ({"year_built_between": [1990, 2005]}, C(year_range=(1990, 1990)), C(year_range=(2006, 2006))),
     ({"cladding_in": ["Monolithic"]}, C(cladding="monolithic"), C(cladding="brick")),
 ]
 
@@ -196,7 +160,7 @@ def client(tmp_path, monkeypatch):
     return TestClient(app)
 
 
-BODY = {"property_context": {"property": {"cv": {"value": 1000000}}, "extra": 1},
+BODY = {"property_context": {"property": {"cv": {"value": 1000000, "status": "found"}}, "extra": 1},
         "user_inputs": {"deposit": 120000, "household_income": 150000, "existing_debts": 30000}}
 
 

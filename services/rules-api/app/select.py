@@ -14,7 +14,7 @@ class SelectContext:
     hazards: list[dict] = field(default_factory=list)  # {layer, priority, status}
     lvr_pct: Optional[float] = None
     dti: Optional[float] = None
-    year_built: Optional[int] = None  # already resolved (property, else chat)
+    year_range: Optional[tuple[int, int]] = None  # (from, to); resolved property, else chat
     cladding: Optional[str] = None
     fhl_eligible: bool = False  # first_home_loan scenario was produced
 
@@ -37,7 +37,7 @@ def _check(key: str, arg: Any, ctx: SelectContext) -> Optional[bool]:
         return ctx.dti is not None and ctx.dti > arg
     if key == "year_built_between":
         lo, hi = arg
-        return ctx.year_built is not None and lo <= ctx.year_built <= hi
+        return ctx.year_range is not None and ctx.year_range[0] <= hi and lo <= ctx.year_range[1]
     if key == "cladding_in":
         return ctx.cladding is not None and ctx.cladding.lower() in {
             str(c).lower() for c in arg
