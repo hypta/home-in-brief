@@ -32,7 +32,7 @@
     "source_type": "official"
   },
   {
-    "id": "src_rbnz_lvr",
+    "id": "rbnz_lvr",
     "title": "Understanding loan-to-value restrictions - Reserve Bank of New Zealand",
     "url": "https://www.rbnz.govt.nz/education/explainers/loan-to-value-restrictions-explained",
     "licence": "[待查證]",
@@ -40,7 +40,7 @@
     "source_type": "official"
   },
   {
-    "id": "src_rbnz_dti",
+    "id": "rbnz_dti",
     "title": "Understanding debt-to-income (DTI) restrictions - Reserve Bank of New Zealand",
     "url": "https://www.rbnz.govt.nz/education/explainers/dti",
     "licence": "[待查證]",
@@ -75,6 +75,22 @@
     "id": "src_unittitles_guide",
     "title": "Short guide to unit titles (May 2024) - unittitles.govt.nz (MBIE)",
     "url": "https://www.unittitles.govt.nz/assets/unit-titles/short-guide-to-unit-titles-may-2024.pdf",
+    "licence": "[待查證]",
+    "accessed_at": "2026-10-03",
+    "source_type": "official"
+  },
+  {
+    "id": "bank_rates_snapshot",
+    "title": "Bank published home loan rates (daily snapshot)",
+    "url": "https://www.anz.co.nz/rates-fees-agreements/home-loans/",
+    "licence": "[待查證]",
+    "accessed_at": "2026-10-03",
+    "source_type": "official"
+  },
+  {
+    "id": "kainga_ora_fhl",
+    "title": "Kāinga Ora First Home Loan brochure",
+    "url": "https://kaingaora.govt.nz/assets/Home-ownership/First-Home-Loan-brochures/Kainga-Ora-First-Home-Loan-Brochure.pdf",
     "licence": "[待查證]",
     "accessed_at": "2026-10-03",
     "source_type": "official"

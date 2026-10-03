@@ -94,7 +94,10 @@ def fetch_page(url: str, client: httpx.Client | None = None) -> FetchResult:
             return FetchResult(resp.status_code, None, f"HTTP {resp.status_code}")
         ctype = resp.headers.get("content-type", "").lower()
         try:
-            if "pdf" in ctype or url.lower().split("?")[0].endswith(".pdf") or resp.content[:5] == b"%PDF-":
+            is_pdf = resp.content[:5] == b"%PDF-"
+            if not is_pdf and url.lower().split("?")[0].endswith(".pdf"):
+                return FetchResult(resp.status_code, None, "expected PDF, got non-PDF body (likely CDN block)")
+            if is_pdf:
                 text = pdf_to_text(resp.content)
             else:
                 body = resp.text

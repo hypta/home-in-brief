@@ -149,3 +149,9 @@ def test_firestore_verified_goes_needs_review_and_logs():
     assert db.data["kb_items/b"]["last_check"]["quote_found"] is False
     assert "kb_source_checks/a/runs/20260101T000000Z" in db.data
     assert db.data["job_runs/20260101T000000Z"]["job"] == "kb-refresh"
+
+
+def test_pdf_url_returning_html_is_network_error():
+    client = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(200, text="<html>blocked</html>")))
+    r = fetch_page("https://e.test/a.pdf", client)
+    assert r.text is None and r.network_error and "non-PDF" in r.error
