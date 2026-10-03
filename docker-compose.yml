@@ -1,0 +1,48 @@
+# Local stack: Firestore emulator + rules-api; jobs behind the "jobs" profile.
+# Build context is the repo root for every image (same as cloudbuild.yaml).
+x-emulator-env: &emulator-env
+  DATA_BACKEND: firestore
+  FIRESTORE_EMULATOR_HOST: firestore:8085
+  GOOGLE_CLOUD_PROJECT: local-dev
+
+services:
+  firestore:
+    image: gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators
+    command: gcloud emulators firestore start --host-port=0.0.0.0:8085
+    ports:
+      - "8085:8085"
+
+  rules-api:
+    build:
+      context: .
+      dockerfile: services/rules-api/Dockerfile
+    environment:
+      <<: *emulator-env
+      INCLUDE_DRAFT: "true"
+    ports:
+      - "8080:8080"
+    depends_on:
+      - firestore
+
+  rates-refresh:
+    profiles: ["jobs"]
+    build:
+      context: .
+      dockerfile: jobs/rates-refresh/Dockerfile
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      <<: *emulator-env
+    depends_on:
+      - firestore
+
+  kb-refresh:
+    profiles: ["jobs"]
+    build:
+      context: .
+      dockerfile: jobs/kb-refresh/Dockerfile
+    environment:
+      <<: *emulator-env
+    depends_on:
+      - firestore
