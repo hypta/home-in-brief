@@ -16,6 +16,8 @@ but the schedule is not enabled (see `DEPLOY.md`).
    - `floating`: the owner-occupier floating or variable rate, or `null`.
    - `low_equity.bands`: low equity margin bands as `lvr_from`, `lvr_to`, `margin_pct` (empty if not published).
    - `page_effective_date`: the date the page states, as written, or `null`.
+   - `fhl.special_applies` (`true` only if the bank's page says First Home Loans get the special rates, else `null`),
+     `fhl.lmi_passthrough_pct` and `notes` are curated by hand; the automatic job never overwrites them.
    - Ignore first-home-buyer-only promotions, revolving credit, investor and reverse-equity rates.
 3. Set that row's `captured_at` to the time you read the page (ISO 8601, e.g. `2026-10-04T09:30:00+13:00`).
    Leave other banks' `captured_at` alone: each row carries its own date. Update the top-level `captured_at`

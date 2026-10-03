@@ -27,7 +27,7 @@ class LocalStore:
         except (OSError, ValueError):
             return None
 
-    def write_snapshot(self, date: str, snapshot: dict):
+    def write_snapshot(self, snapshot_id: str, snapshot: dict):
         self.out_dir.mkdir(parents=True, exist_ok=True)
         (self.out_dir / "rates_snapshot.json").write_text(json.dumps(snapshot, indent=2, ensure_ascii=False))
 
@@ -48,8 +48,8 @@ class FirestoreStore:
         doc = self.db.collection("rates_latest").document("current").get()
         return doc.to_dict() if doc.exists else None
 
-    def write_snapshot(self, date: str, snapshot: dict):
-        self.db.collection("rates_snapshots").document(date).set(snapshot)
+    def write_snapshot(self, snapshot_id: str, snapshot: dict):
+        self.db.collection("rates_snapshots").document(snapshot_id).set(snapshot)
         self.db.collection("rates_latest").document("current").set(snapshot)
 
     def write_job_run(self, run_id: str, run: dict):

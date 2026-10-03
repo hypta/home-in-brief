@@ -12,7 +12,7 @@ banks:
     tos_note: "Terms require written permission to use or distribute site information publicly; no explicit scraping or automation clause."
     mechanism: standard_rate
     lem_base: null
-    fhl: {lender: true, lmi_passthrough_pct: 1.0}
+    fhl: {lender: true, lmi_passthrough_pct: 1.0, special_applies: true}
 
   - bank_id: westpac
     name: Westpac NZ
@@ -23,7 +23,7 @@ banks:
     tos_note: "Terms allow reproduction solely for viewing and require permission for public display; no explicit automation clause."
     mechanism: lem
     lem_base: unverified
-    fhl: {lender: true, lmi_passthrough_pct: null}
+    fhl: {lender: true, lmi_passthrough_pct: null, special_applies: null}
 
   - bank_id: anz
     name: ANZ NZ
@@ -34,7 +34,7 @@ banks:
     tos_note: "Terms limit reproduction to personal use and require permission for public display; no explicit automation clause."
     mechanism: standard_rate
     lem_base: null
-    fhl: {lender: false, lmi_passthrough_pct: null}
+    fhl: {lender: false, lmi_passthrough_pct: null, special_applies: null}
 
   - bank_id: asb
     name: ASB
@@ -45,7 +45,7 @@ banks:
     tos_note: "No website terms page found, so automated access is neither allowed nor prohibited in writing."
     mechanism: lem
     lem_base: special
-    fhl: {lender: true, lmi_passthrough_pct: 1.2}
+    fhl: {lender: true, lmi_passthrough_pct: 1.2, special_applies: null}
 
   - bank_id: bnz
     name: BNZ
@@ -56,7 +56,7 @@ banks:
     tos_note: "Terms forbid interfering with normal site operation and reserve copyright and the right to block access; no explicit scraping clause."
     mechanism: lem
     lem_base: special
-    fhl: {lender: false, lmi_passthrough_pct: null}
+    fhl: {lender: false, lmi_passthrough_pct: null, special_applies: null}
 
   - bank_id: tsb
     name: TSB
@@ -67,7 +67,7 @@ banks:
     tos_note: "Content is for personal non-commercial use and reproduction needs written consent; no explicit automation clause."
     mechanism: standard_rate
     lem_base: null
-    fhl: {lender: false, lmi_passthrough_pct: null}
+    fhl: {lender: false, lmi_passthrough_pct: null, special_applies: null}
 
   - bank_id: coop
     name: Co-operative Bank
@@ -78,7 +78,7 @@ banks:
     tos_note: "No website terms page found, so automated access is neither allowed nor prohibited in writing."
     mechanism: lem
     lem_base: unverified
-    fhl: {lender: true, lmi_passthrough_pct: 1.2}
+    fhl: {lender: true, lmi_passthrough_pct: 1.2, special_applies: true}
     notes:
       - "Low equity premium is 0.20-1.00% p.a. above 80% LVR; per-LVR bands are not published on the rates page, so bands are empty."
 
@@ -91,7 +91,7 @@ banks:
     tos_note: "Terms bar commercial or public use of site content without written consent; no explicit automation clause."
     mechanism: standard_rate
     lem_base: null
-    fhl: {lender: true, lmi_passthrough_pct: 1.2}
+    fhl: {lender: true, lmi_passthrough_pct: 1.2, special_applies: true}
     notes:
       - "Special rates need 20% equity (30% for investors) or a First Home Loan with 5% equity."
 
@@ -104,7 +104,7 @@ banks:
     tos_note: "No website terms page found, so automated access is neither allowed nor prohibited in writing."
     mechanism: standard_rate
     lem_base: null
-    fhl: {lender: true, lmi_passthrough_pct: null}
+    fhl: {lender: true, lmi_passthrough_pct: null, special_applies: true}
     notes:
       - "Only 6m, 1y, 18m and 2y terms. Special rates need salary credited to a Unity account (First Home Loans also get special rates)."
 
@@ -117,7 +117,7 @@ banks:
     tos_note: "No website terms page found, so automated access is neither allowed nor prohibited in writing."
     mechanism: standard_rate
     lem_base: null
-    fhl: {lender: true, lmi_passthrough_pct: 1.2}
+    fhl: {lender: true, lmi_passthrough_pct: 1.2, special_applies: null}
     notes:
       - "Only 6m, 1y and 2y terms."
 
@@ -130,6 +130,6 @@ banks:
     tos_note: "Terms allow standard web browsers only and name scraping and automation as prohibited methods (terms cover nzhl.co.nz; rates URL is on asb.co.nz, treated conservatively)."
     mechanism: lem
     lem_base: special
-    fhl: {lender: true, lmi_passthrough_pct: 1.2}
+    fhl: {lender: true, lmi_passthrough_pct: 1.2, special_applies: null}
     notes:
       - "NZHL-arranged loans are written by ASB; fixed rates match ASB but the floating rate differs."

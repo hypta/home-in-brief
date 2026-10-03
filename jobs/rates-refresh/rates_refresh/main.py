@@ -1,5 +1,6 @@
 """rates-refresh job: fetch -> extract -> validate -> write. Never overwrite good data with bad."""
 import argparse
+import secrets
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -13,7 +14,7 @@ from .store import make_store
 from .validate import build_bank
 
 SCHEMA_VERSION = "0.1"
-RUN_ID_FORMAT = "%Y%m%dT%H%M%SZ"
+RUN_ID_FORMAT = "%Y%m%dT%H%M%SZ"  # + "-xxxx" (4 lowercase hex), same as kb-refresh
 NZ = ZoneInfo("Pacific/Auckland")
 CONFIG_PATH = Path(__file__).resolve().parent.parent / "config" / "banks.yaml"
 
@@ -33,21 +34,21 @@ def _mark_stale(prev_bank: dict, date: str, prev_captured_at: str | None = None)
     return rec
 
 
-def run(banks, store, extractor=gemini_extractor, fetcher=fetch_bank, now: datetime | None = None):
+def run(banks, store, extractor=None, fetcher=None, now: datetime | None = None):
     """Returns (snapshot | None, job_run, exit_code). Writes via store."""
+    extractor, fetcher = extractor or gemini_extractor, fetcher or fetch_bank  # resolved per call (patchable)
     now = now or datetime.now(NZ)
     date = now.date().isoformat()  # snapshot key: NZ calendar day, same as captured_at[:10] (captured_at keeps its +12/+13 offset)
     prev = store.load_previous() or {}
     prev_by_id = {b["bank_id"]: b for b in prev.get("banks", [])}
 
-    out_banks, updated, failed, skipped = [], [], [], []
+    result = dict(prev_by_id)  # start from every previous bank; --bank / skipped banks keep their rows untouched
+    updated, failed, skipped = [], [], []
     for bank in banks:
         bid = bank["bank_id"]
         if bank.get("tos_status") != "allowed":
             # terms do not clearly allow automated access: no request at all, keep the manually maintained data
             skipped.append(bid)
-            if bid in prev_by_id:
-                out_banks.append(prev_by_id[bid])
             continue
         record, reason = None, None
         try:
@@ -63,12 +64,12 @@ def run(banks, store, extractor=gemini_extractor, fetcher=fetch_bank, now: datet
             reason = f"error: {type(e).__name__}: {e}"[:500]
 
         if record is not None:
-            out_banks.append(record)
+            result[bid] = record
             updated.append(bid)
         else:
             failed.append({"bank_id": bid, "reason": reason})
             if bid in prev_by_id:
-                out_banks.append(_mark_stale(prev_by_id[bid], date, prev.get("captured_at")))
+                result[bid] = _mark_stale(prev_by_id[bid], date, prev.get("captured_at"))
 
     job_run = {
         "job": "rates-refresh",
@@ -78,14 +79,15 @@ def run(banks, store, extractor=gemini_extractor, fetcher=fetch_bank, now: datet
         "finished_at": now.isoformat(),
     }
     snapshot = None
+    # UTC, sortable, with a short random suffix so two runs in the same second never collide
+    run_id = now.astimezone(timezone.utc).strftime(RUN_ID_FORMAT) + "-" + secrets.token_hex(2)
     if updated:
         snapshot = {
             "schema_version": SCHEMA_VERSION,
             "captured_at": now.isoformat(),
-            "banks": out_banks,
+            "banks": list(result.values()),
         }
-        store.write_snapshot(date, snapshot)
-    run_id = now.astimezone(timezone.utc).strftime(RUN_ID_FORMAT)  # UTC, sortable, same as kb-refresh
+        store.write_snapshot(f"{date}_{run_id}", snapshot)  # one immutable doc per run, plus rates_latest/current
     job_run["run_id"] = run_id
     store.write_job_run(run_id, job_run)
     attempted = len(banks) - len(skipped)
@@ -126,6 +128,10 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
     banks = load_banks()
     if args.bank:
+        unknown = set(args.bank) - {b["bank_id"] for b in banks}
+        if unknown:
+            print(f"unknown bank_id: {sorted(unknown)}")
+            return 2
         banks = [b for b in banks if b["bank_id"] in args.bank]
     if args.fetch_only:
         return fetch_only(banks)

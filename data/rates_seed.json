@@ -402,7 +402,7 @@
       "fhl": {
         "lender": true,
         "lmi_passthrough_pct": null,
-        "special_applies": null
+        "special_applies": true
       },
       "notes": [
         "Only 6m, 1y, 18m and 2y terms. Special rates need salary credited to a Unity account (First Home Loans also get special rates).",

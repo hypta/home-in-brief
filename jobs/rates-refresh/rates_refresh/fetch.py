@@ -77,13 +77,20 @@ def html_to_text(html: str) -> str:
     return normalize_text(text)
 
 
-def detect_block(status: int | None, text: str, raw: str = "") -> str | None:
-    """Return a reason string if the response looks like a block / challenge page."""
+def detect_guard(status: int | None, text: str, raw: str = "") -> str | None:
+    """Reason if the site is refusing us (block status or challenge page); checked before anything else."""
     if status in BLOCK_STATUSES:
         return f"http_{status}"
-    sample = raw or text
-    if BLOCK_MARKERS.search(sample) and len(text) < 5000:
+    if BLOCK_MARKERS.search(raw or text) and len(text) < 5000:
         return "challenge_page"
+    return None
+
+
+def detect_block(status: int | None, text: str, raw: str = "") -> str | None:
+    """Return a reason string if the response is a block / challenge page or has no usable rates."""
+    reason = detect_guard(status, text, raw)
+    if reason:
+        return reason
     if len(text) < MIN_TEXT_LEN:
         return f"short_content_{len(text)}"
     # JS-rendered pages return a shell with no actual rate table over plain HTTP
@@ -93,10 +100,39 @@ def detect_block(status: int | None, text: str, raw: str = "") -> str | None:
     return None
 
 
+class RedirectBlocked(Exception):
+    """A redirect left the approved host or downgraded to http."""
+
+
+def _host(url: str) -> str:
+    return (urlsplit(url).hostname or "").lower()
+
+
+def safe_get(url: str, max_hops: int = 3, client=None) -> httpx.Response:
+    """GET without auto-redirects: every hop must be https and on the host the terms review covered."""
+    approved = _host(url)
+    own = client is None
+    client = client or httpx.Client(follow_redirects=False, timeout=20,
+                                    headers={"User-Agent": USER_AGENT, "Accept-Language": "en-NZ,en;q=0.9"})
+    try:
+        for _ in range(max_hops + 1):
+            r = client.get(url)
+            if r.status_code not in (301, 302, 303, 307, 308):
+                return r
+            url = str(httpx.URL(url).join(r.headers.get("location", "")))
+            if urlsplit(url).scheme != "https" or _host(url) != approved:
+                raise RedirectBlocked(f"redirect to {_host(url) or 'unknown'} (approved host {approved})")
+        raise RedirectBlocked("too many redirects")
+    finally:
+        if own:
+            client.close()
+
+
 def http_fetch(url: str) -> FetchResult:
-    headers = {"User-Agent": USER_AGENT, "Accept-Language": "en-NZ,en;q=0.9"}
-    with httpx.Client(follow_redirects=True, timeout=20, headers=headers) as c:
-        r = c.get(url)
+    try:
+        r = safe_get(url)
+    except RedirectBlocked as e:
+        return FetchResult("", "http", None, True, f"redirect_blocked: {e}")
     text = html_to_text(r.text)
     reason = detect_block(r.status_code, text, r.text)
     return FetchResult(text, "http", r.status_code, reason is not None, reason)
@@ -130,11 +166,24 @@ def browser_fetch(url: str) -> FetchResult:
             )
             page = ctx.new_page()
             resp = page.goto(url, wait_until="domcontentloaded", timeout=60000)
+            status = resp.status if resp else None
+            if _host(page.url) != _host(url) or urlsplit(page.url).scheme != "https":
+                return FetchResult("", "browser", status, True, f"redirect_blocked: landed on {_host(page.url)}")
+            # stop before any interaction if the site is refusing us
+            first = page.inner_text("body")
+            reason = detect_guard(status, first)
+            if reason:
+                return FetchResult(first, "browser", status, True, reason)
             try:
                 page.wait_for_load_state("networkidle", timeout=20000)
             except Exception:
                 pass
             page.wait_for_timeout(3000)  # rate tables are often filled by a late XHR
+            if _host(page.url) != _host(url):  # navigation may have moved on (script redirect, challenge)
+                return FetchResult("", "browser", status, True, f"redirect_blocked: landed on {_host(page.url)}")
+            reason = detect_guard(status, page.inner_text("body"))
+            if reason:
+                return FetchResult("", "browser", status, True, reason)
             text = _expanded_text(page)
             # tabbed pages only render the active tab: click each tab, keep lines not seen yet
             seen = set(text.split("\n"))
@@ -148,7 +197,6 @@ def browser_fetch(url: str) -> FetchResult:
                     text += "\n" + "\n".join(extra)
                 except Exception:
                     continue
-            status = resp.status if resp else None
         finally:
             browser.close()
     text = normalize_text(text)
@@ -157,18 +205,24 @@ def browser_fetch(url: str) -> FetchResult:
 
 
 def robots_allows(url: str, getter=None) -> tuple[bool, str]:
-    """RFC 9309 behaviour: 4xx (other than 401/403) = allowed, 401/403 or unreachable = do not fetch."""
+    """Only a readable robots.txt (200) or a plain 404/410 lets us proceed.
+
+    Rate limits (429), auth walls (401/403), other 4xx, 5xx, redirects off-host, timeouts and HTML challenge pages
+    served in place of robots.txt all mean "do not fetch".
+    """
     parts = urlsplit(url)
     robots_url = f"{parts.scheme}://{parts.netloc}/robots.txt"
     getter = getter or _get_robots
     try:
         status, body = getter(robots_url)
-    except httpx.HTTPError as e:
+    except (httpx.HTTPError, RedirectBlocked) as e:
         return False, f"robots_unreachable: {type(e).__name__}"
-    if status in (401, 403) or status >= 500:
-        return False, f"robots_status_{status}"
-    if status >= 400:
+    if status in (404, 410):
         return True, "no_robots_txt"
+    if status != 200:
+        return False, f"robots_status_{status}"
+    if re.search(r"<\s*(html|!doctype|body|head)\b", body[:2000], re.I):
+        return False, "robots_not_text"
     rp = urllib.robotparser.RobotFileParser()
     rp.parse(body.splitlines())
     if rp.can_fetch(ROBOTS_TOKEN, url):
@@ -177,8 +231,7 @@ def robots_allows(url: str, getter=None) -> tuple[bool, str]:
 
 
 def _get_robots(robots_url: str) -> tuple[int, str]:
-    with httpx.Client(follow_redirects=True, timeout=20, headers={"User-Agent": USER_AGENT}) as c:
-        r = c.get(robots_url)
+    r = safe_get(robots_url)
     return r.status_code, r.text
 
 
@@ -192,3 +245,5 @@ def fetch_bank(bank: dict, http=http_fetch, browser=browser_fetch, robots=robots
         return (browser if bank.get("render") == "browser" else http)(url)
     except httpx.HTTPError as e:
         return FetchResult("", "http", None, True, f"http_error: {type(e).__name__}")
+    except RedirectBlocked as e:
+        return FetchResult("", "http", None, True, f"redirect_blocked: {e}")
