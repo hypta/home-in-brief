@@ -1,3 +1,149 @@
 # Home Buyer Copilot
 
-Home Buyer Copilot is a free tool that helps first-time home buyers in New Zealand understand the risks and costs of an Auckland property early in their search.
+A free pre-offer report for first-time home buyers in Auckland, New Zealand. Before making an offer, a buyer gets a
+plain-English view of what a property could really cost and where the risks are: affordability under current lending
+rules (LVR and DTI limits, deposit, repayments at current bank rates), the property's title type, age and cladding,
+natural-hazard and insurance exposure, and the Council valuation (CV), which is not a market price.
+
+This is general information, not financial, legal or insurance advice. Verify everything with a licensed adviser,
+lawyer and insurer before you make an offer.
+
+License: TBD by the team.
+
+## Status
+
+This repo is a monorepo shared by two people. **What works today** is the rules side (owner B): a deterministic rules
+and calculation API, a knowledge base with source quotes, and jobs that keep rates and knowledge-base data fresh.
+**Not built yet:** the property-data API (owner A, coming into `services/property-api/`), the Gemini layer that turns the
+rules output into the written report, and the frontend. The last two are owned jointly and are in progress.
+
+## Repo layout
+
+| Path | Owner | What it is |
+|---|---|---|
+| `services/property-api/` | A (coming) | Collects property data (CV, title, hazards) and calls rules-api |
+| `services/rules-api/` | B | FastAPI service: loan, LVR, DTI, repayment scenarios, which knowledge-base items apply |
+| `jobs/rates-refresh/` | B | Job that refreshes bank rates (Gemini extraction), gated by each bank's website terms |
+| `jobs/kb-refresh/` | B | Job that re-checks knowledge-base quotes against their source pages |
+| `shared/b_common/` | shared | Pydantic schemas and the data-access layer (local files or Firestore) |
+| `kb/` | shared | Knowledge-base seed items and sources, validator, `MANUAL_CHECK.md` |
+| `data/` | shared | `rates_seed.json`, the hand-maintained rates snapshot |
+| `scripts/` | B | `seed_firestore.py`, `seed_rates.py`, `smoke.py`, `validate_rates_seed.py` |
+| `openapi.json` | B | OpenAPI description of rules-api |
+
+Docs: `LOCAL.md` (run locally), `DEPLOY.md` (Cloud Run + Firestore), `RATES_UPDATE.md` (update rates by hand),
+`kb/MANUAL_CHECK.md` (verify knowledge-base items by hand).
+
+## Architecture
+
+```
+                 Browser (frontend, in progress)
+                           |
+                           v
+                  property-api (A, coming)  ---> property data sources
+                           |
+                           |  POST /v1/rules   (property_context + user_inputs)
+                           v
+        +--------------- rules-api (B, private Cloud Run) ---------------+
+        |  calc: loan, LVR, DTI, repayment scenarios, First Home Loan     |
+        |  rules: select applicable knowledge-base items                  |
+        +-----------------------------+----------------------------------+
+                                      | reads
+                                      v
+                        Firestore  (rates_latest, rates_snapshots,
+                                    kb_items, sources, job_runs)
+                                      ^ writes
+              +-----------------------+------------------------+
+              |                                                |
+     rates-refresh (Cloud Run job)                   kb-refresh (Cloud Run job, weekly)
+     fetch rates page -> Gemini extract              fetch source page -> check quote
+     (only banks whose terms allow it)               (only sources whose terms allow it)
+
+   Gemini report-writing layer (in progress): rules output + knowledge-base quotes -> written report
+```
+
+rules-api never calls a language model. Numbers come from code; knowledge-base claims come from human-verified quotes
+with their source and attribution.
+
+## Quickstart (about 5 minutes, no Docker, no cloud account)
+
+Needs Python 3.12 and [uv](https://docs.astral.sh/uv/). Run from the repo root.
+
+```bash
+git clone <this repo> && cd <repo directory>
+make setup          # uv venv --python 3.12 .venv + pip-installs each service's requirements.txt and pytest
+make test           # all unit tests
+make local-api      # rules-api on http://localhost:8080 (DATA_BACKEND=local, reads kb/seed and data/rates_seed.json)
+make smoke          # in a second shell: checks /healthz and /v1/rules (expects loan 880000, LVR 88.0, DTI 6.07)
+```
+
+Without `uv`: `python3.12 -m venv .venv`, then `.venv/bin/pip install -r services/rules-api/requirements.txt -r jobs/rates-refresh/requirements.txt -r jobs/kb-refresh/requirements.txt pytest`.
+Or install one service only, for example `.venv/bin/pip install -r services/rules-api/requirements.txt pytest`.
+
+### Docker plus Firestore emulator
+
+Needs a running Docker daemon.
+
+```bash
+make up       # build and start the Firestore emulator (127.0.0.1:8085) and rules-api (127.0.0.1:8080)
+make seed     # load kb/seed and data/rates_seed.json into the emulator (emulator data is not persisted)
+make smoke    # same check, now served from Firestore
+make kb       # run the kb-refresh job against the emulator
+make down
+```
+
+Ports are published on `127.0.0.1` only, because the emulator and the API have no authentication. More detail in
+`LOCAL.md`. Production deployment (Cloud Run, Firestore, Scheduler, IAM) is in `DEPLOY.md`.
+
+## API (rules-api)
+
+| Method and path | Purpose |
+|---|---|
+| `GET /healthz` | Liveness check |
+| `POST /v1/rules` | Loan, LVR, DTI, repayment scenarios and the ids of applicable knowledge-base items |
+| `GET /v1/kb/items?ids=a,b` | Knowledge-base items (quote, source URL, attribution); all visible items if `ids` is empty |
+| `GET /v1/rates/latest` | Latest bank rates snapshot (404 if none loaded) |
+| `GET /v1/sources` | Sources and licence/attribution details behind the knowledge base |
+
+Only `verified` knowledge-base items are returned. Set `INCLUDE_DRAFT=true` (done in `docker-compose.yml`) to include
+`draft` items for development; the response flags this with `kb_includes_draft`. Full schema: `openapi.json`.
+
+Example (a $1,000,000 property by CV, $120,000 deposit, $150,000 household income, $30,000 other debts):
+
+```bash
+curl -s http://localhost:8080/v1/rules -H 'Content-Type: application/json' -d '{
+  "property_context": {"property": {"cv": {"value": 1000000, "valuation_date": "2024-05-01"}}},
+  "user_inputs": {"deposit": 120000, "household_income": 150000, "existing_debts": 30000,
+                  "household_type": "multiple"}
+}'
+```
+
+The response includes `loan_amount` (880000), `lvr_pct` (88.0), `dti` (6.07), `scenarios`, `kb_items`,
+`rates_snapshot_date` and `warnings`.
+
+In production rules-api is a private Cloud Run service; callers authenticate with a Google ID token (`DEPLOY.md`, section 11).
+
+## Data policy
+
+- **Website terms gate automation.** Every bank in `jobs/rates-refresh/config/banks.yaml` and every source in
+  `kb/seed/sources.json` carries a `tos_status` (`allowed`, `unclear` or `prohibited`) with the terms URL and review
+  date (reviewed 2026-10-03, not legal advice). Jobs fetch only `allowed` entries, send an honest `User-Agent`, honour
+  `robots.txt`, and treat a block or bot challenge as final: no retry through a browser, no bypass.
+- **No scraping of sites that disallow it.** As of the review no bank is `allowed`, so no rates page is fetched automatically.
+- **Rates are a manual snapshot.** `data/rates_seed.json` is updated by hand from each bank's public rates page
+  (`RATES_UPDATE.md`), with a `captured_at` per bank. Rates move; the report shows the snapshot date.
+- **Knowledge-base items need human verification.** Each item holds a word-for-word quote from an official source. Items
+  start as `draft`; a person checks the quote against the source and marks it `verified` (`kb/MANUAL_CHECK.md`). The job
+  never edits item text and downgrades an item whose quote disappears.
+- **Attribution.** Quotes are shown with the source's name, URL and licence/attribution text from `kb/seed/sources.json`.
+- The CV is an Auckland Council rating valuation (date shown), not a market price.
+
+## Limitations
+
+- The property-data API (A), the Gemini report layer and the frontend are not in this repo yet; this repo currently
+  ends at the rules API and its data jobs.
+- All 16 seeded knowledge-base items are `draft` until a person verifies them, so a production rules-api (no
+  `INCLUDE_DRAFT`) returns none.
+- Rates cover 11 lenders from a manual snapshot and can be out of date. Non-bank lenders are not covered.
+- Calculations are simplified (for example fixed-rate owner-occupier scenarios only) and are not a lender's assessment.
+- Auckland only. Not financial, legal or insurance advice.

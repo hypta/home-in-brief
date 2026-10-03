@@ -1,4 +1,5 @@
 # Local stack: Firestore emulator + rules-api; jobs behind the "jobs" profile.
+# Ports are published on 127.0.0.1 only: the emulator and API have no auth.
 # Build context is the repo root for every image (same as cloudbuild.yaml).
 x-emulator-env: &emulator-env
   DATA_BACKEND: firestore
@@ -10,7 +11,7 @@ services:
     image: gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators
     command: gcloud emulators firestore start --host-port=0.0.0.0:8085
     ports:
-      - "8085:8085"
+      - "127.0.0.1:8085:8085"
 
   rules-api:
     build:
@@ -20,7 +21,7 @@ services:
       <<: *emulator-env
       INCLUDE_DRAFT: "true"
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     depends_on:
       - firestore
 

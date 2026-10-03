@@ -49,6 +49,38 @@ gcloud artifacts repositories create $REPO --repository-format=docker --location
 gcloud firestore databases create --location=$REGION --type=firestore-native
 ```
 
+## 3b. Load seed data into Firestore
+
+A fresh database is empty. Without this step rules-api is healthy but `/v1/rates/latest` returns 404, `/v1/rules`
+returns no repayment scenarios (warning `rates_unavailable`) and `/v1/sources` is `[]`. The rates job cannot fill the
+gap: with no bank marked `tos_status: allowed` it fetches nothing (see section 9 and RATES_UPDATE.md).
+
+Run the two scripts from the repo root against the **real project**, not the emulator. They use Application Default
+Credentials, so the identity running them needs `roles/datastore.user` on the project (grant it to yourself, or to a
+service account you impersonate, as in section 5).
+
+```bash
+make setup                                    # once: .venv with google-cloud-firestore
+gcloud auth application-default login         # or: export GOOGLE_APPLICATION_CREDENTIALS=/path/to/key.json
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member=user:$(gcloud config get-value account) --role=roles/datastore.user
+
+unset FIRESTORE_EMULATOR_HOST                 # must be unset, otherwise the data goes to a local emulator
+export GOOGLE_CLOUD_PROJECT=$PROJECT_ID
+.venv/bin/python scripts/seed_firestore.py --dry-run   # optional: print what would be written
+.venv/bin/python scripts/seed_firestore.py             # sources/* and kb_items/*
+.venv/bin/python scripts/seed_rates.py                 # rates_latest/current and rates_snapshots/<date>
+```
+
+Notes:
+- Do not use `make seed` here: it hard-codes the emulator host and project `local-dev`.
+- Re-running `seed_firestore.py` is safe: it keeps `status`, `verified_by`, `verified_at` and `last_check` of existing items.
+  `seed_rates.py` overwrites `rates_latest/current` with `data/rates_seed.json`.
+- All seeded KB items have `status: draft` until a person verifies them (see `kb/MANUAL_CHECK.md`). rules-api only
+  returns `verified` items unless `INCLUDE_DRAFT=true` is set, so `kb_items` stays empty in production until items are verified.
+- Check after seeding (needs an identity with `run.invoker`, after section 8):
+  `curl -H "Authorization: Bearer $(gcloud auth print-identity-token)" $RULES_API_URL/v1/rates/latest` returns 200.
+
 ## 4. Service accounts
 
 ```bash
@@ -126,7 +158,7 @@ gcloud run jobs create kb-refresh \
   --set-env-vars=DATA_BACKEND=firestore
 
 # smoke test once by hand, then check the Firestore job_runs collection
-# (with no bank marked tos_status=allowed, rates-refresh fetches nothing and records skipped_by_policy)
+# (with no bank marked tos_status=allowed, rates-refresh fetches nothing, writes no snapshot and records skipped_by_policy in job_runs)
 gcloud run jobs execute rates-refresh --region=$REGION --wait
 ```
 
@@ -202,9 +234,11 @@ Budgets only alert, they do not stop spending. Adjust the amount (and currency t
 ## Operations notes
 
 - Banks that are not `tos_status: allowed` are listed under `skipped_by_policy` in `job_runs/*` and keep their
-  existing (hand-maintained) data. For allowed banks, a failed or blocked fetch keeps the old row, adds a
-  `stale_since: <date>` note and is listed under `failed`. The job exits non-zero only when it attempted banks and
-  every one failed; with no allowed banks it exits 0.
+  existing (hand-maintained) data. For allowed banks, a failed or blocked fetch is listed under `failed`; its old row
+  is kept and marked with `stale_since: <date>`, but only if the run produces a snapshot, which requires at least one
+  bank to update successfully. If every attempted bank fails (or none is allowed), no snapshot is written, so `rates_latest`
+  is unchanged and carries no stale marker; only a `job_runs` record is written. The job exits non-zero only when it
+  attempted banks and every one failed; with no allowed banks it exits 0.
 - Rollback of a bad snapshot: copy `rates_snapshots/<good date>` over `rates_latest/current`.
 
 ## Rates coverage and automation policy

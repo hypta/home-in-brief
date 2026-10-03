@@ -2,16 +2,25 @@
 
 Run everything from the repo root. `make test` runs all unit tests with the `.venv` (Python 3.12).
 
+## One-time: create the virtualenv
+
+```bash
+make setup    # uv venv --python 3.12 .venv, then installs every service's requirements.txt plus pytest
+```
+
+Without `uv`: `python3.12 -m venv .venv`, then `.venv/bin/pip install -r services/rules-api/requirements.txt -r jobs/rates-refresh/requirements.txt -r jobs/kb-refresh/requirements.txt pytest`.
+(`PY=/path/to/python` overrides the interpreter that every target uses.)
+
 ## One-time: your own `.env`
 
 `rates-refresh` calls Gemini (only for banks whose terms allow automated fetching; currently none, so it fetches nothing and rates are updated by hand, see `RATES_UPDATE.md`). To try it, create `.env` yourself (it is gitignored):
 
 ```bash
 cp .env.example .env
-# edit .env and set GEMINI_API_KEY=...   (GEMINI_MODEL is optional)
+# edit .env and set GEMINI_API_KEY=...   (GEMINI_MODEL is optional: leave it commented out to use the code default)
 ```
 
-With an allowed bank configured but no key, `rates` / `local-rates` fail loudly (`KeyError: 'GEMINI_API_KEY'`, non-zero exit) and write nothing.
+With an allowed bank configured but no key, `rates` / `local-rates` fail loudly (`KeyError: 'GEMINI_API_KEY'` recorded as that bank's failure, non-zero exit when every attempted bank failed) and write no rates snapshot. A `job_runs` record of the failed run is still written.
 
 ## Mode 1: pure Python (no Docker)
 
