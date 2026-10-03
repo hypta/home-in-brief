@@ -252,3 +252,17 @@ def test_non_allowed_sources_are_not_fetched_and_status_unchanged(tmp_path):
         assert runs[i]["status_after"] == "verified"  # manual items are never demoted
     assert runs["ok"]["status_after"] == "needs_review"  # allowed + quote gone
     assert "tos_status=prohibited" in runs["pr"]["manual_reason"]
+
+
+def test_run_ids_are_utc_compact_and_at_is_iso():
+    import re
+    from datetime import datetime
+    db = FakeDB()
+    db.data["sources/s_ok"] = {"id": "s_ok", "tos_status": "allowed"}
+    db.data["kb_items/a"] = make_item("verified", id="a")
+    job, _ = run_job(FirestoreStore(db), fetch=page("redesigned page"))  # real clock
+    ids = [k.split("/")[-1] for k in db.data if k.startswith("job_runs/") or "/runs/" in k]
+    assert ids and all(re.fullmatch(r"\d{8}T\d{6}Z", i) for i in ids)
+    assert re.fullmatch(r"\d{8}T\d{6}Z", job["run_id"])
+    assert datetime.fromisoformat(job["at"]).utcoffset().total_seconds() == 0
+    assert db.data["kb_items/a"]["last_check"]["at"].endswith("+00:00")

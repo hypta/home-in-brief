@@ -57,7 +57,7 @@ class FirestoreStore:
         return {d.id: d.to_dict() for d in self.db.collection("sources").stream()}
 
     def record(self, item: dict, run: dict, new_status: str) -> None:
-        ts = run["at"]
+        ts = run.get("run_id") or run["at"]
         self.db.collection("kb_source_checks").document(item["id"]).collection("runs").document(ts).set(run)
         update = {"last_check": run}
         if new_status != item.get("status"):
@@ -65,4 +65,4 @@ class FirestoreStore:
         self.db.collection("kb_items").document(item["id"]).update(update)
 
     def finish(self, job_run: dict) -> None:
-        self.db.collection("job_runs").document(job_run["at"]).set(job_run)
+        self.db.collection("job_runs").document(job_run.get("run_id") or job_run["at"]).set(job_run)

@@ -293,3 +293,15 @@ def test_store_imports_from_shallow_path(monkeypatch, tmp_path):
         monkeypatch.chdir(tmp_path)
         store = ns["LocalStore"]()  # falls back to cwd, still no crash
         assert store.load_previous() is None
+
+
+def test_job_run_id_is_utc_compact_and_times_are_iso():
+    import re
+    store = MemStore()
+    run(store, lambda t, b: ext())
+    run_id, jr = store.runs[0]
+    assert re.fullmatch(r"\d{8}T\d{6}Z", run_id) and run_id == "20261003T170000Z"  # NOW is 06:00+13:00
+    assert jr["run_id"] == run_id
+    assert datetime.fromisoformat(jr["finished_at"]).utcoffset() is not None
+    assert datetime.fromisoformat(store.snapshots[0][1]["captured_at"]).utcoffset() is not None
+    assert store.snapshots[0][0] == "2026-10-04"  # snapshot key stays the NZ date

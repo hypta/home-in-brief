@@ -15,8 +15,20 @@ from checker import Fetcher, check_item, manual_run, next_status  # noqa: E402
 from store import FirestoreStore, LocalStore  # noqa: E402
 
 
+RUN_ID_FORMAT = "%Y%m%dT%H%M%SZ"
+
+
+def run_id_to_iso(run_id: str) -> str:
+    """UTC run id -> ISO 8601 with offset; anything unparseable is returned unchanged."""
+    try:
+        return datetime.strptime(run_id, RUN_ID_FORMAT).replace(tzinfo=timezone.utc).isoformat()
+    except ValueError:
+        return run_id
+
+
 def run_job(store, fetch=None, clock=None) -> tuple[dict, int]:
-    clock = clock or (lambda: datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ"))
+    """clock() returns a UTC run id (YYYYMMDDTHHMMSSZ): used as the Firestore doc id; the stored `at` is ISO 8601."""
+    clock = clock or (lambda: datetime.now(timezone.utc).strftime(RUN_ID_FORMAT))
     own_fetcher = fetch is None
     fetch = fetch or Fetcher()
     sources = store.load_sources()
@@ -28,10 +40,12 @@ def run_job(store, fetch=None, clock=None) -> tuple[dict, int]:
             src = sources.get(item.get("source_id"))
             tos = src.get("tos_status") if src else None
             try:
+                run_id = clock()
                 if tos != "allowed":
-                    run = manual_run(clock(), f"tos_status={tos or 'source_not_found'}")
+                    run = manual_run(run_id, f"tos_status={tos or 'source_not_found'}")
                 else:
-                    run = check_item(item, fetch=fetch, now=clock())
+                    run = check_item(item, fetch=fetch, now=run_id)
+                run["run_id"], run["at"] = run_id, run_id_to_iso(run_id)
                 status = next_status(item, run)
                 store.record(item, run, status)
             except Exception as e:  # non-network failure (parse, store write, bad item)
@@ -50,7 +64,8 @@ def run_job(store, fetch=None, clock=None) -> tuple[dict, int]:
     finally:
         if own_fetcher:
             fetch.close()
-    job_run = {"job": "kb-refresh", "at": clock(), "checked": checked, "manual_check_required": manual,
+    job_id = clock()
+    job_run = {"job": "kb-refresh", "run_id": job_id, "at": run_id_to_iso(job_id), "checked": checked, "manual_check_required": manual,
                "changed": changed, "errors": errors}
     store.finish(job_run)
     return job_run, (1 if hard_errors else 0)

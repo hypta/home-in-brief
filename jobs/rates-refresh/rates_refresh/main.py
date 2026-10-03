@@ -1,7 +1,7 @@
 """rates-refresh job: fetch -> extract -> validate -> write. Never overwrite good data with bad."""
 import argparse
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -13,6 +13,7 @@ from .store import make_store
 from .validate import build_bank
 
 SCHEMA_VERSION = "0.1"
+RUN_ID_FORMAT = "%Y%m%dT%H%M%SZ"
 NZ = ZoneInfo("Pacific/Auckland")
 CONFIG_PATH = Path(__file__).resolve().parent.parent / "config" / "banks.yaml"
 
@@ -35,7 +36,7 @@ def _mark_stale(prev_bank: dict, date: str, prev_captured_at: str | None = None)
 def run(banks, store, extractor=gemini_extractor, fetcher=fetch_bank, now: datetime | None = None):
     """Returns (snapshot | None, job_run, exit_code). Writes via store."""
     now = now or datetime.now(NZ)
-    date = now.date().isoformat()
+    date = now.date().isoformat()  # snapshot key: NZ calendar day, same as captured_at[:10] (captured_at keeps its +12/+13 offset)
     prev = store.load_previous() or {}
     prev_by_id = {b["bank_id"]: b for b in prev.get("banks", [])}
 
@@ -84,7 +85,9 @@ def run(banks, store, extractor=gemini_extractor, fetcher=fetch_bank, now: datet
             "banks": out_banks,
         }
         store.write_snapshot(date, snapshot)
-    store.write_job_run(now.strftime("%Y-%m-%dT%H-%M-%S%z"), job_run)
+    run_id = now.astimezone(timezone.utc).strftime(RUN_ID_FORMAT)  # UTC, sortable, same as kb-refresh
+    job_run["run_id"] = run_id
+    store.write_job_run(run_id, job_run)
     attempted = len(banks) - len(skipped)
     return snapshot, job_run, (1 if attempted and not updated else 0)
 
