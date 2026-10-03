@@ -1,0 +1,241 @@
+{
+  "schema_version": "0.1",
+  "captured_at": "2026-09-27T00:00:00+12:00",
+  "banks": [
+    {
+      "bank_id": "kiwibank",
+      "name": "Kiwibank",
+      "source_url": "https://www.kiwibank.co.nz/personal-banking/home-loans/rates-and-fees/",
+      "page_sha256": null,
+      "page_effective_date": null,
+      "special": {
+        "6m": 4.85,
+        "1y": 5.15,
+        "2y": 5.39,
+        "3y": 5.59,
+        "4y": 5.79,
+        "5y": 5.89
+      },
+      "standard": {
+        "6m": 5.75,
+        "1y": 6.05,
+        "2y": 6.29,
+        "3y": 6.39,
+        "4y": 6.49,
+        "5y": 6.59
+      },
+      "floating": 6.25,
+      "special_requires_equity_pct": 20,
+      "low_equity": {
+        "mechanism": "standard_rate",
+        "lem_base": null,
+        "bands": []
+      },
+      "fhl": {
+        "lender": true,
+        "lmi_passthrough_pct": 1.0
+      },
+      "notes": []
+    },
+    {
+      "bank_id": "westpac",
+      "name": "Westpac",
+      "source_url": "https://www.westpac.co.nz/home-loans-mortgages/interest-rates/",
+      "page_sha256": null,
+      "page_effective_date": null,
+      "special": {
+        "6m": 4.89,
+        "1y": 5.19,
+        "18m": 5.45,
+        "2y": 5.29,
+        "3y": 5.59,
+        "4y": 5.65,
+        "5y": 5.75
+      },
+      "standard": {
+        "6m": 5.49,
+        "1y": 5.79,
+        "18m": 6.05,
+        "2y": 5.89,
+        "3y": 6.19,
+        "4y": 6.25,
+        "5y": 6.35
+      },
+      "floating": 6.39,
+      "special_requires_equity_pct": 20,
+      "low_equity": {
+        "mechanism": "lem",
+        "lem_base": "unverified",
+        "bands": [
+          {
+            "lvr_from": 80.01,
+            "lvr_to": 85,
+            "margin_pct": 0.25
+          },
+          {
+            "lvr_from": 85.01,
+            "lvr_to": 90,
+            "margin_pct": 0.75
+          },
+          {
+            "lvr_from": 90.01,
+            "lvr_to": 95,
+            "margin_pct": 1.5
+          },
+          {
+            "lvr_from": 95.01,
+            "lvr_to": 100,
+            "margin_pct": 1.75
+          }
+        ]
+      },
+      "fhl": {
+        "lender": true,
+        "lmi_passthrough_pct": null
+      },
+      "notes": [
+        "Special rates require salary deposited to Westpac.",
+        "The base rate that LEM stacks on is unverified."
+      ]
+    },
+    {
+      "bank_id": "anz",
+      "name": "ANZ",
+      "source_url": "https://www.anz.co.nz/rates-fees-agreements/home-loans/",
+      "page_sha256": null,
+      "page_effective_date": "2026-08-06",
+      "special": {
+        "6m": 4.79,
+        "1y": 4.99,
+        "18m": 5.45,
+        "2y": 5.49,
+        "3y": 5.59
+      },
+      "standard": {
+        "6m": 5.39,
+        "1y": 5.59,
+        "18m": 6.05,
+        "2y": 6.09,
+        "3y": 6.19,
+        "4y": 6.39,
+        "5y": 6.49
+      },
+      "floating": 6.29,
+      "special_requires_equity_pct": 20,
+      "low_equity": {
+        "mechanism": "standard_rate",
+        "lem_base": null,
+        "bands": []
+      },
+      "fhl": {
+        "lender": false,
+        "lmi_passthrough_pct": null
+      },
+      "notes": [
+        "Page date label lags the actual rates."
+      ]
+    },
+    {
+      "bank_id": "asb",
+      "name": "ASB",
+      "source_url": "https://www.asb.co.nz/home-loans-mortgages/interest-rates-fees.html",
+      "page_sha256": null,
+      "page_effective_date": null,
+      "special": {
+        "6m": 4.79,
+        "1y": 4.99,
+        "18m": 5.35,
+        "2y": 5.45,
+        "3y": 5.45,
+        "4y": 5.49,
+        "5y": 5.59
+      },
+      "standard": null,
+      "floating": 6.29,
+      "special_requires_equity_pct": 20,
+      "low_equity": {
+        "mechanism": "lem",
+        "lem_base": "special",
+        "bands": [
+          {
+            "lvr_from": 80.01,
+            "lvr_to": 85,
+            "margin_pct": 0.3
+          },
+          {
+            "lvr_from": 85.01,
+            "lvr_to": 90,
+            "margin_pct": 0.75
+          },
+          {
+            "lvr_from": 90.01,
+            "lvr_to": 95,
+            "margin_pct": 1.3
+          },
+          {
+            "lvr_from": 95.01,
+            "lvr_to": 100,
+            "margin_pct": 1.5
+          }
+        ]
+      },
+      "fhl": {
+        "lender": true,
+        "lmi_passthrough_pct": 1.2
+      },
+      "notes": [
+        "First Home Loan is not charged LEM."
+      ]
+    },
+    {
+      "bank_id": "bnz",
+      "name": "BNZ",
+      "source_url": "https://www.bnz.co.nz/personal-banking/home-loans/compare-bnz-home-loan-rates",
+      "page_sha256": null,
+      "page_effective_date": null,
+      "special": {
+        "6m": 4.89,
+        "1y": 5.19,
+        "18m": 5.29,
+        "2y": 5.35,
+        "3y": 5.59,
+        "4y": 5.65,
+        "5y": 5.75
+      },
+      "standard": null,
+      "floating": 6.34,
+      "special_requires_equity_pct": 20,
+      "low_equity": {
+        "mechanism": "lem",
+        "lem_base": "special",
+        "bands": [
+          {
+            "lvr_from": 80.01,
+            "lvr_to": 85,
+            "margin_pct": 0.35
+          },
+          {
+            "lvr_from": 85.01,
+            "lvr_to": 90,
+            "margin_pct": 0.75
+          },
+          {
+            "lvr_from": 90.01,
+            "lvr_to": 95,
+            "margin_pct": 1.2
+          },
+          {
+            "lvr_from": 95.01,
+            "lvr_to": 100,
+            "margin_pct": 1.5
+          }
+        ]
+      },
+      "fhl": {
+        "lender": false,
+        "lmi_passthrough_pct": null
+      },
+      "notes": []
+    }
+  ]
+}

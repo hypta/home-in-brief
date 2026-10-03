@@ -1,0 +1,1265 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "rules-api",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/healthz": {
+      "get": {
+        "summary": "Healthz",
+        "operationId": "healthz_healthz_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Healthz Healthz Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/rules": {
+      "post": {
+        "summary": "Rules",
+        "operationId": "rules_v1_rules_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RulesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RulesOutput"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/kb/items": {
+      "get": {
+        "summary": "Kb Items",
+        "operationId": "kb_items_v1_kb_items_get",
+        "parameters": [
+          {
+            "name": "ids",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "comma-separated ids",
+              "default": "",
+              "title": "Ids"
+            },
+            "description": "comma-separated ids"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/KbItem"
+                  },
+                  "title": "Response Kb Items V1 Kb Items Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/rates/latest": {
+      "get": {
+        "summary": "Rates Latest",
+        "operationId": "rates_latest_v1_rates_latest_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RatesSnapshot"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/sources": {
+      "get": {
+        "summary": "Sources",
+        "operationId": "sources_v1_sources_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Source"
+                  },
+                  "type": "array",
+                  "title": "Response Sources V1 Sources Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "BankRate": {
+        "properties": {
+          "bank_id": {
+            "type": "string",
+            "title": "Bank Id"
+          },
+          "rate_pct": {
+            "type": "number",
+            "title": "Rate Pct"
+          },
+          "basis": {
+            "type": "string",
+            "title": "Basis"
+          }
+        },
+        "type": "object",
+        "required": [
+          "bank_id",
+          "rate_pct",
+          "basis"
+        ],
+        "title": "BankRate"
+      },
+      "BankRates": {
+        "properties": {
+          "bank_id": {
+            "type": "string",
+            "title": "Bank Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "source_url": {
+            "type": "string",
+            "title": "Source Url"
+          },
+          "page_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Sha256"
+          },
+          "page_effective_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Effective Date"
+          },
+          "special": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Special"
+          },
+          "standard": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Standard"
+          },
+          "floating": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Floating"
+          },
+          "special_requires_equity_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Special Requires Equity Pct",
+            "default": 20
+          },
+          "low_equity": {
+            "$ref": "#/components/schemas/LowEquity"
+          },
+          "fhl": {
+            "$ref": "#/components/schemas/Fhl"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Notes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "bank_id",
+          "name",
+          "source_url",
+          "low_equity",
+          "fhl"
+        ],
+        "title": "BankRates"
+      },
+      "BankStandardScenario": {
+        "properties": {
+          "rate_range_pct": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Rate Range Pct"
+          },
+          "low_equity_margin_pct": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Low Equity Margin Pct"
+          },
+          "monthly_range": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Monthly Range"
+          },
+          "fortnightly_range": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Fortnightly Range"
+          },
+          "stress_monthly": {
+            "type": "integer",
+            "title": "Stress Monthly"
+          },
+          "per_bank": {
+            "items": {
+              "$ref": "#/components/schemas/BankRate"
+            },
+            "type": "array",
+            "title": "Per Bank"
+          },
+          "source_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Source Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rate_range_pct",
+          "monthly_range",
+          "fortnightly_range",
+          "stress_monthly",
+          "per_bank"
+        ],
+        "title": "BankStandardScenario"
+      },
+      "CV": {
+        "properties": {
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "valuation_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valuation Date"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "title": "CV"
+      },
+      "ChatSupplied": {
+        "properties": {
+          "year_built": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year Built"
+          },
+          "cladding": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cladding"
+          }
+        },
+        "type": "object",
+        "title": "ChatSupplied"
+      },
+      "Fhl": {
+        "properties": {
+          "lender": {
+            "type": "boolean",
+            "title": "Lender"
+          },
+          "lmi_passthrough_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lmi Passthrough Pct"
+          }
+        },
+        "type": "object",
+        "required": [
+          "lender"
+        ],
+        "title": "Fhl"
+      },
+      "FirstHomeLoanScenario": {
+        "properties": {
+          "rate_pct": {
+            "type": "number",
+            "title": "Rate Pct"
+          },
+          "lender_bank_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lender Bank Id"
+          },
+          "lmi_amount": {
+            "type": "number",
+            "title": "Lmi Amount"
+          },
+          "lmi_capitalised": {
+            "type": "boolean",
+            "title": "Lmi Capitalised",
+            "default": true
+          },
+          "loan_with_lmi": {
+            "type": "number",
+            "title": "Loan With Lmi"
+          },
+          "monthly": {
+            "type": "integer",
+            "title": "Monthly"
+          },
+          "fortnightly": {
+            "type": "integer",
+            "title": "Fortnightly"
+          },
+          "source_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Source Ids"
+          },
+          "note_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Note Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rate_pct",
+          "lmi_amount",
+          "loan_with_lmi",
+          "monthly",
+          "fortnightly"
+        ],
+        "title": "FirstHomeLoanScenario"
+      },
+      "Flag": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "active": {
+            "type": "boolean",
+            "title": "Active",
+            "default": true
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "title": "Flag"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "Hazard": {
+        "properties": {
+          "layer": {
+            "type": "string",
+            "title": "Layer"
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "primary",
+              "secondary"
+            ],
+            "title": "Priority",
+            "default": "secondary"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "intersects",
+              "none",
+              "unavailable",
+              "not_found"
+            ],
+            "title": "Status",
+            "default": "none"
+          }
+        },
+        "type": "object",
+        "required": [
+          "layer"
+        ],
+        "title": "Hazard"
+      },
+      "IntField": {
+        "properties": {
+          "value": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "type": "object",
+        "title": "IntField"
+      },
+      "KbItem": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "topic": {
+            "type": "string",
+            "title": "Topic"
+          },
+          "applies_when": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Applies When"
+          },
+          "claim_en": {
+            "type": "string",
+            "title": "Claim En"
+          },
+          "quote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quote"
+          },
+          "source_id": {
+            "type": "string",
+            "title": "Source Id"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "source_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Title"
+          },
+          "source_type": {
+            "type": "string",
+            "enum": [
+              "official",
+              "secondary"
+            ],
+            "title": "Source Type",
+            "default": "official"
+          },
+          "licence": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Licence"
+          },
+          "next_step_en": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Step En"
+          },
+          "verified_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verified By"
+          },
+          "verified_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verified At"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "verified",
+              "needs_review",
+              "retired"
+            ],
+            "title": "Status",
+            "default": "draft"
+          },
+          "last_check": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Check"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "topic",
+          "claim_en",
+          "source_id"
+        ],
+        "title": "KbItem"
+      },
+      "LemBand": {
+        "properties": {
+          "lvr_from": {
+            "type": "number",
+            "title": "Lvr From"
+          },
+          "lvr_to": {
+            "type": "number",
+            "title": "Lvr To"
+          },
+          "margin_pct": {
+            "type": "number",
+            "title": "Margin Pct"
+          }
+        },
+        "type": "object",
+        "required": [
+          "lvr_from",
+          "lvr_to",
+          "margin_pct"
+        ],
+        "title": "LemBand"
+      },
+      "LowEquity": {
+        "properties": {
+          "mechanism": {
+            "type": "string",
+            "enum": [
+              "lem",
+              "standard_rate"
+            ],
+            "title": "Mechanism"
+          },
+          "lem_base": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "special",
+                  "unverified"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lem Base"
+          },
+          "bands": {
+            "items": {
+              "$ref": "#/components/schemas/LemBand"
+            },
+            "type": "array",
+            "title": "Bands"
+          }
+        },
+        "type": "object",
+        "required": [
+          "mechanism"
+        ],
+        "title": "LowEquity"
+      },
+      "PriceUsed": {
+        "properties": {
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "basis": {
+            "type": "string",
+            "enum": [
+              "user_override",
+              "cv",
+              "none"
+            ],
+            "title": "Basis",
+            "default": "none"
+          }
+        },
+        "type": "object",
+        "title": "PriceUsed"
+      },
+      "Property": {
+        "properties": {
+          "cv": {
+            "$ref": "#/components/schemas/CV"
+          },
+          "title_type": {
+            "$ref": "#/components/schemas/StrField"
+          },
+          "year_built": {
+            "$ref": "#/components/schemas/IntField"
+          },
+          "cladding": {
+            "$ref": "#/components/schemas/StrField"
+          }
+        },
+        "type": "object",
+        "title": "Property"
+      },
+      "PropertyContext": {
+        "properties": {
+          "property": {
+            "$ref": "#/components/schemas/Property"
+          },
+          "hazards": {
+            "items": {
+              "$ref": "#/components/schemas/Hazard"
+            },
+            "type": "array",
+            "title": "Hazards"
+          }
+        },
+        "type": "object",
+        "title": "PropertyContext"
+      },
+      "RatesSnapshot": {
+        "properties": {
+          "schema_version": {
+            "type": "string",
+            "title": "Schema Version",
+            "default": "0.1"
+          },
+          "captured_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captured At"
+          },
+          "banks": {
+            "items": {
+              "$ref": "#/components/schemas/BankRates"
+            },
+            "type": "array",
+            "title": "Banks"
+          }
+        },
+        "type": "object",
+        "title": "RatesSnapshot"
+      },
+      "RulesOutput": {
+        "properties": {
+          "schema_version": {
+            "type": "string",
+            "title": "Schema Version",
+            "default": "0.1"
+          },
+          "generated_at": {
+            "type": "string",
+            "title": "Generated At"
+          },
+          "price_used": {
+            "$ref": "#/components/schemas/PriceUsed"
+          },
+          "deposit": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deposit"
+          },
+          "loan": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Loan"
+          },
+          "lvr_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lvr Pct"
+          },
+          "dti": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dti"
+          },
+          "high_dti_threshold": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "High Dti Threshold"
+          },
+          "stress_add_pp": {
+            "type": "number",
+            "title": "Stress Add Pp",
+            "default": 2.0
+          },
+          "scenarios": {
+            "$ref": "#/components/schemas/Scenarios"
+          },
+          "flags": {
+            "items": {
+              "$ref": "#/components/schemas/Flag"
+            },
+            "type": "array",
+            "title": "Flags"
+          },
+          "kb_items": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Kb Items"
+          },
+          "kb_includes_draft": {
+            "type": "boolean",
+            "title": "Kb Includes Draft",
+            "default": false
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "generated_at",
+          "price_used"
+        ],
+        "title": "RulesOutput"
+      },
+      "RulesRequest": {
+        "properties": {
+          "property_context": {
+            "$ref": "#/components/schemas/PropertyContext"
+          },
+          "user_inputs": {
+            "$ref": "#/components/schemas/UserInputs"
+          }
+        },
+        "type": "object",
+        "title": "RulesRequest"
+      },
+      "Scenarios": {
+        "properties": {
+          "bank_standard": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BankStandardScenario"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "user_rate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UserRateScenario"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "first_home_loan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FirstHomeLoanScenario"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "Scenarios"
+      },
+      "Source": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "licence": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Licence"
+          },
+          "accessed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accessed At"
+          },
+          "source_type": {
+            "type": "string",
+            "enum": [
+              "official",
+              "secondary"
+            ],
+            "title": "Source Type",
+            "default": "official"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "url"
+        ],
+        "title": "Source"
+      },
+      "StrField": {
+        "properties": {
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "type": "object",
+        "title": "StrField"
+      },
+      "UserInputs": {
+        "properties": {
+          "price_override": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Override"
+          },
+          "deposit": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deposit"
+          },
+          "household_income": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Household Income"
+          },
+          "existing_debts": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Existing Debts"
+          },
+          "rate_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rate Pct"
+          },
+          "household_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "single",
+                  "single_with_dependants",
+                  "multiple"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Household Type"
+          },
+          "chat_supplied": {
+            "$ref": "#/components/schemas/ChatSupplied"
+          }
+        },
+        "type": "object",
+        "title": "UserInputs"
+      },
+      "UserRateScenario": {
+        "properties": {
+          "rate_pct": {
+            "type": "number",
+            "title": "Rate Pct"
+          },
+          "monthly": {
+            "type": "integer",
+            "title": "Monthly"
+          },
+          "fortnightly": {
+            "type": "integer",
+            "title": "Fortnightly"
+          },
+          "stress_monthly": {
+            "type": "integer",
+            "title": "Stress Monthly"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rate_pct",
+          "monthly",
+          "fortnightly",
+          "stress_monthly"
+        ],
+        "title": "UserRateScenario"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}
