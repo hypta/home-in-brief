@@ -21,8 +21,10 @@ def load_banks(path: Path = CONFIG_PATH) -> list[dict]:
     return yaml.safe_load(path.read_text())["banks"]
 
 
-def _mark_stale(prev_bank: dict, date: str) -> dict:
+def _mark_stale(prev_bank: dict, date: str, prev_captured_at: str | None = None) -> dict:
     rec = dict(prev_bank)
+    # keep the bank's own capture time; older snapshots only have the top-level one
+    rec["captured_at"] = prev_bank.get("captured_at") or prev_captured_at
     notes = list(rec.get("notes") or [])
     if not any(n.startswith("stale_since:") for n in notes):  # keep the earliest date
         notes.append(f"stale_since: {date}")
@@ -47,7 +49,7 @@ def run(banks, store, extractor=gemini_extractor, fetcher=fetch_bank, now: datet
                 reason = f"fetch blocked via {page.method}: {page.block_reason}"
             else:
                 ext = extractor(page.text, bank)
-                record, problems = build_bank(bank, ext, page.sha256, prev_by_id.get(bid))
+                record, problems = build_bank(bank, ext, page.sha256, prev_by_id.get(bid), now.isoformat())
                 if problems:
                     reason = "validation: " + "; ".join(problems)
         except Exception as e:  # one bank must never take down the others
@@ -59,7 +61,7 @@ def run(banks, store, extractor=gemini_extractor, fetcher=fetch_bank, now: datet
         else:
             failed.append({"bank_id": bid, "reason": reason})
             if bid in prev_by_id:
-                out_banks.append(_mark_stale(prev_by_id[bid], date))
+                out_banks.append(_mark_stale(prev_by_id[bid], date, prev.get("captured_at")))
 
     job_run = {
         "job": "rates-refresh",

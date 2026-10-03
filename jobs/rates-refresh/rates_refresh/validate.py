@@ -43,7 +43,7 @@ def validate(special: dict, standard: dict | None, floating: float | None,
     return problems
 
 
-def build_bank(bank: dict, ext: Extracted, page_sha256: str, prev: dict | None):
+def build_bank(bank: dict, ext: Extracted, page_sha256: str, prev: dict | None, captured_at: str | None = None):
     """Return (record, problems). record is None when validation fails."""
     special = to_rate_map(ext.special)
     standard = to_rate_map(ext.standard) or None
@@ -55,6 +55,7 @@ def build_bank(bank: dict, ext: Extracted, page_sha256: str, prev: dict | None):
         "bank_id": bank["bank_id"],
         "name": bank["name"],
         "source_url": bank["source_url"],
+        "captured_at": captured_at,
         "page_sha256": page_sha256,
         "page_effective_date": ext.page_effective_date,
         "special": special,

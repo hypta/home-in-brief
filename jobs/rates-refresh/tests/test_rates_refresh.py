@@ -208,3 +208,23 @@ def test_banks_config_is_complete():
         assert b["fetch"] in ("http", "browser") and b["source_url"].startswith("https://")
         assert b["mechanism"] in ("lem", "standard_rate")
         assert "lender" in b["fhl"] and "lmi_passthrough_pct" in b["fhl"]
+
+
+def test_per_bank_captured_at_fresh_and_stale():
+    prev = prev_snapshot(captured_at="2026-09-01T06:00:00+12:00")
+    b3 = {**prev["banks"][0], "bank_id": "b3", "name": "B3"}
+    del b3["captured_at"]  # old-format bank without its own captured_at
+    prev["banks"].append(b3)
+    prev["captured_at"] = "2026-08-01T06:00:00+12:00"
+    store = MemStore(prev)
+    banks = [bank("b1"), bank("b2"), bank("b3")]
+
+    def extractor(t, b):  # b1 and b3 fail validation, b2 succeeds
+        return ext() if b["bank_id"] == "b2" else ext({"1y": 99})
+
+    snap, jr, _ = run(store, extractor, banks)
+    by = {b["bank_id"]: b for b in snap["banks"]}
+    assert by["b2"]["captured_at"] == NOW.isoformat()
+    assert by["b1"]["captured_at"] == "2026-09-01T06:00:00+12:00"  # own value kept, not overwritten
+    assert by["b3"]["captured_at"] == "2026-08-01T06:00:00+12:00"  # falls back to snapshot-level time
+    assert by["b1"]["page_sha256"] == "old"
