@@ -11,10 +11,10 @@ NOW = datetime.fromisoformat("2026-10-04T06:00:00+13:00")
 LONG = "x" * 3000 + " rates 4.89% 4.79% 4.99% 5.19% 5.29% 5.39% 5.49% 5.59% 5.69%"
 
 
-def bank(bid="b1", fetch="http"):
+def bank(bid="b1", render="http", tos="allowed"):
     return {
         "bank_id": bid, "name": bid.upper(), "source_url": f"https://{bid}.example/",
-        "fetch": fetch, "mechanism": "lem", "lem_base": "special",
+        "render": render, "tos_status": tos, "mechanism": "lem", "lem_base": "special",
         "fhl": {"lender": True, "lmi_passthrough_pct": 1.2},
     }
 
@@ -137,7 +137,10 @@ def test_blocked_page_not_sent_to_extractor():
     assert code == 1 and not called and "blocked" in jr["failed"][0]["reason"]
 
 
-def test_blocked_http_switches_to_browser():
+ROBOTS_OK = lambda url: (True, "robots_ok")
+
+
+def test_blocked_http_stops_without_browser():
     calls = []
 
     def http(url):
@@ -148,15 +151,77 @@ def test_blocked_http_switches_to_browser():
         calls.append("browser")
         return FetchResult(LONG, "browser", 200, False, None)
 
-    r = fetch_bank(bank(), http=http, browser=browser)
-    assert calls == ["http", "browser"] and r.method == "browser" and r.fell_back and not r.blocked
+    r = fetch_bank(bank(), http=http, browser=browser, robots=ROBOTS_OK)
+    assert calls == ["http"] and r.blocked and r.block_reason == "http_403"
 
 
-def test_http_ok_stays_http_and_browser_config_skips_http():
+def test_challenge_page_does_not_switch_to_browser():
+    calls = []
+    http = lambda url: (calls.append("http"), FetchResult("x", "http", 200, True, "challenge_page"))[1]
+    browser = lambda url: calls.append("browser")
+    assert fetch_bank(bank(), http=http, browser=browser, robots=ROBOTS_OK).blocked
+    assert calls == ["http"]
+
+
+def test_render_browser_only_when_configured():
     http = lambda url: FetchResult(LONG, "http", 200, False, None)
     browser = lambda url: FetchResult(LONG, "browser", 200, False, None)
-    assert fetch_bank(bank(), http=http, browser=browser).method == "http"
-    assert fetch_bank(bank(fetch="browser"), http=http, browser=browser).method == "browser"
+    assert fetch_bank(bank(), http=http, browser=browser, robots=ROBOTS_OK).method == "http"
+    assert fetch_bank(bank(render="browser"), http=http, browser=browser, robots=ROBOTS_OK).method == "browser"
+
+
+def test_robots_disallow_means_no_page_request():
+    calls = []
+    http = lambda url: calls.append(url)
+    r = fetch_bank(bank(), http=http, browser=http, robots=lambda u: (False, "robots_disallow"))
+    assert calls == [] and r.blocked and r.block_reason == "robots_disallow"
+
+
+def test_robots_parsing():
+    from rates_refresh.fetch import robots_allows
+    url = "https://x.example/rates/"
+    assert robots_allows(url, getter=lambda u: (200, "User-agent: *\nDisallow: /rates/"))[0] is False
+    assert robots_allows(url, getter=lambda u: (200, "User-agent: *\nDisallow: /admin/"))[0] is True
+    assert robots_allows(url, getter=lambda u: (200, "User-agent: home-buyer-copilot\nDisallow: /"))[0] is False
+    assert robots_allows(url, getter=lambda u: (404, ""))[0] is True
+    assert robots_allows(url, getter=lambda u: (403, ""))[0] is False
+    assert robots_allows(url, getter=lambda u: (503, ""))[0] is False
+
+
+def test_user_agent_is_honest():
+    from rates_refresh.fetch import USER_AGENT
+    assert USER_AGENT.startswith("home-buyer-copilot/") and "Mozilla" not in USER_AGENT
+
+
+def test_not_allowed_banks_skipped_without_any_request():
+    called = []
+    fetcher = lambda b: called.append(b["bank_id"])
+    prev = prev_snapshot()
+    store = MemStore(prev)
+    banks = [bank("b1", tos="unclear"), bank("b2", tos="prohibited")]
+    snap, jr, code = run(store, lambda t, b: called.append("extract"), banks, fetcher=fetcher)
+    assert called == [] and jr["skipped_by_policy"] == ["b1", "b2"]
+    assert jr["updated"] == [] and jr["failed"] == []
+    assert code == 0 and snap is None and store.snapshots == []  # nothing written but the job_run
+    assert len(store.runs) == 1
+
+
+def test_mixed_policy_keeps_skipped_bank_data_as_is():
+    store = MemStore(prev_snapshot())
+    banks = [bank("b1", tos="unclear"), bank("b2")]
+    snap, jr, code = run(store, lambda t, b: ext(), banks)
+    assert code == 0 and jr["updated"] == ["b2"] and jr["skipped_by_policy"] == ["b1"]
+    kept = next(b for b in snap["banks"] if b["bank_id"] == "b1")
+    assert kept == prev_snapshot()["banks"][0]  # untouched, not marked stale
+
+
+def test_main_without_allowed_banks_exits_zero_with_message(capsys, tmp_path, monkeypatch):
+    monkeypatch.setenv("DATA_BACKEND", "local")
+    monkeypatch.setenv("OUT_DIR", str(tmp_path))
+    monkeypatch.setattr(job, "fetch_bank", lambda b: pytest.fail("must not fetch"))
+    assert job.main([]) == 0
+    assert "No bank has tos_status=allowed" in capsys.readouterr().out
+    assert job.main(["--fetch-only"]) == 0
 
 
 def test_detect_block():
@@ -205,26 +270,12 @@ def test_banks_config_is_complete():
     ids = [b["bank_id"] for b in banks]
     assert len(ids) == len(set(ids)) and {"tsb", "coop", "sbs", "unity", "nbs", "nzhl"} <= set(ids)
     for b in banks:
-        assert b["fetch"] in ("http", "browser") and b["source_url"].startswith("https://")
+        assert b["source_url"].startswith("https://")
         assert b["mechanism"] in ("lem", "standard_rate")
         assert "lender" in b["fhl"] and "lmi_passthrough_pct" in b["fhl"]
-
-
-def test_per_bank_captured_at_fresh_and_stale():
-    prev = prev_snapshot(captured_at="2026-09-01T06:00:00+12:00")
-    b3 = {**prev["banks"][0], "bank_id": "b3", "name": "B3"}
-    del b3["captured_at"]  # old-format bank without its own captured_at
-    prev["banks"].append(b3)
-    prev["captured_at"] = "2026-08-01T06:00:00+12:00"
-    store = MemStore(prev)
-    banks = [bank("b1"), bank("b2"), bank("b3")]
-
-    def extractor(t, b):  # b1 and b3 fail validation, b2 succeeds
-        return ext() if b["bank_id"] == "b2" else ext({"1y": 99})
-
-    snap, jr, _ = run(store, extractor, banks)
-    by = {b["bank_id"]: b for b in snap["banks"]}
-    assert by["b2"]["captured_at"] == NOW.isoformat()
-    assert by["b1"]["captured_at"] == "2026-09-01T06:00:00+12:00"  # own value kept, not overwritten
-    assert by["b3"]["captured_at"] == "2026-08-01T06:00:00+12:00"  # falls back to snapshot-level time
-    assert by["b1"]["page_sha256"] == "old"
+        assert b["tos_status"] in ("allowed", "unclear", "prohibited")
+        assert b["tos_checked_at"] and b["tos_note"] and "tos_url" in b
+        assert b.get("render", "http") in ("http", "browser")
+        if b.get("render") == "browser":
+            assert b["tos_status"] == "allowed"  # never render-by-browser a site we may not automate
+    assert next(b for b in banks if b["bank_id"] == "nzhl")["tos_status"] == "prohibited"

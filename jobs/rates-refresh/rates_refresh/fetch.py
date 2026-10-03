@@ -1,15 +1,20 @@
-"""Page fetching: plain HTTP first, Playwright when blocked or configured."""
+"""Polite page fetching for banks whose terms allow automated access.
+
+Identifies itself honestly, obeys robots.txt, and stops (never retries another way) when a site blocks us.
+Playwright is used only when banks.yaml says `render: browser` (the page needs JavaScript to show rates).
+"""
 import hashlib
 import re
 from dataclasses import dataclass
 from html.parser import HTMLParser
 
+import urllib.robotparser
+from urllib.parse import urlsplit
+
 import httpx
 
-USER_AGENT = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-)
+USER_AGENT = "home-buyer-copilot/0.1 (+https://github.com/hypta/home-buyer-copilot)"
+ROBOTS_TOKEN = "home-buyer-copilot"
 MIN_TEXT_LEN = 1500
 MIN_RATES_ON_PAGE = 8
 RATE_RE = re.compile(r"\b(\d{1,2}\.\d{2})\s*%")
@@ -28,7 +33,6 @@ class FetchResult:
     status: int | None
     blocked: bool
     block_reason: str | None
-    fell_back: bool = False
 
     @property
     def sha256(self) -> str:
@@ -152,17 +156,39 @@ def browser_fetch(url: str) -> FetchResult:
     return FetchResult(text, "browser", status, reason is not None, reason)
 
 
-def fetch_bank(bank: dict, http=http_fetch, browser=browser_fetch) -> FetchResult:
-    """Fetch per config; switch to the browser if HTTP is blocked or errors out."""
-    url = bank["source_url"]
-    if bank.get("fetch") == "browser":
-        return browser(url)
+def robots_allows(url: str, getter=None) -> tuple[bool, str]:
+    """RFC 9309 behaviour: 4xx (other than 401/403) = allowed, 401/403 or unreachable = do not fetch."""
+    parts = urlsplit(url)
+    robots_url = f"{parts.scheme}://{parts.netloc}/robots.txt"
+    getter = getter or _get_robots
     try:
-        res = http(url)
-    except httpx.HTTPError:
-        res = None
-    if res is not None and not res.blocked:
-        return res
-    out = browser(url)
-    out.fell_back = True
-    return out
+        status, body = getter(robots_url)
+    except httpx.HTTPError as e:
+        return False, f"robots_unreachable: {type(e).__name__}"
+    if status in (401, 403) or status >= 500:
+        return False, f"robots_status_{status}"
+    if status >= 400:
+        return True, "no_robots_txt"
+    rp = urllib.robotparser.RobotFileParser()
+    rp.parse(body.splitlines())
+    if rp.can_fetch(ROBOTS_TOKEN, url):
+        return True, "robots_ok"
+    return False, "robots_disallow"
+
+
+def _get_robots(robots_url: str) -> tuple[int, str]:
+    with httpx.Client(follow_redirects=True, timeout=20, headers={"User-Agent": USER_AGENT}) as c:
+        r = c.get(robots_url)
+    return r.status_code, r.text
+
+
+def fetch_bank(bank: dict, http=http_fetch, browser=browser_fetch, robots=robots_allows) -> FetchResult:
+    """One attempt, honest client. A block, challenge page or robots Disallow is final: no retry another way."""
+    url = bank["source_url"]
+    ok, why = robots(url)
+    if not ok:
+        return FetchResult("", "none", None, True, why)
+    try:
+        return (browser if bank.get("render") == "browser" else http)(url)
+    except httpx.HTTPError as e:
+        return FetchResult("", "http", None, True, f"http_error: {type(e).__name__}")

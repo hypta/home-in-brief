@@ -4,14 +4,14 @@ Run everything from the repo root. `make test` runs all unit tests with the `.ve
 
 ## One-time: your own `.env`
 
-`rates-refresh` calls Gemini, so create `.env` yourself (it is gitignored):
+`rates-refresh` calls Gemini (only for banks whose terms allow automated fetching; currently none, so it fetches nothing and rates are updated by hand, see `RATES_UPDATE.md`). To try it, create `.env` yourself (it is gitignored):
 
 ```bash
 cp .env.example .env
 # edit .env and set GEMINI_API_KEY=...   (GEMINI_MODEL is optional)
 ```
 
-Without a key, `rates` / `local-rates` fail loudly (`KeyError: 'GEMINI_API_KEY'`, non-zero exit) and write nothing.
+With an allowed bank configured but no key, `rates` / `local-rates` fail loudly (`KeyError: 'GEMINI_API_KEY'`, non-zero exit) and write nothing.
 
 ## Mode 1: pure Python (no Docker)
 
@@ -19,8 +19,9 @@ Without a key, `rates` / `local-rates` fail loudly (`KeyError: 'GEMINI_API_KEY'`
 make test          # all unit tests
 make local-api     # uvicorn on :8080, DATA_BACKEND=local (reads kb/seed + data/rates_seed.json)
 make smoke         # in another shell: /healthz + /v1/rules, expects loan 880000, lvr 88.0, dti 6.07
-make rates-fetch   # fetch the 11 bank pages only; no Gemini, no writes
-make local-rates   # full rates-refresh (needs .env); output in jobs/rates-refresh/out/
+make rates-fetch   # fetch pages of tos_status=allowed banks only (none today); no Gemini, no writes
+make local-rates   # full rates-refresh (needs .env); skips non-allowed banks; output in jobs/rates-refresh/out/
+python scripts/validate_rates_seed.py   # check the hand-maintained data/rates_seed.json
 make local-kb      # kb-refresh; prints quote_found per KB item, report in out/
 ```
 

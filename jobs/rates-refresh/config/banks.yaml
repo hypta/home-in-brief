@@ -1,17 +1,26 @@
-# fetch: http = try plain HTTP first (falls back to browser if blocked); browser = always Playwright.
+# Rates are fetched automatically ONLY for banks with tos_status: allowed.
+# unclear / prohibited banks are never requested; their rows are maintained by hand (see RATES_UPDATE.md).
+# render: browser (optional) means the page needs JavaScript to show rates; use it only for allowed banks.
+# Terms review: read 2026-10-03, not legal advice. Re-check before switching any bank to allowed.
 banks:
   - bank_id: kiwibank
     name: Kiwibank
     source_url: https://www.kiwibank.co.nz/personal-banking/home-loans/rates-and-fees/
-    fetch: http
+    tos_status: unclear
+    tos_url: https://www.kiwibank.co.nz/about-us/governance/legal-documents-and-information/website-terms-of-use/
+    tos_checked_at: "2026-10-03"
+    tos_note: "Terms require written permission to use or distribute site information publicly; no explicit scraping or automation clause."
     mechanism: standard_rate
     lem_base: null
-    fhl: {lender: true, lmi_passthrough_pct: 1.00}
+    fhl: {lender: true, lmi_passthrough_pct: 1.0}
 
   - bank_id: westpac
     name: Westpac NZ
     source_url: https://www.westpac.co.nz/home-loans-mortgages/interest-rates/
-    fetch: browser   # fixed-rate table is JS-rendered; plain HTTP only returns floating + LEM bands
+    tos_status: unclear
+    tos_url: https://www.westpac.co.nz/about-us/legal-information-privacy/website-terms-of-use/
+    tos_checked_at: "2026-10-03"
+    tos_note: "Terms allow reproduction solely for viewing and require permission for public display; no explicit automation clause."
     mechanism: lem
     lem_base: unverified
     fhl: {lender: true, lmi_passthrough_pct: null}
@@ -19,7 +28,10 @@ banks:
   - bank_id: anz
     name: ANZ NZ
     source_url: https://www.anz.co.nz/rates-fees-agreements/home-loans/
-    fetch: browser   # rates sit in collapsed accordions
+    tos_status: unclear
+    tos_url: https://www.anz.co.nz/comms/website-terms-of-use/
+    tos_checked_at: "2026-10-03"
+    tos_note: "Terms limit reproduction to personal use and require permission for public display; no explicit automation clause."
     mechanism: standard_rate
     lem_base: null
     fhl: {lender: false, lmi_passthrough_pct: null}
@@ -27,7 +39,10 @@ banks:
   - bank_id: asb
     name: ASB
     source_url: https://www.asb.co.nz/home-loans-mortgages/interest-rates-fees.html
-    fetch: http
+    tos_status: unclear
+    tos_url: null
+    tos_checked_at: "2026-10-03"
+    tos_note: "No website terms page found, so automated access is neither allowed nor prohibited in writing."
     mechanism: lem
     lem_base: special
     fhl: {lender: true, lmi_passthrough_pct: 1.2}
@@ -35,7 +50,10 @@ banks:
   - bank_id: bnz
     name: BNZ
     source_url: https://www.bnz.co.nz/personal-banking/home-loans/compare-bnz-home-loan-rates
-    fetch: http
+    tos_status: unclear
+    tos_url: https://www.bnz.co.nz/about-us/governance/terms-and-conditions
+    tos_checked_at: "2026-10-03"
+    tos_note: "Terms forbid interfering with normal site operation and reserve copyright and the right to block access; no explicit scraping clause."
     mechanism: lem
     lem_base: special
     fhl: {lender: false, lmi_passthrough_pct: null}
@@ -43,16 +61,22 @@ banks:
   - bank_id: tsb
     name: TSB
     source_url: https://www.tsb.co.nz/rates-fees-agreements/home-loan
-    fetch: http   # browser gets HTTP 403 here, so http must stay first
-    mechanism: standard_rate   # special needs 20% deposit, otherwise standard rate
+    tos_status: unclear
+    tos_url: https://www.tsb.co.nz/information/website-policy
+    tos_checked_at: "2026-10-03"
+    tos_note: "Content is for personal non-commercial use and reproduction needs written consent; no explicit automation clause."
+    mechanism: standard_rate
     lem_base: null
     fhl: {lender: false, lmi_passthrough_pct: null}
 
   - bank_id: coop
     name: Co-operative Bank
     source_url: https://www.co-operativebank.co.nz/rates
-    fetch: http   # http returns an Imperva challenge, so it falls back to browser
-    mechanism: lem   # standard rates + a low equity premium of 0.20-1.00% above 80% LVR
+    tos_status: unclear
+    tos_url: null
+    tos_checked_at: "2026-10-03"
+    tos_note: "No website terms page found, so automated access is neither allowed nor prohibited in writing."
+    mechanism: lem
     lem_base: unverified
     fhl: {lender: true, lmi_passthrough_pct: 1.2}
     notes:
@@ -61,7 +85,10 @@ banks:
   - bank_id: sbs
     name: SBS Bank
     source_url: https://www.sbsbank.co.nz/rates
-    fetch: http
+    tos_status: unclear
+    tos_url: https://www.sbsbank.co.nz/assets/PDFs/TCs/TC2-Website-Terms-of-Use_FINAL-070826.pdf
+    tos_checked_at: "2026-10-03"
+    tos_note: "Terms bar commercial or public use of site content without written consent; no explicit automation clause."
     mechanism: standard_rate
     lem_base: null
     fhl: {lender: true, lmi_passthrough_pct: 1.2}
@@ -71,18 +98,24 @@ banks:
   - bank_id: unity
     name: Unity
     source_url: https://unitymoney.co.nz/about-us/interest-rates/
-    fetch: http
-    mechanism: standard_rate   # page splits Under 80% LVR (special) / Over 80% LVR (standard)
+    tos_status: unclear
+    tos_url: null
+    tos_checked_at: "2026-10-03"
+    tos_note: "No website terms page found, so automated access is neither allowed nor prohibited in writing."
+    mechanism: standard_rate
     lem_base: null
-    fhl: {lender: true, lmi_passthrough_pct: null}   # LMI amount not stated on the rates page
+    fhl: {lender: true, lmi_passthrough_pct: null}
     notes:
       - "Only 6m, 1y, 18m and 2y terms. Special rates need salary credited to a Unity account (First Home Loans also get special rates)."
 
   - bank_id: nbs
     name: Nelson Building Society
     source_url: https://www.nbs.co.nz/interest-rates-and-fees
-    fetch: http
-    mechanism: standard_rate   # page has separate <20% equity rates
+    tos_status: unclear
+    tos_url: null
+    tos_checked_at: "2026-10-03"
+    tos_note: "No website terms page found, so automated access is neither allowed nor prohibited in writing."
+    mechanism: standard_rate
     lem_base: null
     fhl: {lender: true, lmi_passthrough_pct: 1.2}
     notes:
@@ -91,7 +124,10 @@ banks:
   - bank_id: nzhl
     name: NZHL (arranged, lender ASB)
     source_url: https://www.asb.co.nz/lending/nzhl-interest-rates-fees.html
-    fetch: http   # http returns too few rates, so it falls back to browser
+    tos_status: prohibited
+    tos_url: https://nzhl.co.nz/website-terms-conditions/
+    tos_checked_at: "2026-10-03"
+    tos_note: "Terms allow standard web browsers only and name scraping and automation as prohibited methods (terms cover nzhl.co.nz; rates URL is on asb.co.nz, treated conservatively)."
     mechanism: lem
     lem_base: special
     fhl: {lender: true, lmi_passthrough_pct: 1.2}

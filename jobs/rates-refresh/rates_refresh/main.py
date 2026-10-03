@@ -39,9 +39,15 @@ def run(banks, store, extractor=gemini_extractor, fetcher=fetch_bank, now: datet
     prev = store.load_previous() or {}
     prev_by_id = {b["bank_id"]: b for b in prev.get("banks", [])}
 
-    out_banks, updated, failed = [], [], []
+    out_banks, updated, failed, skipped = [], [], [], []
     for bank in banks:
         bid = bank["bank_id"]
+        if bank.get("tos_status") != "allowed":
+            # terms do not clearly allow automated access: no request at all, keep the manually maintained data
+            skipped.append(bid)
+            if bid in prev_by_id:
+                out_banks.append(prev_by_id[bid])
+            continue
         record, reason = None, None
         try:
             page = fetcher(bank)
@@ -67,6 +73,7 @@ def run(banks, store, extractor=gemini_extractor, fetcher=fetch_bank, now: datet
         "job": "rates-refresh",
         "updated": updated,
         "failed": failed,
+        "skipped_by_policy": skipped,
         "finished_at": now.isoformat(),
     }
     snapshot = None
@@ -78,22 +85,35 @@ def run(banks, store, extractor=gemini_extractor, fetcher=fetch_bank, now: datet
         }
         store.write_snapshot(date, snapshot)
     store.write_job_run(now.strftime("%Y-%m-%dT%H-%M-%S%z"), job_run)
-    return snapshot, job_run, (0 if updated else 1)
+    attempted = len(banks) - len(skipped)
+    return snapshot, job_run, (1 if attempted and not updated else 0)
+
+
+NO_ALLOWED_MSG = (
+    "No bank has tos_status=allowed in config/banks.yaml, so nothing was fetched (skipped_by_policy). "
+    "Rates are maintained by hand: see RATES_UPDATE.md."
+)
 
 
 def fetch_only(banks) -> int:
+    allowed = [b for b in banks if b.get("tos_status") == "allowed"]
+    for b in banks:
+        if b not in allowed:
+            print(f"{b['bank_id']:9} skipped_by_policy tos_status={b.get('tos_status')}")
+    if not allowed:
+        print(NO_ALLOWED_MSG)
+        return 0
     bad = 0
-    for bank in banks:
+    for bank in allowed:
         try:
             r = fetch_bank(bank)
-            print(f"{bank['bank_id']:9} configured={bank['fetch']:8} used={r.method:8} "
-                  f"fell_back={r.fell_back} status={r.status} len={len(r.text)} "
-                  f"blocked={r.blocked} reason={r.block_reason}")
+            print(f"{bank['bank_id']:9} render={bank.get('render', 'http'):8} used={r.method:8} "
+                  f"status={r.status} len={len(r.text)} blocked={r.blocked} reason={r.block_reason}")
             bad += r.blocked
         except Exception as e:
             bad += 1
             print(f"{bank['bank_id']:9} ERROR {type(e).__name__}: {e}")
-    return 1 if bad == len(banks) else 0
+    return 1 if bad == len(allowed) else 0
 
 
 def main(argv=None) -> int:
@@ -106,8 +126,10 @@ def main(argv=None) -> int:
         banks = [b for b in banks if b["bank_id"] in args.bank]
     if args.fetch_only:
         return fetch_only(banks)
+    if not any(b.get("tos_status") == "allowed" for b in banks):
+        print(NO_ALLOWED_MSG)
     _, job_run, code = run(banks, make_store())
-    print(f"updated={job_run['updated']} failed={job_run['failed']}")
+    print(f"updated={job_run['updated']} failed={job_run['failed']} skipped_by_policy={job_run['skipped_by_policy']}")
     return code
 
 

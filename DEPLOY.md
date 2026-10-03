@@ -110,7 +110,7 @@ export RULES_API_URL=$(gcloud run services describe rules-api --region=$REGION -
 ## 9. Cloud Run jobs
 
 ```bash
-# rates-refresh: Playwright/chromium needs memory
+# rates-refresh: created but NOT scheduled (see section 10). 2Gi is only needed if a bank is switched to `render: browser`.
 gcloud run jobs create rates-refresh \
   --image=$IMG/rates-refresh:$TAG --region=$REGION \
   --service-account=$(SA jobs-sa) \
@@ -118,14 +118,15 @@ gcloud run jobs create rates-refresh \
   --set-env-vars=DATA_BACKEND=firestore,GEMINI_MODEL=gemini-2.5-flash \
   --set-secrets=GEMINI_API_KEY=GEMINI_API_KEY:latest
 
-# kb-refresh: same DATA_BACKEND=firestore as the rates job; it needs no Gemini secret (only DATA_BACKEND is read). Chromium fallback (blocked sites) needs 2Gi.
+# kb-refresh: same DATA_BACKEND=firestore as the rates job; it needs no Gemini secret (only DATA_BACKEND is read) and no browser.
 gcloud run jobs create kb-refresh \
   --image=$IMG/kb-refresh:$TAG --region=$REGION \
   --service-account=$(SA jobs-sa) \
-  --memory=2Gi --max-retries=1 --task-timeout=15m \
+  --memory=512Mi --max-retries=1 --task-timeout=15m \
   --set-env-vars=DATA_BACKEND=firestore
 
 # smoke test once by hand, then check the Firestore job_runs collection
+# (with no bank marked tos_status=allowed, rates-refresh fetches nothing and records skipped_by_policy)
 gcloud run jobs execute rates-refresh --region=$REGION --wait
 ```
 
@@ -134,17 +135,20 @@ Later image updates: `gcloud run jobs update rates-refresh --image=$IMG/rates-re
 ## 10. Cloud Scheduler (Pacific/Auckland)
 
 ```bash
-for JOB in rates-refresh kb-refresh; do
+for JOB in kb-refresh; do   # add rates-refresh here when its schedule is enabled
   gcloud run jobs add-iam-policy-binding $JOB --region=$REGION \
     --member=serviceAccount:$(SA scheduler-sa) --role=roles/run.invoker
 done
 
-# rates: every day 06:00
-gcloud scheduler jobs create http rates-refresh-daily \
-  --location=$REGION --schedule="0 6 * * *" --time-zone="Pacific/Auckland" \
-  --http-method=POST \
-  --uri="https://run.googleapis.com/v2/projects/${PROJECT_ID}/locations/${REGION}/jobs/rates-refresh:run" \
-  --oauth-service-account-email=$(SA scheduler-sa)
+# rates: DISABLED. The banks' website terms do not clearly allow automated access, so rates are updated by hand
+# (see RATES_UPDATE.md). Enable only when a bank in banks.yaml is marked tos_status: allowed.
+# gcloud run jobs add-iam-policy-binding rates-refresh --region=$REGION \
+#   --member=serviceAccount:$(SA scheduler-sa) --role=roles/run.invoker
+# gcloud scheduler jobs create http rates-refresh-daily \
+#   --location=$REGION --schedule="0 6 * * *" --time-zone="Pacific/Auckland" \
+#   --http-method=POST \
+#   --uri="https://run.googleapis.com/v2/projects/${PROJECT_ID}/locations/${REGION}/jobs/rates-refresh:run" \
+#   --oauth-service-account-email=$(SA scheduler-sa)
 
 # kb: every Monday 06:00
 gcloud scheduler jobs create http kb-refresh-weekly \
@@ -197,16 +201,28 @@ Budgets only alert, they do not stop spending. Adjust the amount (and currency t
 
 ## Operations notes
 
-- A stale bank shows up as a `stale_since: <date>` entry in that bank's `notes` in `rates_latest/current`, and in
-  `job_runs/*` under `failed`. The job exits non-zero only when every bank fails; set a log-based alert on
-  Cloud Run job failures if you want to hear about it.
+- Banks that are not `tos_status: allowed` are listed under `skipped_by_policy` in `job_runs/*` and keep their
+  existing (hand-maintained) data. For allowed banks, a failed or blocked fetch keeps the old row, adds a
+  `stale_since: <date>` note and is listed under `failed`. The job exits non-zero only when it attempted banks and
+  every one failed; with no allowed banks it exits 0.
 - Rollback of a bad snapshot: copy `rates_snapshots/<good date>` over `rates_latest/current`.
 
-## Rates coverage
+## Rates coverage and automation policy
 
 `jobs/rates-refresh/config/banks.yaml` covers 11 lenders: Kiwibank, Westpac, ANZ, ASB, BNZ, TSB, Co-operative Bank,
-SBS Bank, Unity, Nelson Building Society and NZHL (ASB-written, own rates page). Adding a lender means one entry in
-that file plus a check with `python -m rates_refresh --fetch-only --bank <id>` from `jobs/rates-refresh/`.
+SBS Bank, Unity, Nelson Building Society and NZHL (ASB-written, own rates page).
+
+Each lender carries `tos_status` (`allowed`, `unclear` or `prohibited`), `tos_url`, `tos_checked_at` and `tos_note`
+from a review of its website terms and robots.txt on 2026-10-03 (not legal advice). The job only fetches banks
+marked `allowed`. As of that review none is: NZHL is `prohibited` (its terms name scraping and automation), the other
+ten are `unclear` (no written permission, no explicit ban). Those rows are updated by hand, see `RATES_UPDATE.md`.
+
+Fetch behaviour for allowed banks: honest `User-Agent` (`home-buyer-copilot/0.1 (+repo URL)`), robots.txt is read first
+and a Disallow means no request, and a 401/403/429 or an Imperva/Incapsula/Cloudflare challenge page is final (the
+bank is recorded as blocked and keeps its old data; there is no retry through a browser). Playwright is used only for a
+bank that is `allowed` and sets `render: browser` because its rates need JavaScript.
+
+Adding a lender means one entry in `banks.yaml` (start with `tos_status: unclear`) and a row in `data/rates_seed.json`.
 
 Not covered (future work): non-bank lenders such as Pepper, Resimac, Liberty, Avanti and Basecorp. Their rates are
 tiered by LVR *and* document type (full doc / alt doc / near-prime), so one lender has many rate rows rather than a
