@@ -13,7 +13,6 @@ from b_common.schemas import (
     PropertyContext,
     RatesSnapshot,
     RulesOutput,
-    Scenarios,
     UserInputs,
     UserRateScenario,
 )
@@ -46,9 +45,12 @@ def _pay_set(loan: float, rate_pct: float) -> tuple[int, int, int]:
 
 def resolve_price(ctx: PropertyContext, ui: UserInputs) -> PriceUsed:
     if ui.price_override is not None:
-        return PriceUsed(value=ui.price_override, basis="user_override")
+        return PriceUsed(value=ui.price_override, basis="user")
     if ctx.property.cv.value is not None:
-        return PriceUsed(value=ctx.property.cv.value, basis="cv")
+        return PriceUsed(
+            value=ctx.property.cv.value, basis="cv",
+            valuation_date=ctx.property.cv.valuation_date,
+        )
     return PriceUsed(value=None, basis="none")
 
 
@@ -103,16 +105,16 @@ def first_home_loan(
         warnings.append("fhl_skipped_income_missing")
         return None
     if ui.household_type is None:
-        flags.append(Flag(id="fhl_household_type_unknown", source_id="kainga_ora_fhl"))
+        flags.append(Flag(id="fhl_household_type_unknown", source_ids=["kainga_ora_fhl"]))
         cap = FHL_INCOME_CAP_DEFAULT
     else:
         cap = FHL_INCOME_CAP[ui.household_type]
     ok = True
     if deposit / price * 100 < FHL_MIN_DEPOSIT_PCT:
-        flags.append(Flag(id="fhl_deposit_below_5", source_id="kainga_ora_fhl"))
+        flags.append(Flag(id="fhl_deposit_below_5", source_ids=["kainga_ora_fhl"]))
         ok = False
     if ui.household_income > cap:
-        flags.append(Flag(id="fhl_income_over_cap", source_id="kainga_ora_fhl"))
+        flags.append(Flag(id="fhl_income_over_cap", source_ids=["kainga_ora_fhl"]))
         ok = False
     if not ok:
         return None
@@ -136,6 +138,7 @@ def compute(ctx: PropertyContext, ui: UserInputs, snap: Optional[RatesSnapshot])
     out = RulesOutput(
         generated_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
         price_used=resolve_price(ctx, ui),
+        rates_snapshot_date=(snap.captured_at or "")[:10] or None if snap else None,
         deposit=ui.deposit,
         stress_add_pp=STRESS_ADD_PP,
     )
@@ -151,25 +154,26 @@ def compute(ctx: PropertyContext, ui: UserInputs, snap: Optional[RatesSnapshot])
     else:
         loan = price - ui.deposit
         lvr = loan / price * 100
-        out.loan = round(loan, 2)
+        out.loan_amount = round(loan, 2)
         out.lvr_pct = round(lvr, 1)
-        flags.append(Flag(id="lvr_over_80", active=lvr > 80, source_id="rbnz_lvr"))
+        if lvr > 80:
+            flags.append(Flag(id="lvr_over_80", source_ids=["rbnz_lvr"]))
         if income is not None and income > 0:
             dti = (debts + loan) / income
             out.dti = round(dti, 2)
-            flags.append(Flag(id="dti_over_6", active=dti > 6, source_id="rbnz_dti"))
+            if dti > 6:
+                flags.append(Flag(id="dti_over_6", source_ids=["rbnz_dti"]))
         else:
             warnings.append("income_missing")
         if loan > 0 and snap is not None:
-            out.scenarios = Scenarios(
-                bank_standard=bank_standard(loan, lvr, snap, warnings),
-                first_home_loan=first_home_loan(price, ui.deposit, loan, ui, snap, flags, warnings),
-            )
+            scenarios = [bank_standard(loan, lvr, snap, warnings)]
             if ui.rate_pct is not None:
                 m, f, s = _pay_set(loan, ui.rate_pct)
-                out.scenarios.user_rate = UserRateScenario(
+                scenarios.append(UserRateScenario(
                     rate_pct=ui.rate_pct, monthly=m, fortnightly=f, stress_monthly=s
-                )
+                ))
+            scenarios.append(first_home_loan(price, ui.deposit, loan, ui, snap, flags, warnings))
+            out.scenarios = [x for x in scenarios if x is not None]
         elif snap is None:
             warnings.append("rates_unavailable")
     out.flags = flags

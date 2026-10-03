@@ -1,7 +1,7 @@
 """Shared pydantic v2 models for the rules-api and its consumers."""
 from __future__ import annotations
 
-from typing import Any, Literal, Optional
+from typing import Annotated, Any, Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -140,13 +140,13 @@ class KbItem(BaseModel):
 # ---- RulesOutput ------------------------------------------------------------
 class PriceUsed(BaseModel):
     value: Optional[float] = None
-    basis: Literal["user_override", "cv", "none"] = "none"
+    basis: Literal["cv", "user", "none"] = "none"
+    valuation_date: Optional[str] = None
 
 
 class Flag(BaseModel):
     id: str
-    active: bool = True
-    source_id: Optional[str] = None
+    source_ids: list[str] = Field(default_factory=list)
 
 
 class BankRate(BaseModel):
@@ -156,6 +156,7 @@ class BankRate(BaseModel):
 
 
 class BankStandardScenario(BaseModel):
+    id: Literal["bank_standard"] = "bank_standard"
     rate_range_pct: list[float]
     low_equity_margin_pct: Optional[list[float]] = None
     monthly_range: list[int]
@@ -166,6 +167,7 @@ class BankStandardScenario(BaseModel):
 
 
 class UserRateScenario(BaseModel):
+    id: Literal["user_rate"] = "user_rate"
     rate_pct: float
     monthly: int
     fortnightly: int
@@ -173,6 +175,7 @@ class UserRateScenario(BaseModel):
 
 
 class FirstHomeLoanScenario(BaseModel):
+    id: Literal["first_home_loan"] = "first_home_loan"
     rate_pct: float
     lender_bank_id: Optional[str] = None
     lmi_amount: float
@@ -184,10 +187,10 @@ class FirstHomeLoanScenario(BaseModel):
     note_ids: list[str] = Field(default_factory=lambda: ["fhl_passthrough_varies"])
 
 
-class Scenarios(BaseModel):
-    bank_standard: Optional[BankStandardScenario] = None
-    user_rate: Optional[UserRateScenario] = None
-    first_home_loan: Optional[FirstHomeLoanScenario] = None
+Scenario = Annotated[
+    Union[BankStandardScenario, UserRateScenario, FirstHomeLoanScenario],
+    Field(discriminator="id"),
+]
 
 
 class RulesOutput(BaseModel):
@@ -195,12 +198,13 @@ class RulesOutput(BaseModel):
     generated_at: str
     price_used: PriceUsed
     deposit: Optional[float] = None
-    loan: Optional[float] = None
+    loan_amount: Optional[float] = None
     lvr_pct: Optional[float] = None
     dti: Optional[float] = None
     high_dti_threshold: Optional[float] = None
+    rates_snapshot_date: Optional[str] = None
     stress_add_pp: float = 2.0
-    scenarios: Scenarios = Field(default_factory=Scenarios)
+    scenarios: list[Scenario] = Field(default_factory=list)
     flags: list[Flag] = Field(default_factory=list)
     kb_items: list[str] = Field(default_factory=list)
     kb_includes_draft: bool = False

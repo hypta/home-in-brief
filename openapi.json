@@ -281,6 +281,12 @@
       },
       "BankStandardScenario": {
         "properties": {
+          "id": {
+            "type": "string",
+            "const": "bank_standard",
+            "title": "Id",
+            "default": "bank_standard"
+          },
           "rate_range_pct": {
             "items": {
               "type": "number"
@@ -438,6 +444,12 @@
       },
       "FirstHomeLoanScenario": {
         "properties": {
+          "id": {
+            "type": "string",
+            "const": "first_home_loan",
+            "title": "Id",
+            "default": "first_home_loan"
+          },
           "rate_pct": {
             "type": "number",
             "title": "Rate Pct"
@@ -505,21 +517,12 @@
             "type": "string",
             "title": "Id"
           },
-          "active": {
-            "type": "boolean",
-            "title": "Active",
-            "default": true
-          },
-          "source_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Source Id"
+          "source_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Source Ids"
           }
         },
         "type": "object",
@@ -808,12 +811,23 @@
           "basis": {
             "type": "string",
             "enum": [
-              "user_override",
               "cv",
+              "user",
               "none"
             ],
             "title": "Basis",
             "default": "none"
+          },
+          "valuation_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valuation Date"
           }
         },
         "type": "object",
@@ -907,7 +921,7 @@
             ],
             "title": "Deposit"
           },
-          "loan": {
+          "loan_amount": {
             "anyOf": [
               {
                 "type": "number"
@@ -916,7 +930,7 @@
                 "type": "null"
               }
             ],
-            "title": "Loan"
+            "title": "Loan Amount"
           },
           "lvr_pct": {
             "anyOf": [
@@ -951,13 +965,46 @@
             ],
             "title": "High Dti Threshold"
           },
+          "rates_snapshot_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rates Snapshot Date"
+          },
           "stress_add_pp": {
             "type": "number",
             "title": "Stress Add Pp",
             "default": 2.0
           },
           "scenarios": {
-            "$ref": "#/components/schemas/Scenarios"
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/BankStandardScenario"
+                },
+                {
+                  "$ref": "#/components/schemas/UserRateScenario"
+                },
+                {
+                  "$ref": "#/components/schemas/FirstHomeLoanScenario"
+                }
+              ],
+              "discriminator": {
+                "propertyName": "id",
+                "mapping": {
+                  "bank_standard": "#/components/schemas/BankStandardScenario",
+                  "first_home_loan": "#/components/schemas/FirstHomeLoanScenario",
+                  "user_rate": "#/components/schemas/UserRateScenario"
+                }
+              }
+            },
+            "type": "array",
+            "title": "Scenarios"
           },
           "flags": {
             "items": {
@@ -1004,42 +1051,6 @@
         },
         "type": "object",
         "title": "RulesRequest"
-      },
-      "Scenarios": {
-        "properties": {
-          "bank_standard": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/BankStandardScenario"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "user_rate": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/UserRateScenario"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "first_home_loan": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/FirstHomeLoanScenario"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "type": "object",
-        "title": "Scenarios"
       },
       "Source": {
         "properties": {
@@ -1194,6 +1205,12 @@
       },
       "UserRateScenario": {
         "properties": {
+          "id": {
+            "type": "string",
+            "const": "user_rate",
+            "title": "Id",
+            "default": "user_rate"
+          },
           "rate_pct": {
             "type": "number",
             "title": "Rate Pct"
