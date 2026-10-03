@@ -8,7 +8,7 @@ A and B share this one repo; the submission is a single GitHub link.
 |---|---|---|
 | `services/property-api/` | A | calls rules-api (see section 11) |
 | `services/rules-api/` | B | private Cloud Run service |
-| `jobs/rates-refresh/` | B | Cloud Run job, daily |
+| `jobs/rates-refresh/` | B | Cloud Run job; scheduler code kept but disabled, rates maintained by hand (`RATES_UPDATE.md`) |
 | `jobs/kb-refresh/` | B | Cloud Run job, weekly |
 | `shared/`, `kb/`, `data/` | shared | common code, knowledge base, seed data |
 
@@ -74,7 +74,10 @@ export GOOGLE_CLOUD_PROJECT=$PROJECT_ID
 
 Notes:
 - Do not use `make seed` here: it hard-codes the emulator host and project `local-dev`.
-- Re-running `seed_firestore.py` is safe: it keeps `status`, `verified_by`, `verified_at` and `last_check` of existing items.
+- `seed_firestore.py` treats the git seed as the source of truth for content and validates it first (`kb/validate.py`);
+  an invalid seed writes nothing. From Firestore it keeps only `last_check`, a human verification while it still matches
+  the seed item's exact content hash (changed content becomes `needs_review`), and `needs_review` set by kb-refresh
+  while the content is unchanged. Ids that were removed from the seed are marked `retired`.
   `seed_rates.py` overwrites `rates_latest/current` with `data/rates_seed.json`.
 - All seeded KB items have `status: draft` until a person verifies them (see `kb/MANUAL_CHECK.md`). rules-api only
   returns `verified` items unless `INCLUDE_DRAFT=true` is set, so `kb_items` stays empty in production until items are verified.
@@ -125,11 +128,18 @@ gcloud secrets add-iam-policy-binding GEMINI_API_KEY \
 
 ## 8. Deploy rules-api (private)
 
+`--min-instances=1` keeps one instance warm so judges do not hit a cold start. Use it for the judging period
+(Oct 19 - Nov 6). It is billed for the idle instance (CPU and memory, roughly a few dollars to low tens of dollars a
+month for a small instance; check the Cloud Run pricing page for your region and your budget alert from section 12).
+Afterwards set it back to scale-to-zero:
+`gcloud run services update rules-api --region=$REGION --min-instances=0`.
+
 ```bash
 gcloud run deploy rules-api \
   --image=$IMG/rules-api:$TAG --region=$REGION \
   --service-account=$(SA rules-api-sa) \
   --no-allow-unauthenticated \
+  --min-instances=1 \
   --set-env-vars=DATA_BACKEND=firestore
 
 # only property-api-sa may call it

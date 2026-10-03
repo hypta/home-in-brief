@@ -31,7 +31,7 @@ rules output into the written report, and the frontend. The last two are owned j
 | `scripts/` | B | `seed_firestore.py`, `seed_rates.py`, `smoke.py`, `validate_rates_seed.py` |
 | `openapi.json` | B | OpenAPI description of rules-api |
 
-Docs: `LOCAL.md` (run locally), `DEPLOY.md` (Cloud Run + Firestore), `RATES_UPDATE.md` (update rates by hand),
+Docs: `LOCAL.md` (run locally), `DEPLOY.md` (Cloud Run + Firestore), `RATES_UPDATE.md` (update rates by hand), `CODES.md` (codes used by the API),
 `kb/MANUAL_CHECK.md` (verify knowledge-base items by hand).
 
 ## Architecture
@@ -101,9 +101,9 @@ Ports are published on `127.0.0.1` only, because the emulator and the API have n
 |---|---|
 | `GET /healthz` | Liveness check |
 | `POST /v1/rules` | Loan, LVR, DTI, repayment scenarios and the ids of applicable knowledge-base items |
-| `GET /v1/kb/items?ids=a,b` | Knowledge-base items (quote, source URL, attribution); all visible items if `ids` is empty |
+| `GET /v1/kb/items?ids=a,b` | Knowledge-base items (quote, source URL, `source_id`, licence); all visible items if `ids` is empty |
 | `GET /v1/rates/latest` | Latest bank rates snapshot (404 if none loaded) |
-| `GET /v1/sources` | Sources and licence/attribution details behind the knowledge base |
+| `GET /v1/sources` | Sources behind the knowledge base, with `attribution`, `tos_status`, `tos_url` and `tos_checked_at` (join on an item's `source_id`) |
 
 Only `verified` knowledge-base items are returned. Set `INCLUDE_DRAFT=true` (done in `docker-compose.yml`) to include
 `draft` items for development; the response flags this with `kb_includes_draft`. 
@@ -146,7 +146,7 @@ In production rules-api is a private Cloud Run service; callers authenticate wit
 
 - The property-data API (A), the Gemini report layer and the frontend are not in this repo yet; this repo currently
   ends at the rules API and its data jobs.
-- All 16 seeded knowledge-base items are `draft` until a person verifies them, so a production rules-api (no
+- Most seeded knowledge-base items (20+) are `draft` until a person verifies them, so a production rules-api (no
   `INCLUDE_DRAFT`) returns none.
 - Rates cover 11 lenders from a manual snapshot and can be out of date. Non-bank lenders are not covered.
 - Calculations are simplified (for example fixed-rate owner-occupier scenarios only) and are not a lender's assessment.
