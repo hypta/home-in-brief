@@ -94,10 +94,47 @@ def test_fhl_ineligible_flags():
     assert {"fhl_deposit_below_5", "fhl_income_over_cap"} <= ids
 
 
+def _fhl_candidates():
+    from types import SimpleNamespace as NS
+    for b in SNAP.banks:
+        if not b.fhl.lender:
+            continue
+        if b.fhl.special_applies is True:
+            yield NS(fhl_rate=b.special["1y"])
+        elif b.standard:
+            yield NS(fhl_rate=b.standard["1y"])
+
+
+def test_fhl_not_generated_with_25pct_deposit():
+    out = run(price_override=1_000_000, deposit=250000, household_income=120000,
+              household_type="multiple")
+    assert sc(out, 'first_home_loan') is None
+    assert not {f.id for f in out.flags} & {"fhl_deposit_below_5", "fhl_income_over_cap"}
+
+
+def test_fhl_12pct_deposit_rate_source():
+    out = run(price_override=1_000_000, deposit=120000, household_income=120000,
+              household_type="multiple")
+    fhl = sc(out, 'first_home_loan')
+    by_id = {b.bank_id: b for b in SNAP.banks}
+    bank = by_id[fhl.lender_bank_id]
+    if fhl.rate_basis == "special":
+        assert bank.fhl.special_applies is True and fhl.rate_pct == bank.special["1y"]
+    else:
+        assert bank.fhl.special_applies is not True and fhl.rate_pct == bank.standard["1y"]
+    # asb has no standard rate and special_applies is null, so it is skipped
+    assert fhl.lender_bank_id != "asb"
+
+
 def test_fhl_household_unknown_flag():
     out = run(price_override=1_000_000, deposit=100000, household_income=120000)
     assert "fhl_household_type_unknown" in {f.id for f in out.flags}
-    assert sc(out, 'first_home_loan').rate_pct == 4.99
+    fhl = sc(out, 'first_home_loan')
+    # kiwibank/coop/sbs special 1y vs other lenders' standard 1y: lowest wins
+    assert fhl.rate_basis in ("special", "standard")
+    assert fhl.rate_pct == min(
+        b.fhl_rate for b in _fhl_candidates()
+    )
 
 
 # ---- applies_when ----

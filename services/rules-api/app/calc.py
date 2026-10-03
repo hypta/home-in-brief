@@ -128,16 +128,23 @@ def first_home_loan(
         ok = False
     if not ok:
         return None
-    lenders = [b for b in snap.banks if b.fhl.lender and "1y" in b.special]
-    if not lenders:
+    # special rates need >=20% equity unless the bank confirms FHL gets them
+    cands: list[tuple[float, str, str]] = []
+    for b in snap.banks:
+        if not b.fhl.lender:
+            continue
+        if b.fhl.special_applies is True and "1y" in b.special:
+            cands.append((b.special["1y"], b.bank_id, "special"))
+        elif b.standard and "1y" in b.standard:
+            cands.append((b.standard["1y"], b.bank_id, "standard"))
+    if not cands:
         warnings.append("fhl_no_lender_rate")
         return None
-    best = min(lenders, key=lambda b: b.special["1y"])
-    rate = best.special["1y"]
+    rate, bank_id, basis = min(cands)
     lmi = round(loan * FHL_PREMIUM_PCT / 100, 2)
     total = loan + lmi
     return FirstHomeLoanScenario(
-        rate_pct=rate, lender_bank_id=best.bank_id, lmi_amount=lmi, loan_with_lmi=total,
+        rate_pct=rate, lender_bank_id=bank_id, rate_basis=basis, lmi_amount=lmi, loan_with_lmi=total,
         monthly=payment(total, rate, MONTHLY), fortnightly=payment(total, rate, FORTNIGHTLY),
     )
 
@@ -182,7 +189,8 @@ def compute(ctx: PropertyContext, ui: UserInputs, snap: Optional[RatesSnapshot])
                 scenarios.append(UserRateScenario(
                     rate_pct=ui.rate_pct, monthly=m, fortnightly=f, stress_monthly=s
                 ))
-            scenarios.append(first_home_loan(price, ui.deposit, loan, ui, snap, flags, warnings))
+            scenarios.append(first_home_loan(price, ui.deposit, loan, ui, snap, flags, warnings)
+                if lvr > 80 else None)
             out.scenarios = [x for x in scenarios if x is not None]
         elif snap is None:
             warnings.append("rates_unavailable")

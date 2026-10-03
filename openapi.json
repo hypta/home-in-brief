@@ -456,6 +456,17 @@
               }
             ],
             "title": "Lmi Passthrough Pct"
+          },
+          "special_applies": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Special Applies"
           }
         },
         "type": "object",
@@ -486,6 +497,15 @@
               }
             ],
             "title": "Lender Bank Id"
+          },
+          "rate_basis": {
+            "type": "string",
+            "enum": [
+              "special",
+              "standard"
+            ],
+            "title": "Rate Basis",
+            "default": "standard"
           },
           "lmi_amount": {
             "type": "number",

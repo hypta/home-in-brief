@@ -86,6 +86,8 @@ class LowEquity(BaseModel):
 class Fhl(BaseModel):
     lender: bool
     lmi_passthrough_pct: Optional[float] = None
+    # True: FHL borrowers get the special rate despite <20% equity; null: unverified
+    special_applies: Optional[bool] = None
 
 
 class BankRates(BaseModel):
@@ -180,6 +182,7 @@ class FirstHomeLoanScenario(BaseModel):
     id: Literal["first_home_loan"] = "first_home_loan"
     rate_pct: float
     lender_bank_id: Optional[str] = None
+    rate_basis: Literal["special", "standard"] = "standard"
     lmi_amount: float
     lmi_capitalised: bool = True
     loan_with_lmi: float

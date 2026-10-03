@@ -33,7 +33,8 @@
       },
       "fhl": {
         "lender": true,
-        "lmi_passthrough_pct": 1.0
+        "lmi_passthrough_pct": 1.0,
+        "special_applies": true
       },
       "notes": [],
       "captured_at": "2026-09-27T00:00:00+12:00"
@@ -92,7 +93,8 @@
       },
       "fhl": {
         "lender": true,
-        "lmi_passthrough_pct": null
+        "lmi_passthrough_pct": null,
+        "special_applies": null
       },
       "notes": [
         "Special rates require salary deposited to Westpac.",
@@ -131,7 +133,8 @@
       },
       "fhl": {
         "lender": false,
-        "lmi_passthrough_pct": null
+        "lmi_passthrough_pct": null,
+        "special_applies": null
       },
       "notes": [
         "Page date label lags the actual rates."
@@ -184,7 +187,8 @@
       },
       "fhl": {
         "lender": true,
-        "lmi_passthrough_pct": 1.2
+        "lmi_passthrough_pct": 1.2,
+        "special_applies": null
       },
       "notes": [
         "First Home Loan is not charged LEM."
@@ -237,7 +241,8 @@
       },
       "fhl": {
         "lender": false,
-        "lmi_passthrough_pct": null
+        "lmi_passthrough_pct": null,
+        "special_applies": null
       },
       "notes": [],
       "captured_at": "2026-09-27T00:00:00+12:00"
@@ -275,11 +280,12 @@
       },
       "fhl": {
         "lender": false,
-        "lmi_passthrough_pct": null
+        "lmi_passthrough_pct": null,
+        "special_applies": null
       },
       "notes": [
         "Floating: special 6.29, standard 7.09 (<20% deposit).",
-        "seed 由 fetch-only 頁面文字人工整理，2026-10-03"
+        "Seed compiled by hand from fetch-only page text, 2026-10-03"
       ],
       "captured_at": "2026-10-03T00:00:00+13:00"
     },
@@ -316,11 +322,12 @@
       },
       "fhl": {
         "lender": true,
-        "lmi_passthrough_pct": 1.2
+        "lmi_passthrough_pct": 1.2,
+        "special_applies": true
       },
       "notes": [
         "Low equity premium is 0.20-1.00% p.a. above 80% LVR; per-LVR bands are not published on the rates page, so bands are empty.",
-        "seed 由 fetch-only 頁面文字人工整理，2026-10-03"
+        "Seed compiled by hand from fetch-only page text, 2026-10-03"
       ],
       "captured_at": "2026-10-03T00:00:00+13:00"
     },
@@ -357,12 +364,13 @@
       },
       "fhl": {
         "lender": true,
-        "lmi_passthrough_pct": 1.2
+        "lmi_passthrough_pct": 1.2,
+        "special_applies": true
       },
       "notes": [
         "Special rates need 20% equity (30% for investors) or a First Home Loan with 5% equity.",
         "Floating effective for new lending 8 September 2026.",
-        "seed 由 fetch-only 頁面文字人工整理，2026-10-03"
+        "Seed compiled by hand from fetch-only page text, 2026-10-03"
       ],
       "captured_at": "2026-10-03T00:00:00+13:00"
     },
@@ -393,12 +401,13 @@
       },
       "fhl": {
         "lender": true,
-        "lmi_passthrough_pct": null
+        "lmi_passthrough_pct": null,
+        "special_applies": null
       },
       "notes": [
         "Only 6m, 1y, 18m and 2y terms. Special rates need salary credited to a Unity account (First Home Loans also get special rates).",
         "Excludes the 12-month First Home Buyer special of 4.15%.",
-        "seed 由 fetch-only 頁面文字人工整理，2026-10-03"
+        "Seed compiled by hand from fetch-only page text, 2026-10-03"
       ],
       "captured_at": "2026-10-03T00:00:00+13:00"
     },
@@ -427,12 +436,13 @@
       },
       "fhl": {
         "lender": true,
-        "lmi_passthrough_pct": 1.2
+        "lmi_passthrough_pct": 1.2,
+        "special_applies": null
       },
       "notes": [
         "Only 6m, 1y and 2y terms.",
         "Standard = published rates for <20% equity.",
-        "seed 由 fetch-only 頁面文字人工整理，2026-10-03"
+        "Seed compiled by hand from fetch-only page text, 2026-10-03"
       ],
       "captured_at": "2026-10-03T00:00:00+13:00"
     },
@@ -482,11 +492,12 @@
       },
       "fhl": {
         "lender": true,
-        "lmi_passthrough_pct": 1.2
+        "lmi_passthrough_pct": 1.2,
+        "special_applies": null
       },
       "notes": [
         "NZHL-arranged loans are written by ASB; fixed rates match ASB but the floating rate differs.",
-        "seed 由 fetch-only 頁面文字人工整理，2026-10-03"
+        "Seed compiled by hand from fetch-only page text, 2026-10-03"
       ],
       "captured_at": "2026-10-03T00:00:00+13:00"
     }
