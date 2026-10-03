@@ -1,0 +1,43 @@
+# Local testing (B: rules-api, rates-refresh, kb-refresh)
+
+Run everything from the repo root. `make test` runs all unit tests with the `.venv` (Python 3.12).
+
+## One-time: your own `.env`
+
+`rates-refresh` calls Gemini, so create `.env` yourself (it is gitignored):
+
+```bash
+cp .env.example .env
+# edit .env and set GEMINI_API_KEY=...   (GEMINI_MODEL is optional)
+```
+
+Without a key, `rates` / `local-rates` fail loudly (`KeyError: 'GEMINI_API_KEY'`, non-zero exit) and write nothing.
+
+## Mode 1: pure Python (no Docker)
+
+```bash
+make test          # all unit tests
+make local-api     # uvicorn on :8080, DATA_BACKEND=local (reads kb/seed + data/rates_seed.json)
+make smoke         # in another shell: /healthz + /v1/rules, expects loan 880000, lvr 88.0, dti 6.07
+make rates-fetch   # fetch the 11 bank pages only; no Gemini, no writes
+make local-rates   # full rates-refresh (needs .env); output in jobs/rates-refresh/out/
+make local-kb      # kb-refresh; prints quote_found per KB item, report in out/
+```
+
+## Mode 2: Docker + Firestore emulator
+
+Needs the Docker daemon running.
+
+```bash
+make up      # build + start firestore emulator (:8085) and rules-api (:8080, DATA_BACKEND=firestore)
+make seed    # write kb seed + data/rates_seed.json into the emulator (runs on the host via .venv)
+make smoke   # same check as above, now served from Firestore
+make kb      # kb-refresh job in Docker; writes last_check into the emulator
+make rates   # rates-refresh job in Docker (reads GEMINI_API_KEY from .env)
+make down    # stop everything
+```
+
+Notes:
+- `smoke` before `seed` returns empty rates/KB; always `seed` after a fresh `up` (emulator data is not persisted).
+- The jobs are in compose profile `jobs`; `make kb` / `make rates` use `docker compose run`.
+- `smoke` takes `BASE=http://host:port` to point at another instance.
