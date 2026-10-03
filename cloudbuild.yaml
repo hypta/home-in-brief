@@ -25,10 +25,19 @@ steps:
            '-t', '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/rates-refresh:${SHORT_SHA}', '.']
     waitFor: ['-']
 
+  # Owned by A. To enable: uncomment this step AND the matching line under images:.
+  # - id: property-api
+  #   name: gcr.io/cloud-builders/docker
+  #   args: ['build', '-f', 'services/property-api/Dockerfile',
+  #          '-t', '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/property-api:${SHORT_SHA}', '.']
+  #   waitFor: ['-']
+
 images:
   - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/rules-api:${SHORT_SHA}'
   - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/kb-refresh:${SHORT_SHA}'
   - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/rates-refresh:${SHORT_SHA}'
+  # A: uncomment together with the property-api step above
+  # - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/property-api:${SHORT_SHA}'
 
 options:
   logging: CLOUD_LOGGING_ONLY

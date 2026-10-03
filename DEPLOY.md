@@ -1,5 +1,21 @@
 # Deploy (Cloud Run + Firestore, australia-southeast1)
 
+## Monorepo structure and ownership
+
+| Directory | Owner | Notes |
+|---|---|---|
+| `services/property-api/` | A | calls rules-api (see section 11) |
+| `services/rules-api/` | B | private Cloud Run service |
+| `jobs/rates-refresh/` | B | Cloud Run job, daily |
+| `jobs/kb-refresh/` | B | Cloud Run job, weekly |
+| `shared/`, `kb/`, `data/` | shared | common code, knowledge base, seed data |
+
+- Each service/job has its own `Dockerfile` and `requirements.txt`.
+- The Docker build context is always the repo root (`docker build -f <dir>/Dockerfile .`), so Dockerfiles can `COPY shared/ ...`.
+- All paths in `cloudbuild.yaml` and this file are relative to the repo root.
+- Suggested: add `.github/CODEOWNERS` mapping each directory above to its owner (not created yet).
+- A's image is a commented-out step in `cloudbuild.yaml`; enable it by uncommenting the step and its `images:` line.
+
 Commands are listed in order and are **not executed by any script**. Run them yourself.
 
 ```bash
