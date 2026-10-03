@@ -6,6 +6,7 @@ manual_check_required without any request. See kb/MANUAL_CHECK.md.
 Only last_check (and verified -> needs_review) ever changes. Item text is never rewritten.
 """
 import os
+import secrets
 import sys
 from datetime import datetime, timezone
 
@@ -15,20 +16,27 @@ from checker import Fetcher, check_item, manual_run, next_status  # noqa: E402
 from store import FirestoreStore, LocalStore  # noqa: E402
 
 
-RUN_ID_FORMAT = "%Y%m%dT%H%M%SZ"
+RUN_ID_FORMAT = "%Y%m%dT%H%M%SZ"  # base of every run id; a random -xxxx suffix keeps ids unique
+RUN_ID_RE = r"\d{8}T\d{6}Z-[0-9a-f]{4}"
+
+
+def make_run_id(clock, rand=lambda: secrets.token_hex(2)) -> str:
+    return f"{clock()}-{rand()}"
 
 
 def run_id_to_iso(run_id: str) -> str:
     """UTC run id -> ISO 8601 with offset; anything unparseable is returned unchanged."""
     try:
-        return datetime.strptime(run_id, RUN_ID_FORMAT).replace(tzinfo=timezone.utc).isoformat()
+        return datetime.strptime(run_id[:16], RUN_ID_FORMAT).replace(tzinfo=timezone.utc).isoformat()
     except ValueError:
         return run_id
 
 
-def run_job(store, fetch=None, clock=None) -> tuple[dict, int]:
-    """clock() returns a UTC run id (YYYYMMDDTHHMMSSZ): used as the Firestore doc id; the stored `at` is ISO 8601."""
-    clock = clock or (lambda: datetime.now(timezone.utc).strftime(RUN_ID_FORMAT))
+def run_job(store, fetch=None, clock=None, rand=None) -> tuple[dict, int]:
+    """clock() returns UTC YYYYMMDDTHHMMSSZ; ids are clock + "-xxxx" (4 hex), used as Firestore doc ids.
+    The stored `at` is ISO 8601."""
+    base_clock = clock or (lambda: datetime.now(timezone.utc).strftime(RUN_ID_FORMAT))
+    clock = (lambda: make_run_id(base_clock, rand)) if rand else (lambda: make_run_id(base_clock))
     own_fetcher = fetch is None
     fetch = fetch or Fetcher()
     sources = store.load_sources()
@@ -42,7 +50,10 @@ def run_job(store, fetch=None, clock=None) -> tuple[dict, int]:
             try:
                 run_id = clock()
                 if tos != "allowed":
-                    run = manual_run(run_id, f"tos_status={tos or 'source_not_found'}")
+                    run = manual_run(run_id, f"tos_status={tos or 'source_not_found'}", item)
+                elif item.get("source_url") != src.get("url"):
+                    # terms were approved for the source's URL only, never for a different one
+                    run = manual_run(run_id, "source_url_differs_from_approved_source_url", item)
                 else:
                     run = check_item(item, fetch=fetch, now=run_id)
                 run["run_id"], run["at"] = run_id, run_id_to_iso(run_id)

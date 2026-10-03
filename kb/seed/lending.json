@@ -5,7 +5,7 @@
     "applies_when": {
       "lvr_over": 80
     },
-    "claim_en": "The Reserve Bank explainer states that banks may make up to 25% of new owner-occupier loans at an LVR above 80%.",
+    "claim_en": "The Reserve Bank explainer states that up to 25% of new loans can have an LVR above 80% (the explainer lists this under owner-occupiers).",
     "quote": "Up to 25% of new loans can have an LVR above 80%",
     "source_id": "rbnz_lvr",
     "source_url": "https://www.rbnz.govt.nz/education/explainers/loan-to-value-restrictions-explained",
@@ -15,6 +15,7 @@
     "next_step_en": "Ask your lender how it applies the low-deposit lending limit and what extra costs apply.",
     "verified_by": null,
     "verified_at": null,
+    "verified_content_hash": null,
     "status": "draft",
     "last_check": null
   },
@@ -34,6 +35,7 @@
     "next_step_en": "Ask your lender how it calculates your debt-to-income ratio.",
     "verified_by": null,
     "verified_at": null,
+    "verified_content_hash": null,
     "status": "draft",
     "last_check": null
   },
@@ -43,7 +45,27 @@
     "applies_when": {
       "fhl_eligible": true
     },
-    "claim_en": "Kāinga Ora states the First Home Loan insurance premium is 1.2% of the loan value and, from 1 July 2025, the Government no longer funds part of it; it can be paid upfront or across the loan.",
+    "claim_en": "Kāinga Ora states that from 1 July 2025 the First Home Loan insurance premium on new applications increases from 0.5% to 1.2% of the loan value.",
+    "quote": "will increase from 0.5% to 1.2% of the loan value",
+    "source_id": "kainga_ora_fhl",
+    "source_url": "https://kaingaora.govt.nz/assets/Home-ownership/First-Home-Loan-brochures/FHL-Insurance-Premium_FAQs.pdf",
+    "source_title": "First Home Loan - Insurance Premium Changes FAQs (22 May 2025) - Kāinga Ora",
+    "source_type": "official",
+    "licence": "Copyright Kāinga Ora; may be reproduced free of charge without further permission if accurate and not misleading, acknowledging the source and copyright status",
+    "next_step_en": "Ask your lender how the First Home Loan premium would apply to your loan amount.",
+    "verified_by": null,
+    "verified_at": null,
+    "verified_content_hash": null,
+    "status": "draft",
+    "last_check": null
+  },
+  {
+    "id": "kb_fhl_govt_not_funding_premium",
+    "topic": "lending",
+    "applies_when": {
+      "lvr_over": 80
+    },
+    "claim_en": "Kāinga Ora states that after 1 July 2025 the Government will not provide funding to cover part of the First Home Loan insurance premium.",
     "quote": "the Government will not provide funding to cover part of the insurance premium",
     "source_id": "kainga_ora_fhl",
     "source_url": "https://kaingaora.govt.nz/assets/Home-ownership/First-Home-Loan-brochures/FHL-Insurance-Premium_FAQs.pdf",
@@ -53,6 +75,107 @@
     "next_step_en": "Ask your lender how the First Home Loan premium would apply to your loan amount.",
     "verified_by": null,
     "verified_at": null,
+    "verified_content_hash": null,
+    "status": "draft",
+    "last_check": null
+  },
+  {
+    "id": "kb_fhl_lvr_not_restricted",
+    "topic": "lending",
+    "applies_when": {
+      "fhl_eligible": true
+    },
+    "claim_en": "The Reserve Bank LVR explainer lists Kāinga Ora loans, including First Home Loans, under other situations where LVR restrictions do not apply.",
+    "quote": "Kāinga Ora loans, including First Home Loans.",
+    "source_id": "rbnz_lvr",
+    "source_url": "https://www.rbnz.govt.nz/education/explainers/loan-to-value-restrictions-explained",
+    "source_title": "Understanding loan-to-value restrictions - Reserve Bank of New Zealand",
+    "source_type": "official",
+    "licence": "Copyright Reserve Bank of New Zealand; may be reproduced without permission if RBNZ is acknowledged as source and owner (not Creative Commons)",
+    "next_step_en": "Ask your lender which lending criteria it applies to First Home Loan applications.",
+    "verified_by": null,
+    "verified_at": null,
+    "verified_content_hash": null,
+    "status": "draft",
+    "last_check": null
+  },
+  {
+    "id": "kb_fhl_dti_not_restricted",
+    "topic": "lending",
+    "applies_when": {
+      "fhl_eligible": true
+    },
+    "claim_en": "The Reserve Bank DTI explainer lists Kāinga Ora loans, including First Home Loans, under situations where the DTI rules do not apply.",
+    "quote": "Kāinga Ora loans, including First Home Loans.",
+    "source_id": "rbnz_dti",
+    "source_url": "https://www.rbnz.govt.nz/education/explainers/dti",
+    "source_title": "Understanding debt-to-income (DTI) restrictions - Reserve Bank of New Zealand",
+    "source_type": "official",
+    "licence": "Copyright Reserve Bank of New Zealand; may be reproduced without permission if RBNZ is acknowledged as source and owner (not Creative Commons)",
+    "next_step_en": "Ask your lender which lending criteria it applies to First Home Loan applications.",
+    "verified_by": null,
+    "verified_at": null,
+    "verified_content_hash": null,
+    "status": "draft",
+    "last_check": null
+  },
+  {
+    "id": "kb_fhl_deposit_5pct",
+    "topic": "lending",
+    "applies_when": {
+      "fhl_eligible": true
+    },
+    "claim_en": "The Kāinga Ora brochure lists a minimum deposit of 5% of the purchase price as a First Home Loan requirement.",
+    "quote": "have a minimum deposit of 5% of the purchase price of the home",
+    "source_id": "kainga_ora_fhl_brochure",
+    "source_url": "https://kaingaora.govt.nz/assets/Home-ownership/First-Home-Loan-brochures/Kainga-Ora-First-Home-Loan-Brochure.pdf",
+    "source_title": "First Home Loan brochure - Kāinga Ora",
+    "source_type": "official",
+    "licence": "Copyright Kāinga Ora; may be reproduced free of charge without further permission if accurate and not misleading, acknowledging the source and copyright status",
+    "next_step_en": "Check the First Home Loan criteria with a participating lender.",
+    "verified_by": null,
+    "verified_at": null,
+    "verified_content_hash": null,
+    "status": "draft",
+    "last_check": null
+  },
+  {
+    "id": "kb_fhl_income_cap_individual",
+    "topic": "lending",
+    "applies_when": {
+      "fhl_eligible": true
+    },
+    "claim_en": "The Kāinga Ora brochure lists before-tax income limits of $95,000 for an individual buyer and $150,000 for an individual buyer with dependants.",
+    "quote": "$95,000 for an individual buyer – $150,000 for an individual buyer with dependants",
+    "source_id": "kainga_ora_fhl_brochure",
+    "source_url": "https://kaingaora.govt.nz/assets/Home-ownership/First-Home-Loan-brochures/Kainga-Ora-First-Home-Loan-Brochure.pdf",
+    "source_title": "First Home Loan brochure - Kāinga Ora",
+    "source_type": "official",
+    "licence": "Copyright Kāinga Ora; may be reproduced free of charge without further permission if accurate and not misleading, acknowledging the source and copyright status",
+    "next_step_en": "Check the First Home Loan income criteria with a participating lender.",
+    "verified_by": null,
+    "verified_at": null,
+    "verified_content_hash": null,
+    "status": "draft",
+    "last_check": null
+  },
+  {
+    "id": "kb_fhl_income_cap_multiple",
+    "topic": "lending",
+    "applies_when": {
+      "fhl_eligible": true
+    },
+    "claim_en": "The Kāinga Ora brochure lists a before-tax income limit of $150,000 combined for multiple buyers.",
+    "quote": "$150,000 combined for multiple buyers",
+    "source_id": "kainga_ora_fhl_brochure",
+    "source_url": "https://kaingaora.govt.nz/assets/Home-ownership/First-Home-Loan-brochures/Kainga-Ora-First-Home-Loan-Brochure.pdf",
+    "source_title": "First Home Loan brochure - Kāinga Ora",
+    "source_type": "official",
+    "licence": "Copyright Kāinga Ora; may be reproduced free of charge without further permission if accurate and not misleading, acknowledging the source and copyright status",
+    "next_step_en": "Check the First Home Loan income criteria with a participating lender.",
+    "verified_by": null,
+    "verified_at": null,
+    "verified_content_hash": null,
     "status": "draft",
     "last_check": null
   }

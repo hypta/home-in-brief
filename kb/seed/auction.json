@@ -15,6 +15,7 @@
     "next_step_en": "Confirm finance and insurance arrangements before the auction day.",
     "verified_by": null,
     "verified_at": null,
+    "verified_content_hash": null,
     "status": "draft",
     "last_check": null
   }

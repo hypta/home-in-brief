@@ -121,7 +121,7 @@
   },
   {
     "id": "bank_rates_snapshot",
-    "title": "Bank published home loan rates (daily snapshot) - per-bank source_url in rates_latest",
+    "title": "Bank published home loan rates (manually maintained snapshot)",
     "url": "https://www.anz.co.nz/rates-fees-agreements/home-loans/",
     "licence": "Varies by bank; see jobs/rates-refresh/config/banks.yaml",
     "accessed_at": "2026-10-03",
@@ -129,6 +129,18 @@
     "attribution": "Source: each bank's published home loan rates page (URL per bank in rates_latest source_url).",
     "tos_status": "unclear",
     "tos_url": "see jobs/rates-refresh/config/banks.yaml",
+    "tos_checked_at": "2026-10-03"
+  },
+  {
+    "id": "kainga_ora_fhl_brochure",
+    "title": "First Home Loan brochure - Kāinga Ora",
+    "url": "https://kaingaora.govt.nz/assets/Home-ownership/First-Home-Loan-brochures/Kainga-Ora-First-Home-Loan-Brochure.pdf",
+    "licence": "Copyright Kāinga Ora; may be reproduced free of charge without further permission if accurate and not misleading, acknowledging the source and copyright status",
+    "accessed_at": "2026-10-03",
+    "source_type": "official",
+    "attribution": "Source: Kāinga Ora - Homes and Communities (kaingaora.govt.nz), copyright Kāinga Ora.",
+    "tos_status": "allowed",
+    "tos_url": "https://kaingaora.govt.nz/en_NZ/copyright-statement/",
     "tos_checked_at": "2026-10-03"
   }
 ]

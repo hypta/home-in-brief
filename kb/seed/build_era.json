@@ -18,6 +18,7 @@
     "next_step_en": "Ask for the building's age and cladding details and consider a pre-purchase building inspection.",
     "verified_by": null,
     "verified_at": null,
+    "verified_content_hash": null,
     "status": "draft",
     "last_check": null
   }

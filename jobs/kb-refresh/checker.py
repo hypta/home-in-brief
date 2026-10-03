@@ -2,13 +2,18 @@
 import hashlib
 import io
 import re
-import urllib.robotparser
-from urllib.parse import urlsplit
+import sys
 import unicodedata
+import urllib.robotparser
 from dataclasses import dataclass
 from html.parser import HTMLParser
+from pathlib import Path
+from urllib.parse import urljoin, urlsplit
 
 import httpx
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "kb"))
+from content_hash import content_hash, effective_status  # noqa: E402
 
 USER_AGENT = "home-buyer-copilot/0.1 (+https://github.com/hypta/home-buyer-copilot)"
 ROBOTS_AGENT = "home-buyer-copilot"
@@ -19,6 +24,8 @@ HEADERS = {
 }
 TIMEOUT = 20.0
 BLOCK_STATUSES = {401, 403, 406, 429, 503}
+MAX_BYTES = 15 * 1024 * 1024
+MAX_REDIRECTS = 5
 MIN_TEXT_LEN = 500  # shorter HTML text is a JS shell or challenge, not the real page
 # Markers of CDN bot-challenge pages: they return 200 but contain none of the real page.
 BLOCK_MARKERS = ("_incapsula_resource", "cf-browser-verification", "just a moment...", "attention required! | cloudflare")
@@ -84,27 +91,59 @@ class FetchResult:
     blocked: bool = False  # CDN block, challenge, empty JS shell or robots.txt: recorded, never worked around
 
 
-def http_fetch(url: str, client: httpx.Client | None = None) -> FetchResult:
+def _get_limited(client: httpx.Client, url: str) -> tuple[httpx.Response, bytes]:
+    """GET without following redirects; abort bodies larger than MAX_BYTES."""
+    with client.stream("GET", url) as resp:
+        chunks, size = [], 0
+        for chunk in resp.iter_bytes():
+            size += len(chunk)
+            if size > MAX_BYTES:
+                raise ValueError(f"response larger than {MAX_BYTES} bytes")
+            chunks.append(chunk)
+        return resp, b"".join(chunks)
+
+
+def http_fetch(url: str, client: httpx.Client | None = None, guard=None) -> FetchResult:
+    """Fetch one page. Redirects are followed by hand (max MAX_REDIRECTS): only https and the same
+    host as the approved URL, and guard(url) (robots.txt) must still pass for every hop."""
     own = client is None
-    client = client or httpx.Client(headers=HEADERS, timeout=TIMEOUT, follow_redirects=True)
+    client = client or httpx.Client(headers=HEADERS, timeout=TIMEOUT, follow_redirects=False)
     try:
-        try:
-            resp = client.get(url)
-        except httpx.HTTPError as e:
-            return FetchResult(None, None, f"{type(e).__name__}: {e}")
+        origin_host = urlsplit(url).netloc.lower()
+        current = url
+        for _hop in range(MAX_REDIRECTS + 1):
+            try:
+                resp, content = _get_limited(client, current)
+            except httpx.HTTPError as e:
+                return FetchResult(None, None, f"{type(e).__name__}: {e}")
+            except ValueError as e:
+                return FetchResult(None, None, str(e), blocked=True)
+            if resp.status_code in (301, 302, 303, 307, 308) and resp.headers.get("location"):
+                current = urljoin(current, resp.headers["location"])
+                parts = urlsplit(current)
+                if parts.scheme != "https" or parts.netloc.lower() != origin_host:
+                    return FetchResult(resp.status_code, None,
+                                       f"redirect to {parts.scheme}://{parts.netloc} refused (https and same host only)",
+                                       blocked=True)
+                reason = guard(current) if guard else None
+                if reason:
+                    return FetchResult(resp.status_code, None, reason, blocked=True)
+                continue
+            break
+        else:
+            return FetchResult(None, None, f"more than {MAX_REDIRECTS} redirects", blocked=True)
         if resp.status_code >= 400:
             return FetchResult(resp.status_code, None, f"HTTP {resp.status_code}",
                                blocked=resp.status_code in BLOCK_STATUSES)
-        ctype = resp.headers.get("content-type", "").lower()
         try:
-            is_pdf = resp.content[:5] == b"%PDF-"
-            if not is_pdf and url.lower().split("?")[0].endswith(".pdf"):
+            is_pdf = content[:5] == b"%PDF-"
+            if not is_pdf and current.lower().split("?")[0].endswith(".pdf"):
                 # a non-PDF body on a .pdf URL is a block page
                 return FetchResult(resp.status_code, None, "expected PDF, got non-PDF body (likely CDN block)", blocked=True)
             if is_pdf:
-                text = pdf_to_text(resp.content)
+                text = pdf_to_text(content)
             else:
-                body = resp.text
+                body = content.decode(resp.encoding or "utf-8", errors="replace")
                 if any(m in body.lower() for m in BLOCK_MARKERS) and len(body) < 5000:
                     return FetchResult(resp.status_code, None, "blocked by CDN bot challenge", blocked=True)
                 text = html_to_text(body)
@@ -120,48 +159,64 @@ def http_fetch(url: str, client: httpx.Client | None = None) -> FetchResult:
 
 
 class Fetcher:
-    """httpx only. Honest User-Agent, robots.txt first, no retry or workaround when blocked."""
+    """httpx only. Honest User-Agent, https only, robots.txt first, no retry or workaround when blocked."""
 
     def __init__(self, client: httpx.Client | None = None):
-        self.client = client or httpx.Client(headers=HEADERS, timeout=TIMEOUT, follow_redirects=True)
+        self.client = client or httpx.Client(headers=HEADERS, timeout=TIMEOUT, follow_redirects=False)
         self._robots: dict[str, urllib.robotparser.RobotFileParser | str] = {}
 
     def _robots_for(self, origin: str):
-        if origin not in self._robots:
-            try:
-                r = self.client.get(origin + "/robots.txt")
-            except httpx.HTTPError as e:
-                self._robots[origin] = f"robots.txt unavailable: {type(e).__name__}"
-                return self._robots[origin]
-            rp = urllib.robotparser.RobotFileParser()
-            if r.status_code in (401, 403) or r.status_code >= 500:
-                self._robots[origin] = f"robots.txt unavailable: HTTP {r.status_code}"  # be conservative
-            elif r.status_code >= 400:
-                rp.parse([])  # no robots.txt: everything allowed
-                self._robots[origin] = rp
+        """A parsed robots.txt, or a reason string meaning: do not fetch from this host."""
+        if origin in self._robots:
+            return self._robots[origin]
+        result: urllib.robotparser.RobotFileParser | str
+        try:
+            r = self.client.get(origin + "/robots.txt")
+        except httpx.HTTPError as e:
+            result = f"robots.txt unavailable: {type(e).__name__}"
+        else:
+            ctype = r.headers.get("content-type", "").lower()
+            if r.status_code in (404, 410):
+                result = urllib.robotparser.RobotFileParser()  # no robots.txt: nothing is disallowed
+                result.parse([])
+            elif r.status_code != 200:
+                result = f"robots.txt unavailable: HTTP {r.status_code}"  # 429, 401, 403, 5xx, ...
+            elif "html" in ctype or r.text.lstrip()[:1] == "<":
+                result = "robots.txt unavailable: got an HTML page (challenge or error page)"
             else:
-                rp.parse(r.text.splitlines())
-                self._robots[origin] = rp
-        return self._robots[origin]
+                result = urllib.robotparser.RobotFileParser()
+                result.parse(r.text.splitlines())
+        self._robots[origin] = result
+        return result
 
-    def __call__(self, url: str) -> FetchResult:
+    def guard(self, url: str) -> str | None:
+        """Reason not to fetch url (not https, or robots.txt), else None."""
         u = urlsplit(url)
+        if u.scheme != "https":
+            return f"only https URLs are fetched (got {u.scheme or 'none'})"
         rp = self._robots_for(f"{u.scheme}://{u.netloc}")
         if isinstance(rp, str):
-            return FetchResult(None, None, rp, blocked=True)
+            return rp
         if not rp.can_fetch(ROBOTS_AGENT, url):
-            return FetchResult(None, None, "disallowed by robots.txt", blocked=True)
-        return http_fetch(url, self.client)
+            return "disallowed by robots.txt"
+        return None
+
+    def __call__(self, url: str) -> FetchResult:
+        reason = self.guard(url)
+        if reason:
+            return FetchResult(None, None, reason, blocked=True)
+        return http_fetch(url, self.client, guard=self.guard)
 
     def close(self) -> None:
         self.client.close()
 
 
-def manual_run(now: str, reason: str) -> dict:
+def manual_run(now: str, reason: str, item: dict | None = None) -> dict:
     """Run record for an item whose source we must not fetch automatically (no request is made)."""
     return {"at": now, "http_status": None, "quote_found": None, "page_sha256": None,
             "error": None, "network_error": False, "blocked": False,
-            "manual_check_required": True, "manual_reason": reason}
+            "manual_check_required": True, "manual_reason": reason,
+            "content_hash": content_hash(item) if item else None}
 
 
 def check_item(item: dict, fetch=http_fetch, now: str = "") -> dict:
@@ -179,6 +234,7 @@ def check_item(item: dict, fetch=http_fetch, now: str = "") -> dict:
         "network_error": bool(res.error) and res.network_error,
         "blocked": res.blocked,
         "manual_check_required": False,
+        "content_hash": content_hash(item),  # the content version this result is about
     }
     if res.text is not None:
         norm = normalize(res.text)
@@ -188,7 +244,10 @@ def check_item(item: dict, fetch=http_fetch, now: str = "") -> dict:
 
 
 def next_status(item: dict, run: dict) -> str:
-    """Only verified + quote definitely gone -> needs_review. Everything else keeps status."""
-    if item.get("status") == "verified" and run["quote_found"] is False:
+    """Status to store. A verified item without sound verification (missing reviewer data or content
+    changed since review) counts as needs_review; a sound verified item is demoted only when its
+    quote is definitely gone. Everything else keeps its status."""
+    status = effective_status(item)
+    if status == "verified" and run["quote_found"] is False:
         return "needs_review"
-    return item.get("status", "draft")
+    return status

@@ -1,11 +1,15 @@
 """Backends: local (kb/seed/*.json, report file) and firestore."""
 import json
 import os
+import sys
 from pathlib import Path
 
 ROOT = Path(os.environ.get("KB_ROOT") or Path(__file__).resolve().parents[2])
 SEED_DIR = Path(os.environ.get("KB_SEED_DIR") or ROOT / "kb" / "seed")
 OUT_DIR = Path(os.environ.get("OUT_DIR") or ROOT / "out")
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "kb"))
+from content_hash import content_hash  # noqa: E402
 
 
 def load_seed_items(seed_dir: Path = SEED_DIR) -> list[dict]:
@@ -43,12 +47,14 @@ class LocalStore:
 
 
 class FirestoreStore:
-    def __init__(self, client=None):
+    def __init__(self, client=None, transactional=None):
         if client is None:
             from google.cloud import firestore
 
             client = firestore.Client()
+            transactional = firestore.transactional
         self.db = client
+        self._transactional = transactional or (lambda fn: fn)  # tests inject a client without transactions
 
     def load_items(self) -> list[dict]:
         return [d.to_dict() | {"id": d.id} for d in self.db.collection("kb_items").stream()]
@@ -57,12 +63,31 @@ class FirestoreStore:
         return {d.id: d.to_dict() for d in self.db.collection("sources").stream()}
 
     def record(self, item: dict, run: dict, new_status: str) -> None:
-        ts = run.get("run_id") or run["at"]
-        self.db.collection("kb_source_checks").document(item["id"]).collection("runs").document(ts).set(run)
-        update = {"last_check": run}
-        if new_status != item.get("status"):
-            update["status"] = new_status
-        self.db.collection("kb_items").document(item["id"]).update(update)
+        """Write the run, and update the item only if its content is still the version that was checked.
+
+        If a person edited or re-verified the item while the job was running, the run is kept for
+        audit with stale_content=True and the item is left alone. The status is changed only if it
+        is still what the job read.
+        """
+        run_id = run.get("run_id") or run["at"]
+        item_ref = self.db.collection("kb_items").document(item["id"])
+        run_ref = self.db.collection("kb_source_checks").document(item["id"]).collection("runs").document(run_id)
+
+        @self._transactional
+        def apply(tx):
+            snap = item_ref.get(transaction=tx)
+            current = snap.to_dict() if snap.exists else None
+            stale = current is None or content_hash(current) != run.get("content_hash")
+            rec = dict(run, stale_content=stale)
+            tx.set(run_ref, rec)
+            if stale:
+                return
+            update = {"last_check": rec}
+            if new_status != item.get("status") and current.get("status") == item.get("status"):
+                update["status"] = new_status
+            tx.update(item_ref, update)
+
+        apply(self.db.transaction())
 
     def finish(self, job_run: dict) -> None:
         self.db.collection("job_runs").document(job_run.get("run_id") or job_run["at"]).set(job_run)

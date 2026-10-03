@@ -1,22 +1,30 @@
 import json
+import re
 
 import httpx
 
 import checker
 from checker import Fetcher, FetchResult, check_item, http_fetch, next_status, normalize
-from main import run_job
+from content_hash import content_hash
+from main import RUN_ID_RE, run_job
 from store import FirestoreStore, LocalStore
 
 QUOTE = "an insurer may limit any cover for flood damage"
 
 
-SOURCES = [{"id": "s_ok", "tos_status": "allowed"}, {"id": "s_unclear", "tos_status": "unclear"},
-           {"id": "s_prohibited", "tos_status": "prohibited"}]
+URL = "https://example.test/p"
+SOURCES = [{"id": s, "tos_status": t, "url": URL} for s, t in
+           [("s_ok", "allowed"), ("s_unclear", "unclear"), ("s_prohibited", "prohibited")]]
 
 
-def make_item(status="draft", quote=QUOTE, id="kb_x", source_id="s_ok"):
-    return {"id": id, "quote": quote, "source_url": "https://example.test/p", "status": status,
-            "source_id": source_id}
+def make_item(status="draft", quote=QUOTE, id="kb_x", source_id="s_ok", sound=True):
+    """A verified item is sound (reviewer data + matching content hash) unless sound=False."""
+    item = {"id": id, "claim_en": "claim", "quote": quote, "source_url": URL, "applies_when": {"always": True},
+            "next_step_en": "step", "status": status, "source_id": source_id,
+            "verified_by": None, "verified_at": None, "verified_content_hash": None}
+    if status == "verified" and sound:
+        item.update(verified_by="Reviewer", verified_at="2026-10-04", verified_content_hash=content_hash(item))
+    return item
 
 
 def page(text):
@@ -188,8 +196,20 @@ class FakeDoc:
     def update(self, data):
         self.db.data.setdefault(self.path, {}).update(data)
 
+    def get(self, transaction=None):
+        data = self.db.data.get(self.path)
+        return type("Snap", (), {"exists": data is not None, "to_dict": lambda s: dict(data or {})})()
+
     def collection(self, name):
         return FakeColl(self.db, f"{self.path}/{name}")
+
+
+class FakeTx:
+    def set(self, ref, data):
+        ref.set(data)
+
+    def update(self, ref, data):
+        ref.update(data)
 
 
 class FakeColl:
@@ -214,19 +234,24 @@ class FakeDB:
     def collection(self, name):
         return FakeColl(self, name)
 
+    def transaction(self):
+        return FakeTx()
+
 
 def test_firestore_verified_goes_needs_review_and_logs():
     db = FakeDB()
-    db.data["sources/s_ok"] = {"id": "s_ok", "tos_status": "allowed"}
+    db.data["sources/s_ok"] = {"id": "s_ok", "tos_status": "allowed", "url": URL}
     db.data["kb_items/a"] = make_item("verified", id="a")
     db.data["kb_items/b"] = make_item("draft", id="b")
-    job, code = run_job(FirestoreStore(db), fetch=page("redesigned page"), clock=lambda: "20260101T000000Z")
+    job, code = run_job(FirestoreStore(db), fetch=page("redesigned page"), clock=lambda: "20260101T000000Z",
+                        rand=lambda: "ab12")
     assert code == 0 and job["checked"] == 2 and job["changed"] == 1
     assert db.data["kb_items/a"]["status"] == "needs_review"
     assert db.data["kb_items/b"]["status"] == "draft"
     assert db.data["kb_items/b"]["last_check"]["quote_found"] is False
-    assert "kb_source_checks/a/runs/20260101T000000Z" in db.data
-    assert db.data["job_runs/20260101T000000Z"]["job"] == "kb-refresh"
+    runs = [k for k in db.data if k.startswith("kb_source_checks/a/runs/")]
+    assert runs == ["kb_source_checks/a/runs/20260101T000000Z-ab12"]
+    assert db.data["job_runs/20260101T000000Z-ab12"]["job"] == "kb-refresh"
 
 
 def test_non_allowed_sources_are_not_fetched_and_status_unchanged(tmp_path):
@@ -255,14 +280,164 @@ def test_non_allowed_sources_are_not_fetched_and_status_unchanged(tmp_path):
 
 
 def test_run_ids_are_utc_compact_and_at_is_iso():
-    import re
     from datetime import datetime
     db = FakeDB()
-    db.data["sources/s_ok"] = {"id": "s_ok", "tos_status": "allowed"}
+    db.data["sources/s_ok"] = {"id": "s_ok", "tos_status": "allowed", "url": URL}
     db.data["kb_items/a"] = make_item("verified", id="a")
     job, _ = run_job(FirestoreStore(db), fetch=page("redesigned page"))  # real clock
     ids = [k.split("/")[-1] for k in db.data if k.startswith("job_runs/") or "/runs/" in k]
-    assert ids and all(re.fullmatch(r"\d{8}T\d{6}Z", i) for i in ids)
-    assert re.fullmatch(r"\d{8}T\d{6}Z", job["run_id"])
+    assert ids and all(re.fullmatch(RUN_ID_RE, i) for i in ids)
+    assert re.fullmatch(r"\d{8}T\d{6}Z-[0-9a-f]{4}", job["run_id"])
     assert datetime.fromisoformat(job["at"]).utcoffset().total_seconds() == 0
     assert db.data["kb_items/a"]["last_check"]["at"].endswith("+00:00")
+
+
+# ---- lifecycle: verification is bound to the content hash -------------------------------------
+
+def test_verified_with_changed_content_counts_as_needs_review():
+    item = make_item("verified")
+    item["claim_en"] = "claim edited after review"
+    run = check_item(item, fetch=page(f"x {QUOTE} y"), now="t")
+    assert run["quote_found"] is True  # even if the quote is fine, the review no longer covers this text
+    assert next_status(item, run) == "needs_review"
+
+
+def test_verified_without_reviewer_data_counts_as_needs_review():
+    item = make_item("verified", sound=False)
+    assert next_status(item, check_item(item, fetch=page(QUOTE), now="t")) == "needs_review"
+
+
+def test_manual_item_with_unsound_verification_is_demoted_but_sound_one_is_not(tmp_path):
+    seed = tmp_path / "seed"
+    seed.mkdir()
+    good, bad = make_item("verified", id="good", source_id="s_unclear"), make_item("verified", id="bad", source_id="s_unclear", sound=False)
+    (seed / "a.json").write_text(json.dumps([good, bad]))
+    (seed / "sources.json").write_text(json.dumps(SOURCES))
+    store = LocalStore(seed, tmp_path / "out")
+    run_job(store, fetch=lambda u: (_ for _ in ()).throw(AssertionError("no request")), clock=lambda: "T")
+    after = {r["id"]: r["status_after"] for r in store.report["runs"]}
+    assert after == {"good": "verified", "bad": "needs_review"}
+
+
+def test_run_records_the_content_hash_it_checked():
+    item = make_item("verified")
+    assert check_item(item, fetch=page(QUOTE), now="t")["content_hash"] == content_hash(item)
+
+
+def test_demotion_only_applies_to_the_checked_content_version():
+    db = FakeDB()
+    db.data["sources/s_ok"] = {"id": "s_ok", "tos_status": "allowed", "url": URL}
+    old = make_item("verified", id="a")
+    db.data["kb_items/a"] = old
+    store = FirestoreStore(db)
+    run = check_item(old, fetch=page("old quote is gone"), now="t")
+    run.update(run_id="r1", at="t")
+    # while the job was fetching, a person fixed the quote and re-verified the new text
+    fixed = make_item("verified", id="a", quote="new corrected quote")
+    db.data["kb_items/a"] = fixed
+    store.record(old, run, next_status(old, run))
+    assert db.data["kb_items/a"]["status"] == "verified" and db.data["kb_items/a"].get("last_check") is None
+    assert db.data["kb_source_checks/a/runs/r1"]["stale_content"] is True
+
+
+def test_status_changed_by_someone_else_is_not_overwritten():
+    db = FakeDB()
+    old = make_item("verified", id="a")
+    db.data["kb_items/a"] = dict(old, status="retired")
+    run = check_item(old, fetch=page("gone"), now="t")
+    run.update(run_id="r1", at="t")
+    FirestoreStore(db).record(old, run, "needs_review")
+    assert db.data["kb_items/a"]["status"] == "retired" and db.data["kb_items/a"]["last_check"]["quote_found"] is False
+
+
+def test_item_with_other_source_url_than_approved_is_not_fetched(tmp_path):
+    seed = tmp_path / "seed"
+    seed.mkdir()
+    item = make_item("draft", id="a")
+    item["source_url"] = "https://other.test/p"
+    (seed / "a.json").write_text(json.dumps([item]))
+    (seed / "sources.json").write_text(json.dumps(SOURCES))
+    store = LocalStore(seed, tmp_path / "out")
+    job, _ = run_job(store, fetch=lambda u: (_ for _ in ()).throw(AssertionError("no request")), clock=lambda: "T")
+    assert job["manual_check_required"] == 1
+    assert store.report["runs"][0]["manual_reason"] == "source_url_differs_from_approved_source_url"
+
+
+# ---- fetching: robots.txt failures, redirects, size ---------------------------------------------
+
+def test_robots_429_and_other_non_200_non_404_mean_no_page_request():
+    for status in (429, 401, 403, 406, 500, 503):
+        log = []
+        f = Fetcher(_client(lambda q, s=status, log=log: (log.append(q.url.path), httpx.Response(s))[1]))
+        r = f("https://e.test/p")
+        assert r.text is None and r.blocked and "robots.txt unavailable" in r.error and log == ["/robots.txt"], status
+
+
+def test_robots_timeout_and_html_challenge_mean_no_page_request():
+    def boom(req):
+        raise httpx.ConnectTimeout("slow")
+
+    r = Fetcher(_client(boom))("https://e.test/p")
+    assert r.text is None and r.blocked and "robots.txt unavailable" in r.error
+    log = []
+    html = lambda q: (log.append(q.url.path), httpx.Response(200, text="<html>challenge</html>",
+                                                              headers={"content-type": "text/html"}))[1]
+    r = Fetcher(_client(html))("https://e.test/p")
+    assert r.text is None and "HTML page" in r.error and log == ["/robots.txt"]
+
+
+def test_robots_404_and_410_allow():
+    for status in (404, 410):
+        f = Fetcher(_client(lambda q, s=status: httpx.Response(s) if q.url.path == "/robots.txt"
+                            else httpx.Response(200, text=BIG)))
+        assert f("https://e.test/p").text
+
+
+def test_only_https_is_fetched():
+    log = []
+    f = Fetcher(_client(lambda q: (log.append(1), httpx.Response(200, text=BIG))[1]))
+    r = f("http://e.test/p")
+    assert r.text is None and r.blocked and "https" in r.error and not log
+
+
+def _redirecting(target, log):
+    def pages(req):
+        log.append(str(req.url))
+        if req.url.path == "/start":
+            return httpx.Response(302, headers={"location": target})
+        return httpx.Response(200, text=BIG)
+    return Fetcher(_client(site(pages)))
+
+
+def test_redirect_to_other_host_or_http_is_refused_without_requesting_it():
+    for target in ("https://evil.test/p", "http://e.test/p", "https://127.0.0.1/admin"):
+        log = []
+        r = _redirecting(target, log)("https://e.test/start")
+        assert r.text is None and r.blocked and "refused" in r.error, target
+        assert all("e.test" in u for u in log) and target not in log
+
+
+def test_same_host_https_redirect_is_followed_and_robots_applies_to_it():
+    log = []
+    r = _redirecting("/ok", log)("https://e.test/start")
+    assert r.text and log[-1] == "https://e.test/ok"
+    r = _redirecting("/private/x", [])("https://e.test/start")
+    assert r.text is None and "robots.txt" in r.error
+
+
+def test_redirect_loop_is_cut_off():
+    f = Fetcher(_client(site(lambda q: httpx.Response(302, headers={"location": "/start"}))))
+    r = f("https://e.test/start")
+    assert r.text is None and r.blocked and "redirects" in r.error
+
+
+def test_oversized_response_is_aborted(monkeypatch):
+    monkeypatch.setattr(checker, "MAX_BYTES", 1000)
+    r = Fetcher(_client(site(lambda q: httpx.Response(200, text="x" * 5000))))("https://e.test/p")
+    assert r.text is None and "larger than" in r.error
+
+
+def test_run_ids_have_random_suffix_and_are_unique_within_a_second():
+    from main import make_run_id
+    ids = {make_run_id(lambda: "20260101T000000Z") for _ in range(50)}
+    assert len(ids) > 40 and all(re.fullmatch(RUN_ID_RE, i) for i in ids)

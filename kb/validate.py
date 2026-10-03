@@ -1,18 +1,23 @@
 """Validate kb/seed/*.json: schema, quote length, source references, duplicate ids.
 
-Usage: python kb/validate.py   (exit code 1 on any problem)
+Usage: python kb/validate.py            (exit code 1 on any problem)
+       python kb/validate.py --hash <id>  (print the content_hash to paste into verified_content_hash)
 """
 import json
 import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from content_hash import content_hash, verification_problems  # noqa: E402
 
 SEED = Path(__file__).resolve().parent / "seed"
 
 ITEM_FIELDS = [
     "id", "topic", "applies_when", "claim_en", "quote", "source_id", "source_url",
     "source_title", "source_type", "licence", "next_step_en", "verified_by",
-    "verified_at", "status", "last_check",
+    "verified_at", "verified_content_hash", "status", "last_check",
 ]
+STATUSES = {"draft", "verified", "needs_review", "retired"}
 SOURCE_FIELDS = ["id", "title", "url", "licence", "accessed_at", "source_type",
                  "attribution", "tos_status", "tos_url", "tos_checked_at"]
 TOS_STATUSES = {"allowed", "unclear", "prohibited"}
@@ -79,9 +84,15 @@ def validate(seed_dir: Path = SEED) -> list[str]:
                     errors.append(f"{where}: licence differs from sources.json")
             if it.get("source_type") not in SOURCE_TYPES:
                 errors.append(f"{where}: bad source_type")
-            if it.get("status") != "draft" or it.get("verified_by") is not None \
-                    or it.get("verified_at") is not None or it.get("last_check") is not None:
-                errors.append(f"{where}: seed must be draft with null verified_by/verified_at/last_check")
+            if it.get("status") not in STATUSES:
+                errors.append(f"{where}: bad status {it.get('status')!r}")
+            if it.get("status") == "draft" and any(
+                    it.get(k) is not None for k in ("verified_by", "verified_at", "verified_content_hash")):
+                errors.append(f"{where}: draft must have null verified_by/verified_at/verified_content_hash")
+            for problem in verification_problems(it):
+                errors.append(f"{where}: verified but {problem}")
+            if it.get("last_check") is not None:
+                errors.append(f"{where}: seed last_check must be null (written by kb-refresh only)")
             when = it.get("applies_when")
             if not isinstance(when, dict) or not when:
                 errors.append(f"{where}: applies_when must be a non-empty object")
@@ -95,5 +106,19 @@ def validate(seed_dir: Path = SEED) -> list[str]:
     return errors
 
 
+def all_items(seed_dir: Path = SEED) -> list[dict]:
+    items: list[dict] = []
+    for path in sorted(seed_dir.glob("*.json")):
+        if path.name != "sources.json":
+            items.extend(json.loads(path.read_text(encoding="utf-8")))
+    return items
+
+
 if __name__ == "__main__":
+    if len(sys.argv) == 3 and sys.argv[1] == "--hash":
+        found = [i for i in all_items() if i["id"] == sys.argv[2]]
+        if not found:
+            sys.exit(f"no item with id {sys.argv[2]}")
+        print(content_hash(found[0]))
+        sys.exit(0)
     sys.exit(1 if validate() else 0)
