@@ -1,0 +1,21 @@
+[
+  {
+    "id": "kb_flood_insurance_limit",
+    "topic": "hazard",
+    "applies_when": {
+      "hazard_status": "intersects"
+    },
+    "claim_en": "Settled.govt.nz states that where a house is in an area previously flooded, an insurer may limit cover for flood damage.",
+    "quote": "an insurer may limit any cover for flood damage",
+    "source_id": "src_settled_insurance",
+    "source_url": "https://www.settled.govt.nz/blog/what-property-buyers-need-to-know-about-insurance/",
+    "source_title": "What property buyers need to know about insurance - settled.govt.nz",
+    "source_type": "official",
+    "licence": "[待查證]",
+    "next_step_en": "Ask insurers about past claims and flood exclusions before making an offer.",
+    "verified_by": null,
+    "verified_at": null,
+    "status": "draft",
+    "last_check": null
+  }
+]

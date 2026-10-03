@@ -1,0 +1,82 @@
+[
+  {
+    "id": "src_settled_auction",
+    "title": "Buying by auction - settled.govt.nz",
+    "url": "https://www.settled.govt.nz/buying-a-home/making-an-offer/buying-by-auction/",
+    "licence": "[待查證]",
+    "accessed_at": "2026-10-03",
+    "source_type": "official"
+  },
+  {
+    "id": "src_settled_insurance",
+    "title": "What property buyers need to know about insurance - settled.govt.nz",
+    "url": "https://www.settled.govt.nz/blog/what-property-buyers-need-to-know-about-insurance/",
+    "licence": "[待查證]",
+    "accessed_at": "2026-10-03",
+    "source_type": "official"
+  },
+  {
+    "id": "src_nhc_about",
+    "title": "About natural hazards cover - Natural Hazards Commission Toka Tū Ake",
+    "url": "https://www.naturalhazards.govt.nz/insurance-and-claims/about-nhcover/",
+    "licence": "CC BY-NC 4.0",
+    "accessed_at": "2026-10-03",
+    "source_type": "official"
+  },
+  {
+    "id": "src_settled_leaky",
+    "title": "Learning about leaky buildings - settled.govt.nz",
+    "url": "https://www.settled.govt.nz/buying-a-home/researching-the-property/learning-about-leaky-buildings/",
+    "licence": "[待查證]",
+    "accessed_at": "2026-10-03",
+    "source_type": "official"
+  },
+  {
+    "id": "src_rbnz_lvr",
+    "title": "Understanding loan-to-value restrictions - Reserve Bank of New Zealand",
+    "url": "https://www.rbnz.govt.nz/education/explainers/loan-to-value-restrictions-explained",
+    "licence": "[待查證]",
+    "accessed_at": "2026-10-03",
+    "source_type": "official"
+  },
+  {
+    "id": "src_rbnz_dti",
+    "title": "Understanding debt-to-income (DTI) restrictions - Reserve Bank of New Zealand",
+    "url": "https://www.rbnz.govt.nz/education/explainers/dti",
+    "licence": "[待查證]",
+    "accessed_at": "2026-10-03",
+    "source_type": "official"
+  },
+  {
+    "id": "src_ko_fhl_premium_faq",
+    "title": "First Home Loan - Insurance Premium Changes FAQs (22 May 2025) - Kāinga Ora",
+    "url": "https://kaingaora.govt.nz/assets/Home-ownership/First-Home-Loan-brochures/FHL-Insurance-Premium_FAQs.pdf",
+    "licence": "[待查證]",
+    "accessed_at": "2026-10-03",
+    "source_type": "official"
+  },
+  {
+    "id": "src_akl_rating_valuation",
+    "title": "Rating valuation - OurAuckland (Auckland Council)",
+    "url": "https://ourauckland.aucklandcouncil.govt.nz/news/2025/06/rating-valuation/",
+    "licence": "[待查證]",
+    "accessed_at": "2026-10-03",
+    "source_type": "official"
+  },
+  {
+    "id": "src_settled_ownership",
+    "title": "Understanding the types of ownership - settled.govt.nz",
+    "url": "https://www.settled.govt.nz/buying-a-home/finding-a-property/understanding-types-of-ownership/",
+    "licence": "[待查證]",
+    "accessed_at": "2026-10-03",
+    "source_type": "official"
+  },
+  {
+    "id": "src_unittitles_guide",
+    "title": "Short guide to unit titles (May 2024) - unittitles.govt.nz (MBIE)",
+    "url": "https://www.unittitles.govt.nz/assets/unit-titles/short-guide-to-unit-titles-may-2024.pdf",
+    "licence": "[待查證]",
+    "accessed_at": "2026-10-03",
+    "source_type": "official"
+  }
+]

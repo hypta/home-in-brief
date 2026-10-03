@@ -1,0 +1,61 @@
+[
+  {
+    "id": "kb_insurance_condition",
+    "topic": "insurance",
+    "applies_when": {
+      "always": true
+    },
+    "claim_en": "Settled.govt.nz states that a bank or lender will usually want proof that property insurance has been arranged before settlement.",
+    "quote": "will usually want proof that you’ve arranged property insurance before settlement",
+    "source_id": "src_settled_insurance",
+    "source_url": "https://www.settled.govt.nz/blog/what-property-buyers-need-to-know-about-insurance/",
+    "source_title": "What property buyers need to know about insurance - settled.govt.nz",
+    "source_type": "official",
+    "licence": "[待查證]",
+    "next_step_en": "Ask your lender what insurance evidence it requires and get insurance quotes early.",
+    "verified_by": null,
+    "verified_at": null,
+    "status": "draft",
+    "last_check": null
+  },
+  {
+    "id": "kb_nhc_building_cap",
+    "topic": "insurance",
+    "applies_when": {
+      "always": true
+    },
+    "claim_en": "The Natural Hazards Commission building cover cap is generally $300,000 plus GST per natural hazard event; the private insurer covers repair costs above the cap.",
+    "quote": "is called the building cover cap and is generally $300,000 plus GST",
+    "source_id": "src_nhc_about",
+    "source_url": "https://www.naturalhazards.govt.nz/insurance-and-claims/about-nhcover/",
+    "source_title": "About natural hazards cover - Natural Hazards Commission Toka Tū Ake",
+    "source_type": "official",
+    "licence": "CC BY-NC 4.0",
+    "next_step_en": "Check your private insurance policy for cover above the Natural Hazards Commission cap.",
+    "verified_by": null,
+    "verified_at": null,
+    "status": "draft",
+    "last_check": null
+  },
+  {
+    "id": "kb_unit_title_body_corporate_insurance",
+    "topic": "insurance",
+    "applies_when": {
+      "title_type": [
+        "Unit Title"
+      ]
+    },
+    "claim_en": "The unittitles.govt.nz short guide states that the body corporate must insure the unit title property to its full insurable value.",
+    "quote": "must insure and keep insured the unit title property to its full insurable value",
+    "source_id": "src_unittitles_guide",
+    "source_url": "https://www.unittitles.govt.nz/assets/unit-titles/short-guide-to-unit-titles-may-2024.pdf",
+    "source_title": "Short guide to unit titles (May 2024) - unittitles.govt.nz (MBIE)",
+    "source_type": "official",
+    "licence": "[待查證]",
+    "next_step_en": "Ask for the body corporate insurance policy and check whether you need separate cover for your unit and contents.",
+    "verified_by": null,
+    "verified_at": null,
+    "status": "draft",
+    "last_check": null
+  }
+]

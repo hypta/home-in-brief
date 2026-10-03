@@ -1,0 +1,24 @@
+[
+  {
+    "id": "kb_leaky_build_era",
+    "topic": "build_era",
+    "applies_when": {
+      "year_built_between": [
+        1987,
+        2006
+      ]
+    },
+    "claim_en": "Settled.govt.nz states that buildings with a high risk of leaking were mostly built between the late 1980s and the mid-2000s.",
+    "quote": "mostly built between the late 1980s and the mid-2000s",
+    "source_id": "src_settled_leaky",
+    "source_url": "https://www.settled.govt.nz/buying-a-home/researching-the-property/learning-about-leaky-buildings/",
+    "source_title": "Learning about leaky buildings - settled.govt.nz",
+    "source_type": "official",
+    "licence": "[待查證]",
+    "next_step_en": "Ask for the building's age and cladding details and consider a pre-purchase building inspection.",
+    "verified_by": null,
+    "verified_at": null,
+    "status": "draft",
+    "last_check": null
+  }
+]

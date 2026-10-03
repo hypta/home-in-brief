@@ -1,0 +1,21 @@
+[
+  {
+    "id": "kb_cv_not_market",
+    "topic": "valuation",
+    "applies_when": {
+      "always": true
+    },
+    "claim_en": "Auckland Council states that its rating valuations do not reflect a property's current market value; the 2024 values are based on 1 May 2024.",
+    "quote": "Council valuations do not reflect a property’s current market value",
+    "source_id": "src_akl_rating_valuation",
+    "source_url": "https://ourauckland.aucklandcouncil.govt.nz/news/2025/06/rating-valuation/",
+    "source_title": "Rating valuation - OurAuckland (Auckland Council)",
+    "source_type": "official",
+    "licence": "[待查證]",
+    "next_step_en": "Use a registered valuer or recent comparable sales for a current market view.",
+    "verified_by": null,
+    "verified_at": null,
+    "status": "draft",
+    "last_check": null
+  }
+]

@@ -1,0 +1,59 @@
+[
+  {
+    "id": "kb_rbnz_lvr",
+    "topic": "lending",
+    "applies_when": {
+      "lvr_over": 80
+    },
+    "claim_en": "The Reserve Bank explainer states that banks may make up to 25% of new owner-occupier loans at an LVR above 80%.",
+    "quote": "Up to 25% of new loans can have an LVR above 80%",
+    "source_id": "src_rbnz_lvr",
+    "source_url": "https://www.rbnz.govt.nz/education/explainers/loan-to-value-restrictions-explained",
+    "source_title": "Understanding loan-to-value restrictions - Reserve Bank of New Zealand",
+    "source_type": "official",
+    "licence": "[待查證]",
+    "next_step_en": "Ask your lender how it applies the low-deposit lending limit and what extra costs apply.",
+    "verified_by": null,
+    "verified_at": null,
+    "status": "draft",
+    "last_check": null
+  },
+  {
+    "id": "kb_rbnz_dti",
+    "topic": "lending",
+    "applies_when": {
+      "dti_over": 6
+    },
+    "claim_en": "The Reserve Bank explainer states that banks may lend up to 20% of owner-occupier lending to borrowers with a DTI ratio greater than 6.",
+    "quote": "20% of owner-occupier lending to borrowers with a DTI ratio greater than 6",
+    "source_id": "src_rbnz_dti",
+    "source_url": "https://www.rbnz.govt.nz/education/explainers/dti",
+    "source_title": "Understanding debt-to-income (DTI) restrictions - Reserve Bank of New Zealand",
+    "source_type": "official",
+    "licence": "[待查證]",
+    "next_step_en": "Ask your lender how it calculates your debt-to-income ratio.",
+    "verified_by": null,
+    "verified_at": null,
+    "status": "draft",
+    "last_check": null
+  },
+  {
+    "id": "kb_fhl_premium",
+    "topic": "lending",
+    "applies_when": {
+      "lvr_over": 80
+    },
+    "claim_en": "Kāinga Ora states the First Home Loan insurance premium is 1.2% of the loan value and, from 1 July 2025, the Government no longer funds part of it; it can be paid upfront or across the loan.",
+    "quote": "the Government will not provide funding to cover part of the insurance premium",
+    "source_id": "src_ko_fhl_premium_faq",
+    "source_url": "https://kaingaora.govt.nz/assets/Home-ownership/First-Home-Loan-brochures/FHL-Insurance-Premium_FAQs.pdf",
+    "source_title": "First Home Loan - Insurance Premium Changes FAQs (22 May 2025) - Kāinga Ora",
+    "source_type": "official",
+    "licence": "[待查證]",
+    "next_step_en": "Ask your lender how the First Home Loan premium would apply to your loan amount.",
+    "verified_by": null,
+    "verified_at": null,
+    "status": "draft",
+    "last_check": null
+  }
+]

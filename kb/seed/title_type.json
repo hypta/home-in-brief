@@ -1,0 +1,65 @@
+[
+  {
+    "id": "kb_title_freehold",
+    "topic": "title_type",
+    "applies_when": {
+      "title_type": [
+        "Freehold"
+      ]
+    },
+    "claim_en": "Settled.govt.nz states that with a freehold property you own the land and generally anything built on it, unless there are registered or unregistered interests.",
+    "quote": "you own the land and (generally) anything built on the land",
+    "source_id": "src_settled_ownership",
+    "source_url": "https://www.settled.govt.nz/buying-a-home/finding-a-property/understanding-types-of-ownership/",
+    "source_title": "Understanding the types of ownership - settled.govt.nz",
+    "source_type": "official",
+    "licence": "[待查證]",
+    "next_step_en": "Ask your lawyer to check the record of title for registered interests.",
+    "verified_by": null,
+    "verified_at": null,
+    "status": "draft",
+    "last_check": null
+  },
+  {
+    "id": "kb_title_cross_lease",
+    "topic": "title_type",
+    "applies_when": {
+      "title_type": [
+        "Cross Lease"
+      ]
+    },
+    "claim_en": "Settled.govt.nz states that a cross lease holder owns a share of the freehold title in common with the other cross leaseholders plus a leasehold interest in the building they occupy.",
+    "quote": "you own a share of the freehold title in common with the other cross leaseholders",
+    "source_id": "src_settled_ownership",
+    "source_url": "https://www.settled.govt.nz/buying-a-home/finding-a-property/understanding-types-of-ownership/",
+    "source_title": "Understanding the types of ownership - settled.govt.nz",
+    "source_type": "official",
+    "licence": "[待查證]",
+    "next_step_en": "Ask your lawyer to check the flats plan against the actual buildings and the lease terms.",
+    "verified_by": null,
+    "verified_at": null,
+    "status": "draft",
+    "last_check": null
+  },
+  {
+    "id": "kb_title_unit_title",
+    "topic": "title_type",
+    "applies_when": {
+      "title_type": [
+        "Unit Title"
+      ]
+    },
+    "claim_en": "Settled.govt.nz states that becoming a unit title holder automatically makes the owner a member of the body corporate.",
+    "quote": "you automatically become a member of the body corporate",
+    "source_id": "src_settled_ownership",
+    "source_url": "https://www.settled.govt.nz/buying-a-home/finding-a-property/understanding-types-of-ownership/",
+    "source_title": "Understanding the types of ownership - settled.govt.nz",
+    "source_type": "official",
+    "licence": "[待查證]",
+    "next_step_en": "Request the body corporate rules, meeting minutes, maintenance plan and levy details.",
+    "verified_by": null,
+    "verified_at": null,
+    "status": "draft",
+    "last_check": null
+  }
+]

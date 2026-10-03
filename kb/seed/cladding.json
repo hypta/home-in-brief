@@ -1,0 +1,26 @@
+[
+  {
+    "id": "kb_monolithic_cladding",
+    "topic": "cladding",
+    "applies_when": {
+      "cladding_in": [
+        "monolithic",
+        "plaster",
+        "stucco",
+        "fibre cement"
+      ]
+    },
+    "claim_en": "Settled.govt.nz links higher leak risk to plaster-style monolithic cladding systems on buildings from the late 1980s to the mid-2000s.",
+    "quote": "using plaster-style monolithic cladding systems",
+    "source_id": "src_settled_leaky",
+    "source_url": "https://www.settled.govt.nz/buying-a-home/researching-the-property/learning-about-leaky-buildings/",
+    "source_title": "Learning about leaky buildings - settled.govt.nz",
+    "source_type": "official",
+    "licence": "[待查證]",
+    "next_step_en": "Ask whether the cladding is monolithic and consider a pre-purchase building inspection.",
+    "verified_by": null,
+    "verified_at": null,
+    "status": "draft",
+    "last_check": null
+  }
+]
