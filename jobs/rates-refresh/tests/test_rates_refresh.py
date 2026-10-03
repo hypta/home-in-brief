@@ -279,3 +279,17 @@ def test_banks_config_is_complete():
         if b.get("render") == "browser":
             assert b["tos_status"] == "allowed"  # never render-by-browser a site we may not automate
     assert next(b for b in banks if b["bank_id"] == "nzhl")["tos_status"] == "prohibited"
+
+
+def test_store_imports_from_shallow_path(monkeypatch, tmp_path):
+    # Docker puts the package at /app/rates_refresh/store.py: only two parent directories
+    import rates_refresh.store as real
+    src = open(real.__file__).read()
+    for fake in ("/app/rates_refresh/store.py", "/store.py"):
+        ns = {"__file__": fake, "__name__": "shallow_store"}
+        exec(compile(src, fake, "exec"), ns)  # must not raise at import time
+        monkeypatch.delenv("RATES_SEED_PATH", raising=False)
+        monkeypatch.delenv("OUT_DIR", raising=False)
+        monkeypatch.chdir(tmp_path)
+        store = ns["LocalStore"]()  # falls back to cwd, still no crash
+        assert store.load_previous() is None

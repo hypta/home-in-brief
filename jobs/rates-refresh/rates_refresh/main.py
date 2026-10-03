@@ -14,7 +14,7 @@ from .validate import build_bank
 
 SCHEMA_VERSION = "0.1"
 NZ = ZoneInfo("Pacific/Auckland")
-CONFIG_PATH = Path(__file__).resolve().parents[1] / "config" / "banks.yaml"
+CONFIG_PATH = Path(__file__).resolve().parent.parent / "config" / "banks.yaml"
 
 
 def load_banks(path: Path = CONFIG_PATH) -> list[dict]:

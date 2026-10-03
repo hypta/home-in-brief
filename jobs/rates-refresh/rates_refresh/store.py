@@ -3,13 +3,23 @@ import json
 import os
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+
+def find_repo_root() -> Path:
+    """Nearest parent containing data/ (works in a checkout); otherwise the cwd. Never assumes a path depth."""
+    for p in Path(__file__).resolve().parents:
+        if (p / "data").is_dir():
+            return p
+    return Path.cwd()
 
 
 class LocalStore:
+    """Dev backend. Paths: env var, then argument, then a default found at construction time (not at import)."""
+
     def __init__(self, seed_path: Path | None = None, out_dir: Path | None = None):
-        self.seed_path = Path(os.environ.get("RATES_SEED_PATH", seed_path or REPO_ROOT / "data" / "rates_seed.json"))
-        self.out_dir = Path(os.environ.get("OUT_DIR", out_dir or Path(__file__).resolve().parents[1] / "out"))
+        self.seed_path = Path(os.environ.get("RATES_SEED_PATH") or seed_path
+                              or find_repo_root() / "data" / "rates_seed.json")
+        self.out_dir = Path(os.environ.get("OUT_DIR") or out_dir
+                            or Path(__file__).resolve().parent.parent / "out")
 
     def load_previous(self) -> dict | None:
         try:
