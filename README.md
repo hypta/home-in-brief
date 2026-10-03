@@ -106,19 +106,23 @@ Ports are published on `127.0.0.1` only, because the emulator and the API have n
 | `GET /v1/sources` | Sources and licence/attribution details behind the knowledge base |
 
 Only `verified` knowledge-base items are returned. Set `INCLUDE_DRAFT=true` (done in `docker-compose.yml`) to include
-`draft` items for development; the response flags this with `kb_includes_draft`. Full schema: `openapi.json`.
+`draft` items for development; the response flags this with `kb_includes_draft`. 
+The `first_home_loan` scenario has a `lenders[]` list, one entry per partner lender. A value that is not known is `null`
+with `rate_basis: "unknown"`, and a note says when eligibility is conditional. The income caps used are $95,000 for a
+single applicant and $150,000 for two or more applicants or a single applicant with dependants.
+`openapi.json` is the contract for all request and response fields.
 
 Example (a $1,000,000 property by CV, $120,000 deposit, $150,000 household income, $30,000 other debts):
 
 ```bash
 curl -s http://localhost:8080/v1/rules -H 'Content-Type: application/json' -d '{
-  "property_context": {"property": {"cv": {"value": 1000000, "valuation_date": "2024-05-01"}}},
+  "property_context": {"property": {"cv": {"status": "found", "value": 1000000, "valuation_date": "2024-05-01"}}},
   "user_inputs": {"deposit": 120000, "household_income": 150000, "existing_debts": 30000,
                   "household_type": "multiple"}
 }'
 ```
 
-The response includes `loan_amount` (880000), `lvr_pct` (88.0), `dti` (6.07), `scenarios`, `kb_items`,
+The CV is used only when `cv.status` is `"found"`. The response includes `loan_amount` (880000), `lvr_pct` (88.0), `dti` (6.07), `scenarios`, `kb_items`,
 `rates_snapshot_date` and `warnings`.
 
 In production rules-api is a private Cloud Run service; callers authenticate with a Google ID token (`DEPLOY.md`, section 11).

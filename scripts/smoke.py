@@ -8,7 +8,7 @@ import urllib.request
 
 BASE = (sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8080").rstrip("/")
 REQ = {
-    "property_context": {"property": {"cv": {"value": 1_000_000, "valuation_date": "2024-05-01"}}},
+    "property_context": {"property": {"cv": {"status": "found", "value": 1_000_000, "valuation_date": "2024-05-01"}}},
     "user_inputs": {"deposit": 120000, "household_income": 150000, "existing_debts": 30000,
                     "household_type": "multiple"},
 }

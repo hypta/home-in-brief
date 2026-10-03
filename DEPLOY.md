@@ -69,7 +69,7 @@ unset FIRESTORE_EMULATOR_HOST                 # must be unset, otherwise the dat
 export GOOGLE_CLOUD_PROJECT=$PROJECT_ID
 .venv/bin/python scripts/seed_firestore.py --dry-run   # optional: print what would be written
 .venv/bin/python scripts/seed_firestore.py             # sources/* and kb_items/*
-.venv/bin/python scripts/seed_rates.py                 # rates_latest/current and rates_snapshots/<date>
+.venv/bin/python scripts/seed_rates.py                 # rates_latest/current and rates_snapshots/<NZ date>_<run_id>
 ```
 
 Notes:
@@ -239,7 +239,7 @@ Budgets only alert, they do not stop spending. Adjust the amount (and currency t
   bank to update successfully. If every attempted bank fails (or none is allowed), no snapshot is written, so `rates_latest`
   is unchanged and carries no stale marker; only a `job_runs` record is written. The job exits non-zero only when it
   attempted banks and every one failed; with no allowed banks it exits 0.
-- Rollback of a bad snapshot: copy `rates_snapshots/<good date>` over `rates_latest/current`.
+- Rollback of a bad snapshot: copy the good snapshot document `rates_snapshots/{NZ date}_{run_id}` (for example `2026-10-04_20261003T191756Z-ab12`) over `rates_latest/current`. Job run ids (`job_runs/<run_id>`) have the form `YYYYMMDDTHHMMSSZ-xxxx`.
 
 ## Rates coverage and automation policy
 
