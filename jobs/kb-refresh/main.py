@@ -46,7 +46,7 @@ def main() -> int:
           f"errors={len(job_run['errors'])}")
     if backend == "local":
         for r in store.report["runs"]:
-            print(f"  {r['id']}: quote_found={r['quote_found']} http={r['http_status']} err={r['error']}")
+            print(f"  {r['id']}: quote_found={r['quote_found']} http={r['http_status']} via={r['fetch_method']} err={r['error']}")
     return code
 
 

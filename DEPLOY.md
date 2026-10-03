@@ -118,11 +118,11 @@ gcloud run jobs create rates-refresh \
   --set-env-vars=DATA_BACKEND=firestore,GEMINI_MODEL=gemini-2.5-flash \
   --set-secrets=GEMINI_API_KEY=GEMINI_API_KEY:latest
 
-# kb-refresh: same DATA_BACKEND=firestore as the rates job; it needs no Gemini secret (only DATA_BACKEND is read)
+# kb-refresh: same DATA_BACKEND=firestore as the rates job; it needs no Gemini secret (only DATA_BACKEND is read). Chromium fallback (blocked sites) needs 2Gi.
 gcloud run jobs create kb-refresh \
   --image=$IMG/kb-refresh:$TAG --region=$REGION \
   --service-account=$(SA jobs-sa) \
-  --memory=1Gi --max-retries=1 --task-timeout=15m \
+  --memory=2Gi --max-retries=1 --task-timeout=15m \
   --set-env-vars=DATA_BACKEND=firestore
 
 # smoke test once by hand, then check the Firestore job_runs collection

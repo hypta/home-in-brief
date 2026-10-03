@@ -2,6 +2,7 @@
 import hashlib
 import io
 import re
+import time
 import unicodedata
 from dataclasses import dataclass
 from html.parser import HTMLParser
@@ -19,6 +20,10 @@ HEADERS = {
     "Upgrade-Insecure-Requests": "1",
 }
 TIMEOUT = 20.0
+BLOCK_STATUSES = {401, 403, 406, 429, 503}
+MIN_TEXT_LEN = 500  # shorter HTML text is a JS shell or challenge, not the real page
+BROWSER_TIMEOUT_MS = 60000
+PDF_RETRY_DELAYS = (3.0, 8.0)  # PDF hosts block intermittently and the browser is not an option for PDFs
 # Markers of CDN bot-challenge pages: they return 200 but contain none of the real page.
 BLOCK_MARKERS = ("_incapsula_resource", "cf-browser-verification", "just a moment...", "attention required! | cloudflare")
 
@@ -80,9 +85,11 @@ class FetchResult:
     text: str | None  # extracted page text; None when fetch failed or was blocked
     error: str | None
     network_error: bool = True  # True: failure is the network's/CDN's, not ours
+    blocked: bool = False  # looks like a CDN block / challenge / empty JS shell: worth retrying in a browser
+    method: str = "http"  # "http" | "browser"
 
 
-def fetch_page(url: str, client: httpx.Client | None = None) -> FetchResult:
+def http_fetch(url: str, client: httpx.Client | None = None) -> FetchResult:
     own = client is None
     client = client or httpx.Client(headers=HEADERS, timeout=TIMEOUT, follow_redirects=True)
     try:
@@ -91,25 +98,80 @@ def fetch_page(url: str, client: httpx.Client | None = None) -> FetchResult:
         except httpx.HTTPError as e:
             return FetchResult(None, None, f"{type(e).__name__}: {e}")
         if resp.status_code >= 400:
-            return FetchResult(resp.status_code, None, f"HTTP {resp.status_code}")
+            return FetchResult(resp.status_code, None, f"HTTP {resp.status_code}",
+                               blocked=resp.status_code in BLOCK_STATUSES)
         ctype = resp.headers.get("content-type", "").lower()
         try:
             is_pdf = resp.content[:5] == b"%PDF-"
             if not is_pdf and url.lower().split("?")[0].endswith(".pdf"):
-                return FetchResult(resp.status_code, None, "expected PDF, got non-PDF body (likely CDN block)")
+                # PDFs never go to the browser; a non-PDF body here is a block page
+                return FetchResult(resp.status_code, None, "expected PDF, got non-PDF body (likely CDN block)", blocked=True)
             if is_pdf:
                 text = pdf_to_text(resp.content)
             else:
                 body = resp.text
                 if any(m in body.lower() for m in BLOCK_MARKERS) and len(body) < 5000:
-                    return FetchResult(resp.status_code, None, "blocked by CDN bot challenge")
+                    return FetchResult(resp.status_code, None, "blocked by CDN bot challenge", blocked=True)
                 text = html_to_text(body)
+                if len(normalize(text)) < MIN_TEXT_LEN:
+                    return FetchResult(resp.status_code, None, f"page text too short ({len(normalize(text))} chars)",
+                                       blocked=True)
         except Exception as e:  # extraction failure is ours, not the network's
             return FetchResult(resp.status_code, None, f"extract failed: {type(e).__name__}: {e}", False)
         return FetchResult(resp.status_code, text, None)
     finally:
         if own:
             client.close()
+
+
+def browser_fetch(url: str) -> FetchResult:
+    """Render the page in headless chromium. Gives up (no CAPTCHA solving) if still blocked."""
+    try:
+        from playwright.sync_api import sync_playwright
+
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            try:
+                ctx = browser.new_context(user_agent=HEADERS["User-Agent"], locale="en-NZ",
+                                          viewport={"width": 1366, "height": 900})
+                page = ctx.new_page()
+                resp = page.goto(url, wait_until="domcontentloaded", timeout=BROWSER_TIMEOUT_MS)
+                try:
+                    page.wait_for_load_state("networkidle", timeout=20000)
+                except Exception:
+                    pass
+                page.wait_for_timeout(2000)
+                html = page.content()  # full DOM, includes collapsed accordion text
+                status = resp.status if resp else None
+            finally:
+                browser.close()
+    except Exception as e:
+        return FetchResult(None, None, f"browser failed: {type(e).__name__}: {e}", method="browser")
+    if status is not None and status >= 400:
+        return FetchResult(status, None, f"HTTP {status} (browser)", method="browser")
+    text = html_to_text(html)
+    if len(normalize(text)) < MIN_TEXT_LEN or (
+            any(m in html.lower() for m in BLOCK_MARKERS) and len(html) < 5000):
+        return FetchResult(status, None, "still blocked in browser", method="browser")
+    return FetchResult(status, text, None, method="browser")
+
+
+def fetch_page(url: str, client: httpx.Client | None = None, browser=browser_fetch) -> FetchResult:
+    """httpx first; blocked/challenge/too-short HTML (never PDF) is retried once in a browser."""
+    res = http_fetch(url, client)
+    if url.lower().split("?")[0].endswith(".pdf"):
+        for delay in PDF_RETRY_DELAYS:
+            if res.text is not None or not res.blocked:
+                break
+            time.sleep(delay)
+            res = http_fetch(url, client)
+        return res
+    if res.text is not None or not res.blocked:
+        return res
+    out = browser(url)
+    if out.text is None:
+        out.error = f"{res.error}; browser: {out.error}"
+    return out
 
 
 def check_item(item: dict, fetch=fetch_page, now: str = "") -> dict:
@@ -125,6 +187,7 @@ def check_item(item: dict, fetch=fetch_page, now: str = "") -> dict:
         "page_sha256": None,
         "error": res.error,
         "network_error": bool(res.error) and res.network_error,
+        "fetch_method": res.method,
     }
     if res.text is not None:
         norm = normalize(res.text)

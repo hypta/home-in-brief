@@ -57,5 +57,43 @@
     "verified_at": null,
     "status": "draft",
     "last_check": null
+  },
+  {
+    "id": "kb_nhc_levy",
+    "topic": "insurance",
+    "applies_when": {
+      "always": true
+    },
+    "claim_en": "The Natural Hazards Commission states that the maximum Natural Hazards Insurance levy is currently $480 plus GST per year, included in the home insurance premium.",
+    "quote": "The maximum levy is currently $480 plus GST per year",
+    "source_id": "src_nhc_about",
+    "source_url": "https://www.naturalhazards.govt.nz/insurance-and-claims/about-nhcover/",
+    "source_title": "About natural hazards cover - Natural Hazards Commission Toka Tū Ake",
+    "source_type": "official",
+    "licence": "CC BY-NC 4.0",
+    "next_step_en": "Ask your insurer how the Natural Hazards Insurance levy appears in the quoted premium.",
+    "verified_by": null,
+    "verified_at": null,
+    "status": "draft",
+    "last_check": null
+  },
+  {
+    "id": "kb_nhc_building_excess",
+    "topic": "insurance",
+    "applies_when": {
+      "always": true
+    },
+    "claim_en": "The Natural Hazards Commission states that for claims on damage first occurring on or after 1 July 2024 the excess for a building claim is $500 per insured home.",
+    "quote": "The excess for a building claim is $500 per insured home",
+    "source_id": "src_nhc_about",
+    "source_url": "https://www.naturalhazards.govt.nz/insurance-and-claims/about-nhcover/",
+    "source_title": "About natural hazards cover - Natural Hazards Commission Toka Tū Ake",
+    "source_type": "official",
+    "licence": "CC BY-NC 4.0",
+    "next_step_en": "Ask your insurer about its own excess in addition to the Natural Hazards Commission excess.",
+    "verified_by": null,
+    "verified_at": null,
+    "status": "draft",
+    "last_check": null
   }
 ]
