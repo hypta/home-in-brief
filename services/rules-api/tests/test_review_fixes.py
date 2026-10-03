@@ -7,6 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
+from conftest import hashed
 from app import calc
 from app.main import app
 from app.repo import LocalRepo
@@ -228,11 +229,11 @@ def kbdir(tmp_path, monkeypatch):
     (tmp_path / "data").mkdir()
     (tmp_path / "data" / "rates_seed.json").write_text((ROOT / "data" / "rates_seed.json").read_text())
     base = dict(topic="t", claim_en="c", source_id="s", status="verified")
-    (seed / "a.json").write_text(json.dumps([
+    (seed / "a.json").write_text(json.dumps([hashed(d) for d in [
         dict(id="clad", applies_when={"cladding_in": ["monolithic"]}, **base),
         dict(id="year", applies_when={"year_built_between": [1990, 2000]}, **base),
         dict(id="never", applies_when={"title_type": ["zzz"]}, **base),
-    ]))
+    ]]))
     (seed / "sources.json").write_text(json.dumps([dict(
         id="s", title="S", url="http://x", licence="CC BY 4.0", attribution="Source: S",
         tos_status="allowed", tos_url="http://t", tos_checked_at="2026-10-03")]))
@@ -281,3 +282,44 @@ def test_real_seed_sources_keep_fields():
 
 def test_dockerfile_copies_kb():
     assert "COPY kb/" in (ROOT / "services" / "rules-api" / "Dockerfile").read_text()
+
+
+# ---- FHL source ids ----
+def test_fhl_flags_use_brochure_source():
+    out = run(price_override=1_000_000, deposit=20_000, household_income=200_000, household_type="single")
+    flags = {f.id: f.source_ids for f in out.flags}
+    assert flags["fhl_deposit_below_5"] == ["kainga_ora_fhl_brochure"]
+    assert flags["fhl_income_over_cap"] == ["kainga_ora_fhl_brochure"]
+    s = sc(run(price_override=1e6, deposit=120000, household_income=90000), "first_home_loan")
+    assert s.source_ids == ["kainga_ora_fhl_brochure", "kainga_ora_fhl"]
+
+
+# ---- KB hash gate ----
+def test_hash_mismatch_item_not_served(kbdir):
+    f = kbdir / "kb" / "seed" / "a.json"
+    items = json.loads(f.read_text())
+    items[0]["claim_en"] = "edited after review"
+    items[1].pop("verified_content_hash")
+    f.write_text(json.dumps(items))
+    out = post({"user_inputs": {"chat_supplied": {"year_built": 1995, "cladding": "Monolithic"}}})
+    assert out["kb_items"] == []
+    assert {"kb_hash_mismatch:clad", "kb_hash_mismatch:year"} <= set(out["warnings"])
+    assert [i["id"] for i in TestClient(app).get("/v1/kb/items").json()] == ["never"]
+
+
+def test_hash_matches_kb_module_on_every_seed_item():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("kb_content_hash", ROOT / "kb" / "content_hash.py")
+    kb = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(kb)
+    from b_common.content_hash import content_hash
+
+    n = 0
+    for p in (ROOT / "kb" / "seed").glob("*.json"):
+        if p.name == "sources.json":
+            continue
+        for raw in json.loads(p.read_text()):
+            assert content_hash(raw) == kb.content_hash(raw), raw["id"]
+            n += 1
+    assert n > 0

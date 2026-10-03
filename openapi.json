@@ -935,6 +935,17 @@
             ],
             "title": "Verified At"
           },
+          "verified_content_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verified Content Hash"
+          },
           "status": {
             "type": "string",
             "enum": [

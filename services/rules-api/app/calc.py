@@ -250,7 +250,7 @@ def first_home_loan(
     deposit: float, price: float, loan: float, ui: UserInputs, snap: RatesSnapshot,
     flags: list[Flag], warnings: list[str],
 ) -> Optional[FirstHomeLoanScenario]:
-    src = ["kainga_ora_fhl"]
+    src = ["kainga_ora_fhl_brochure"]  # eligibility rules (the premium has its own source)
     income = ui.household_income
     if income is None:
         warnings.append("fhl_skipped_income_missing")

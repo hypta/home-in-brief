@@ -4,11 +4,13 @@ from __future__ import annotations
 import os
 
 import logging
+from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from b_common.content_hash import content_hash
 from b_common.schemas import (
     KbItem,
     RatesSnapshot,
@@ -29,9 +31,21 @@ def _include_draft() -> bool:
     return os.environ.get("INCLUDE_DRAFT", "").lower() in ("1", "true", "yes")
 
 
-def _visible(items: list[KbItem]) -> list[KbItem]:
+def _visible(items: list[KbItem], warnings: Optional[list[str]] = None) -> list[KbItem]:
+    """Items to serve. A verified item whose content no longer matches the hash that was
+    reviewed counts as unreviewed: it is dropped and reported."""
     allowed = {"verified", "draft"} if _include_draft() else {"verified"}
-    return [i for i in items if i.status in allowed]
+    out = []
+    for i in items:
+        if i.status not in allowed:
+            continue
+        if i.status == "verified" and i.verified_content_hash != content_hash(i.model_dump()):
+            log.warning("kb hash mismatch for %s", i.id)
+            if warnings is not None:
+                warnings.append(f"kb_hash_mismatch:{i.id}")
+            continue
+        out.append(i)
+    return out
 
 
 @app.get("/healthz")
@@ -91,7 +105,7 @@ def rules(req: RulesRequest) -> RulesOutput:
         return [i.id for i in items if matches(i.applies_when, sctx)]
 
     all_items, kb_ok = _safe(repo.kb_items, [], out.warnings, "kb_unavailable")
-    items = _visible(all_items)
+    items = _visible(all_items, out.warnings)
     out.kb_items = pick(items, True)
     without_chat = set(pick(items, False))
     out.kb_items_from_user_input = [i for i in out.kb_items if i not in without_chat]

@@ -150,6 +150,7 @@ class KbItem(BaseModel):
     next_step_en: Optional[str] = None
     verified_by: Optional[str] = None
     verified_at: Optional[str] = None
+    verified_content_hash: Optional[str] = None
     status: Literal["draft", "verified", "needs_review", "retired"] = "draft"
     last_check: Optional[Any] = None
 
@@ -228,7 +229,9 @@ class FirstHomeLoanScenario(BaseModel):
     monthly_range: Optional[list[int]] = None
     fortnightly_range: Optional[list[int]] = None
     stress_monthly_range: Optional[list[int]] = None
-    source_ids: list[str] = Field(default_factory=lambda: ["kainga_ora_fhl"])
+    source_ids: list[str] = Field(
+        default_factory=lambda: ["kainga_ora_fhl_brochure", "kainga_ora_fhl"]
+    )
     note_ids: list[str] = Field(default_factory=lambda: ["fhl_passthrough_varies"])
 
 

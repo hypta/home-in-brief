@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from conftest import hashed
 from app import calc
 from app.main import app
 from app.repo import LocalRepo
@@ -149,8 +150,8 @@ def client(tmp_path, monkeypatch):
     base = dict(topic="t", claim_en="c", source_id="s")
     (seed / "a.json").write_text(json.dumps([
         dict(id="always_draft", applies_when={"always": True}, status="draft", **base),
-        dict(id="always_ver", applies_when={"always": True}, status="verified", **base),
-        dict(id="lvr_ver", applies_when={"lvr_over": 80}, status="verified", **base),
+        hashed(dict(id="always_ver", applies_when={"always": True}, status="verified", **base)),
+        hashed(dict(id="lvr_ver", applies_when={"lvr_over": 80}, status="verified", **base)),
     ]))
     (seed / "sources.json").write_text(json.dumps(
         [dict(id="s", title="S", url="http://x", source_type="official")]))
@@ -180,9 +181,9 @@ def test_api_include_draft(client, monkeypatch):
 
 
 def test_api_fhl_eligible_key(client, tmp_path):
-    (tmp_path / "kb" / "seed" / "b.json").write_text(json.dumps([dict(
+    (tmp_path / "kb" / "seed" / "b.json").write_text(json.dumps([hashed(dict(
         id="fhl_k", topic="t", claim_en="c", source_id="s", status="verified",
-        applies_when={"fhl_eligible": True})]))
+        applies_when={"fhl_eligible": True}))]))
     assert "fhl_k" not in client.post("/v1/rules", json={}).json()["kb_items"]
     body = {"property_context": BODY["property_context"],
             "user_inputs": {**BODY["user_inputs"], "household_type": "multiple"}}
