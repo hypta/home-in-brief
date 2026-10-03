@@ -1,6 +1,6 @@
 {
   "schema_version": "0.1",
-  "captured_at": "2026-09-27T00:00:00+12:00",
+  "captured_at": "2026-10-03T00:00:00+13:00",
   "banks": [
     {
       "bank_id": "kiwibank",
@@ -236,6 +236,248 @@
         "lmi_passthrough_pct": null
       },
       "notes": []
+    },
+    {
+      "bank_id": "tsb",
+      "name": "TSB",
+      "source_url": "https://www.tsb.co.nz/rates-fees-agreements/home-loan",
+      "page_sha256": null,
+      "page_effective_date": "30 September 2026",
+      "special": {
+        "6m": 4.89,
+        "1y": 5.19,
+        "18m": 5.45,
+        "2y": 5.39,
+        "3y": 5.69,
+        "4y": 5.89,
+        "5y": 5.99
+      },
+      "standard": {
+        "6m": 5.69,
+        "1y": 5.99,
+        "18m": 6.25,
+        "2y": 6.19,
+        "3y": 6.49,
+        "4y": 6.69,
+        "5y": 6.79
+      },
+      "floating": 6.29,
+      "special_requires_equity_pct": 20,
+      "low_equity": {
+        "mechanism": "standard_rate",
+        "lem_base": null,
+        "bands": []
+      },
+      "fhl": {
+        "lender": false,
+        "lmi_passthrough_pct": null
+      },
+      "notes": [
+        "Floating: special 6.29, standard 7.09 (<20% deposit).",
+        "seed 由 fetch-only 頁面文字人工整理，2026-10-03"
+      ]
+    },
+    {
+      "bank_id": "coop",
+      "name": "Co-operative Bank",
+      "source_url": "https://www.co-operativebank.co.nz/rates",
+      "page_sha256": null,
+      "page_effective_date": "25 September 2026",
+      "special": {
+        "6m": 4.89,
+        "1y": 5.19,
+        "18m": 5.35,
+        "2y": 5.49,
+        "3y": 5.69,
+        "4y": 5.89,
+        "5y": 5.99
+      },
+      "standard": {
+        "6m": 5.39,
+        "1y": 5.69,
+        "18m": 5.85,
+        "2y": 5.99,
+        "3y": 6.19,
+        "4y": 6.39,
+        "5y": 6.49
+      },
+      "floating": 5.69,
+      "special_requires_equity_pct": 20,
+      "low_equity": {
+        "mechanism": "lem",
+        "lem_base": "unverified",
+        "bands": []
+      },
+      "fhl": {
+        "lender": true,
+        "lmi_passthrough_pct": 1.2
+      },
+      "notes": [
+        "Low equity premium is 0.20-1.00% p.a. above 80% LVR; per-LVR bands are not published on the rates page, so bands are empty.",
+        "seed 由 fetch-only 頁面文字人工整理，2026-10-03"
+      ]
+    },
+    {
+      "bank_id": "sbs",
+      "name": "SBS Bank",
+      "source_url": "https://www.sbsbank.co.nz/rates",
+      "page_sha256": null,
+      "page_effective_date": "8 September 2026",
+      "special": {
+        "6m": 4.79,
+        "1y": 4.99,
+        "18m": 5.29,
+        "2y": 5.44,
+        "3y": 5.44,
+        "4y": 5.49,
+        "5y": 5.49
+      },
+      "standard": {
+        "6m": 5.39,
+        "1y": 5.59,
+        "18m": 5.89,
+        "2y": 6.04,
+        "3y": 6.04,
+        "4y": 6.09,
+        "5y": 6.09
+      },
+      "floating": 6.34,
+      "special_requires_equity_pct": 20,
+      "low_equity": {
+        "mechanism": "standard_rate",
+        "lem_base": null,
+        "bands": []
+      },
+      "fhl": {
+        "lender": true,
+        "lmi_passthrough_pct": 1.2
+      },
+      "notes": [
+        "Special rates need 20% equity (30% for investors) or a First Home Loan with 5% equity.",
+        "Floating effective for new lending 8 September 2026.",
+        "seed 由 fetch-only 頁面文字人工整理，2026-10-03"
+      ]
+    },
+    {
+      "bank_id": "unity",
+      "name": "Unity",
+      "source_url": "https://unitymoney.co.nz/about-us/interest-rates/",
+      "page_sha256": null,
+      "page_effective_date": null,
+      "special": {
+        "6m": 4.79,
+        "1y": 4.99,
+        "18m": 5.35,
+        "2y": 5.49
+      },
+      "standard": {
+        "6m": 5.59,
+        "1y": 5.79,
+        "18m": 6.15,
+        "2y": 6.29
+      },
+      "floating": 6.04,
+      "special_requires_equity_pct": 20,
+      "low_equity": {
+        "mechanism": "standard_rate",
+        "lem_base": null,
+        "bands": []
+      },
+      "fhl": {
+        "lender": true,
+        "lmi_passthrough_pct": null
+      },
+      "notes": [
+        "Only 6m, 1y, 18m and 2y terms. Special rates need salary credited to a Unity account (First Home Loans also get special rates).",
+        "Excludes the 12-month First Home Buyer special of 4.15%.",
+        "seed 由 fetch-only 頁面文字人工整理，2026-10-03"
+      ]
+    },
+    {
+      "bank_id": "nbs",
+      "name": "Nelson Building Society",
+      "source_url": "https://www.nbs.co.nz/interest-rates-and-fees",
+      "page_sha256": null,
+      "page_effective_date": "8 September 2026",
+      "special": {
+        "6m": 5.19,
+        "1y": 5.19,
+        "2y": 5.49
+      },
+      "standard": {
+        "6m": 5.79,
+        "1y": 5.79,
+        "2y": 6.09
+      },
+      "floating": 6.99,
+      "special_requires_equity_pct": 20,
+      "low_equity": {
+        "mechanism": "standard_rate",
+        "lem_base": null,
+        "bands": []
+      },
+      "fhl": {
+        "lender": true,
+        "lmi_passthrough_pct": 1.2
+      },
+      "notes": [
+        "Only 6m, 1y and 2y terms.",
+        "Standard = published rates for <20% equity.",
+        "seed 由 fetch-only 頁面文字人工整理，2026-10-03"
+      ]
+    },
+    {
+      "bank_id": "nzhl",
+      "name": "NZHL (arranged, lender ASB)",
+      "source_url": "https://www.asb.co.nz/lending/nzhl-interest-rates-fees.html",
+      "page_sha256": null,
+      "page_effective_date": "9 September 2026",
+      "special": {
+        "6m": 4.79,
+        "1y": 4.99,
+        "18m": 5.35,
+        "2y": 5.45,
+        "3y": 5.45,
+        "4y": 5.49,
+        "5y": 5.59
+      },
+      "standard": null,
+      "floating": 6.39,
+      "special_requires_equity_pct": 20,
+      "low_equity": {
+        "mechanism": "lem",
+        "lem_base": "special",
+        "bands": [
+          {
+            "lvr_from": 80.01,
+            "lvr_to": 85,
+            "margin_pct": 0.3
+          },
+          {
+            "lvr_from": 85.01,
+            "lvr_to": 90,
+            "margin_pct": 0.75
+          },
+          {
+            "lvr_from": 90.01,
+            "lvr_to": 95,
+            "margin_pct": 1.3
+          },
+          {
+            "lvr_from": 95.01,
+            "lvr_to": 100,
+            "margin_pct": 1.5
+          }
+        ]
+      },
+      "fhl": {
+        "lender": true,
+        "lmi_passthrough_pct": 1.2
+      },
+      "notes": [
+        "NZHL-arranged loans are written by ASB; fixed rates match ASB but the floating rate differs.",
+        "seed 由 fetch-only 頁面文字人工整理，2026-10-03"
+      ]
     }
   ]
 }

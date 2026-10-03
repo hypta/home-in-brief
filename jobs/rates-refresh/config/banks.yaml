@@ -39,3 +39,61 @@ banks:
     mechanism: lem
     lem_base: special
     fhl: {lender: false, lmi_passthrough_pct: null}
+
+  - bank_id: tsb
+    name: TSB
+    source_url: https://www.tsb.co.nz/rates-fees-agreements/home-loan
+    fetch: http   # browser gets HTTP 403 here, so http must stay first
+    mechanism: standard_rate   # special needs 20% deposit, otherwise standard rate
+    lem_base: null
+    fhl: {lender: false, lmi_passthrough_pct: null}
+
+  - bank_id: coop
+    name: Co-operative Bank
+    source_url: https://www.co-operativebank.co.nz/rates
+    fetch: http   # http returns an Imperva challenge, so it falls back to browser
+    mechanism: lem   # standard rates + a low equity premium of 0.20-1.00% above 80% LVR
+    lem_base: unverified
+    fhl: {lender: true, lmi_passthrough_pct: 1.2}
+    notes:
+      - "Low equity premium is 0.20-1.00% p.a. above 80% LVR; per-LVR bands are not published on the rates page, so bands are empty."
+
+  - bank_id: sbs
+    name: SBS Bank
+    source_url: https://www.sbsbank.co.nz/rates
+    fetch: http
+    mechanism: standard_rate
+    lem_base: null
+    fhl: {lender: true, lmi_passthrough_pct: 1.2}
+    notes:
+      - "Special rates need 20% equity (30% for investors) or a First Home Loan with 5% equity."
+
+  - bank_id: unity
+    name: Unity
+    source_url: https://unitymoney.co.nz/about-us/interest-rates/
+    fetch: http
+    mechanism: standard_rate   # page splits Under 80% LVR (special) / Over 80% LVR (standard)
+    lem_base: null
+    fhl: {lender: true, lmi_passthrough_pct: null}   # LMI amount not stated on the rates page
+    notes:
+      - "Only 6m, 1y, 18m and 2y terms. Special rates need salary credited to a Unity account (First Home Loans also get special rates)."
+
+  - bank_id: nbs
+    name: Nelson Building Society
+    source_url: https://www.nbs.co.nz/interest-rates-and-fees
+    fetch: http
+    mechanism: standard_rate   # page has separate <20% equity rates
+    lem_base: null
+    fhl: {lender: true, lmi_passthrough_pct: 1.2}
+    notes:
+      - "Only 6m, 1y and 2y terms."
+
+  - bank_id: nzhl
+    name: NZHL (arranged, lender ASB)
+    source_url: https://www.asb.co.nz/lending/nzhl-interest-rates-fees.html
+    fetch: http   # http returns too few rates, so it falls back to browser
+    mechanism: lem
+    lem_base: special
+    fhl: {lender: true, lmi_passthrough_pct: 1.2}
+    notes:
+      - "NZHL-arranged loans are written by ASB; fixed rates match ASB but the floating rate differs."

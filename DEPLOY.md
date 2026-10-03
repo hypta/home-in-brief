@@ -201,3 +201,15 @@ Budgets only alert, they do not stop spending. Adjust the amount (and currency t
   `job_runs/*` under `failed`. The job exits non-zero only when every bank fails; set a log-based alert on
   Cloud Run job failures if you want to hear about it.
 - Rollback of a bad snapshot: copy `rates_snapshots/<good date>` over `rates_latest/current`.
+
+## Rates coverage
+
+`jobs/rates-refresh/config/banks.yaml` covers 11 lenders: Kiwibank, Westpac, ANZ, ASB, BNZ, TSB, Co-operative Bank,
+SBS Bank, Unity, Nelson Building Society and NZHL (ASB-written, own rates page). Adding a lender means one entry in
+that file plus a check with `python -m rates_refresh --fetch-only --bank <id>` from `jobs/rates-refresh/`.
+
+Not covered (future work): non-bank lenders such as Pepper, Resimac, Liberty, Avanti and Basecorp. Their rates are
+tiered by LVR *and* document type (full doc / alt doc / near-prime), so one lender has many rate rows rather than a
+single `special`/`standard` ladder per term. The snapshot schema (`special`, `standard`, `low_equity.bands`) cannot
+express that without a schema change that rules-api would also have to understand. Most of them also publish rates
+only behind broker portals or as ranges, which the page-text extractor cannot read reliably.

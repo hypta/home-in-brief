@@ -198,3 +198,13 @@ def test_firestore_store_paths():
     assert "rates_latest/current" in db.data and "rates_snapshots/2026-10-04" in db.data
     assert db.data["rates_latest/current"] == db.data["rates_snapshots/2026-10-04"]
     assert any(k.startswith("job_runs/") for k in db.data)
+
+
+def test_banks_config_is_complete():
+    banks = job.load_banks()
+    ids = [b["bank_id"] for b in banks]
+    assert len(ids) == len(set(ids)) and {"tsb", "coop", "sbs", "unity", "nbs", "nzhl"} <= set(ids)
+    for b in banks:
+        assert b["fetch"] in ("http", "browser") and b["source_url"].startswith("https://")
+        assert b["mechanism"] in ("lem", "standard_rate")
+        assert "lender" in b["fhl"] and "lmi_passthrough_pct" in b["fhl"]

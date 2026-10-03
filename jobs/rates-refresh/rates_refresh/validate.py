@@ -70,6 +70,6 @@ def build_bank(bank: dict, ext: Extracted, page_sha256: str, prev: dict | None):
             "lender": bank["fhl"]["lender"],
             "lmi_passthrough_pct": bank["fhl"].get("lmi_passthrough_pct"),
         },
-        "notes": [],
+        "notes": list(bank.get("notes") or []),
     }
     return rec, []

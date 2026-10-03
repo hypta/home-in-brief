@@ -39,6 +39,9 @@ Return:
 - bands: low-equity margin bands (Low Equity Margin or low equity premium) as lvr_from, lvr_to, margin_pct (e.g. 80.01, 85, 0.30). Empty if none shown.
 - page_effective_date: the date the rates are stated as effective, as written, or null.
 Only use numbers that appear in the text. Omit anything not present. Owner-occupier rates only.
+Ignore products restricted to first home buyers (e.g. "FirstHome Combo", "First Home Buyer special"), revolving credit,
+investment, reverse equity, "Fresh Start", bridging, construction, term deposits, savings and personal loans.
+If the page lists floating rates for both special (20%+ equity) and standard (<20%) borrowers, floating is the special one.
 
 PAGE TEXT:
 {text}
