@@ -48,7 +48,7 @@
     "source_type": "official"
   },
   {
-    "id": "src_ko_fhl_premium_faq",
+    "id": "kainga_ora_fhl",
     "title": "First Home Loan - Insurance Premium Changes FAQs (22 May 2025) - Kāinga Ora",
     "url": "https://kaingaora.govt.nz/assets/Home-ownership/First-Home-Loan-brochures/FHL-Insurance-Premium_FAQs.pdf",
     "licence": "[待查證]",
@@ -81,16 +81,8 @@
   },
   {
     "id": "bank_rates_snapshot",
-    "title": "Bank published home loan rates (daily snapshot)",
+    "title": "Bank published home loan rates (daily snapshot) - per-bank source_url in rates_latest",
     "url": "https://www.anz.co.nz/rates-fees-agreements/home-loans/",
-    "licence": "[待查證]",
-    "accessed_at": "2026-10-03",
-    "source_type": "official"
-  },
-  {
-    "id": "kainga_ora_fhl",
-    "title": "Kāinga Ora First Home Loan brochure",
-    "url": "https://kaingaora.govt.nz/assets/Home-ownership/First-Home-Loan-brochures/Kainga-Ora-First-Home-Loan-Brochure.pdf",
     "licence": "[待查證]",
     "accessed_at": "2026-10-03",
     "source_type": "official"
