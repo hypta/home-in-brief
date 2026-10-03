@@ -74,10 +74,15 @@ export GOOGLE_CLOUD_PROJECT=$PROJECT_ID
 
 Notes:
 - Do not use `make seed` here: it hard-codes the emulator host and project `local-dev`.
-- `seed_firestore.py` treats the git seed as the source of truth for content and validates it first (`kb/validate.py`);
-  an invalid seed writes nothing. From Firestore it keeps only `last_check`, a human verification while it still matches
-  the seed item's exact content hash (changed content becomes `needs_review`), and `needs_review` set by kb-refresh
-  while the content is unchanged. Ids that were removed from the seed are marked `retired`.
+- `seed_firestore.py` treats the git seed as the source of truth for content. It runs `kb/validate.py` first: if the seed
+  is invalid, nothing is written. From Firestore it keeps `last_check` and a human verification only while that
+  verification still matches the seed item's exact content hash (changed content becomes `needs_review`).
+- A kb-refresh demotion (`needs_review`, with `demoted_at`) is kept on re-seed, even if the seed says `verified`, unless
+  the seed's `verified_at` is strictly later than `demoted_at` and the content hash matches. Write `verified_at` as a
+  full ISO 8601 timestamp with offset (for example `2026-10-04T09:30:00+13:00`), not just a date.
+- Ids removed from the seed are marked `retired` (with `retired_at`). A retired id stays retired unless the seed item sets
+  `"reinstate": true`, or carries a valid verification with `verified_at` later than `retired_at`. A seed item with
+  `"status": "retired"` always retires.
   `seed_rates.py` overwrites `rates_latest/current` with `data/rates_seed.json`.
 - All seeded KB items have `status: draft` until a person verifies them (see `kb/MANUAL_CHECK.md`). rules-api only
   returns `verified` items unless `INCLUDE_DRAFT=true` is set, so `kb_items` stays empty in production until items are verified.

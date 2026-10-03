@@ -112,6 +112,9 @@ with `rate_basis: "unknown"`, and a note says when eligibility is conditional. T
 single applicant and $150,000 for two or more applicants or a single applicant with dependants.
 `openapi.json` is the contract for all request and response fields.
 
+Errors use one format for every 4xx and 5xx response: `{"error": {"code": "...", "message": "...", "fields": [{"field": "...", "message": "..."}]}}`.
+Response codes, warnings and flags are explained in `CODES.md`.
+
 Example (a $1,000,000 property by CV, $120,000 deposit, $150,000 household income, $30,000 other debts):
 
 ```bash
