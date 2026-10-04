@@ -301,7 +301,7 @@ import requests
 RULES = "https://rules-api-xxxx-ts.a.run.app"
 tok = requests.get("http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity",
                    params={"audience": RULES}, headers={"Metadata-Flavor": "Google"}, timeout=5).text
-r = requests.get(f"{RULES}/healthz", headers={"Authorization": f"Bearer {tok}"})
+r = requests.get(f"{RULES}/health", headers={"Authorization": f"Bearer {tok}"})
 ```
 
 Node 18+:
@@ -310,7 +310,7 @@ Node 18+:
 const RULES = "https://rules-api-xxxx-ts.a.run.app";
 const idUrl = "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity?audience=" + RULES;
 const tok = await (await fetch(idUrl, { headers: { "Metadata-Flavor": "Google" } })).text();
-const r = await fetch(`${RULES}/healthz`, { headers: { Authorization: `Bearer ${tok}` } });
+const r = await fetch(`${RULES}/health`, { headers: { Authorization: `Bearer ${tok}` } });
 ```
 
 Cache the token for about 50 minutes (it lives 1 hour). Locally, use

@@ -23,6 +23,22 @@
             "method": "GET",
             "header": [],
             "url": {
+              "raw": "{{rules}}/health",
+              "host": [
+                "{{rules}}"
+              ],
+              "path": [
+                "health"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Health check (local only)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
               "raw": "{{rules}}/healthz",
               "host": [
                 "{{rules}}"

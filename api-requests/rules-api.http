@@ -4,7 +4,10 @@
 
 @rules = http://localhost:8080
 
-### Health check
+### Health check (use /health when deployed: Cloud Run reserves some paths ending in "z")
+GET {{rules}}/health
+
+### Health check, local only
 GET {{rules}}/healthz
 
 ### All sources (licence, attribution, terms status)

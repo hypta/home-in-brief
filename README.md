@@ -14,14 +14,14 @@ License: TBD by the team.
 
 This repo is a monorepo shared by two people. **What works today** is the rules side (owner B): a deterministic rules
 and calculation API, a knowledge base with source quotes, and jobs that keep rates and knowledge-base data fresh.
-**Not built yet:** the property-data API (owner A, coming into `services/property-api/`), the Gemini layer that turns the
-rules output into the written report, and the frontend. The last two are owned jointly and are in progress.
+The property-data API (owner A, `services/property-api/`, port 8081) is built. The Gemini layer (summary, validator,
+follow-up questions) is owned by B and the frontend (`web`) by A; both are in progress.
 
 ## Repo layout
 
 | Path | Owner | What it is |
 |---|---|---|
-| `services/property-api/` | A (coming) | Collects property data (CV, title, hazards) and calls rules-api |
+| `services/property-api/` | A | Collects property data (CV, title, hazards) and calls rules-api |
 | `services/rules-api/` | B | FastAPI service: loan, LVR, DTI, repayment scenarios, which knowledge-base items apply |
 | `jobs/rates-refresh/` | B | Job that refreshes bank rates (Gemini extraction), gated by each bank's website terms |
 | `jobs/kb-refresh/` | B | Job that re-checks knowledge-base quotes against their source pages |
@@ -40,7 +40,7 @@ Docs: `LOCAL.md` (run locally), `DEPLOY.md` (Cloud Run + Firestore), `RATES_UPDA
                  Browser (frontend, in progress)
                            |
                            v
-                  property-api (A, coming)  ---> property data sources
+                  property-api (A)  ---> property data sources
                            |
                            |  POST /v1/rules   (property_context + user_inputs)
                            v
@@ -99,7 +99,8 @@ Ports are published on `127.0.0.1` only, because the emulator and the API have n
 
 | Method and path | Purpose |
 |---|---|
-| `GET /healthz` | Liveness check |
+| `GET /health` | Liveness check (use this when deployed: Cloud Run reserves some paths ending in `z`) |
+| `GET /healthz` | Same response, for local use |
 | `POST /v1/rules` | Loan, LVR, DTI, repayment scenarios and the ids of applicable knowledge-base items |
 | `GET /v1/kb/items?ids=a,b` | Knowledge-base items (quote, source URL, `source_id`, licence); all visible items if `ids` is empty |
 | `GET /v1/rates/latest` | Latest bank rates snapshot (404 if none loaded) |
@@ -147,8 +148,7 @@ In production rules-api is a private Cloud Run service; callers authenticate wit
 
 ## Limitations
 
-- The property-data API (A), the Gemini report layer and the frontend are not in this repo yet; this repo currently
-  ends at the rules API and its data jobs.
+- The Gemini report layer and the frontend are not finished yet.
 - Most seeded knowledge-base items (20+) are `draft` until a person verifies them, so a production rules-api (no
   `INCLUDE_DRAFT`) returns none.
 - Rates cover 11 lenders from a manual snapshot and can be out of date. Non-bank lenders are not covered.
