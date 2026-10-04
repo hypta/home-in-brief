@@ -44,6 +44,28 @@
     "last_check": null
   },
   {
+    "id": "kb_title_cross_lease_flats_plan",
+    "topic": "title_type",
+    "applies_when": {
+      "title_type": [
+        "Cross Lease"
+      ]
+    },
+    "claim_en": "Settled.govt.nz says a cross lease title includes a flats plan showing the building footprint, and buyers should check whether it matches the property (older titles may not have one).",
+    "quote": "whether it matches the physical location and footprint of the property you are looking at",
+    "source_id": "src_settled_ownership",
+    "source_url": "https://www.settled.govt.nz/buying-a-home/finding-a-property/understanding-types-of-ownership/",
+    "source_title": "Understanding the types of ownership - settled.govt.nz",
+    "source_type": "official",
+    "licence": "Copyright Real Estate Authority (not Creative Commons); may be reproduced free of charge for personal or in-house use only",
+    "next_step_en": "Ask your lawyer to compare the flats plan on the title with the property.",
+    "verified_by": null,
+    "verified_at": null,
+    "verified_content_hash": null,
+    "status": "draft",
+    "last_check": null
+  },
+  {
     "id": "kb_title_unit_title",
     "topic": "title_type",
     "applies_when": {

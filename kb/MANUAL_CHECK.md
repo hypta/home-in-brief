@@ -69,9 +69,9 @@ settled.govt.nz, "last updated" for RBNZ and Auckland Council, the document date
 
 | Source (`tos_status`) | Items | Why manual | Cadence |
 |---|---|---|---|
-| `src_settled_*` settled.govt.nz (unclear) | kb_auction_unconditional, kb_leaky_build_era, kb_monolithic_cladding, kb_flood_insurance_limit, kb_insurance_condition, kb_title_freehold, kb_title_cross_lease, kb_title_unit_title | Real Estate Authority copyright: "personal or in-house use only"; no automation clause, so unclear. For kb_flood_insurance_limit the claim says the insurer may limit flood cover where the house is in an area that has flooded before: while checking, copy the full sentence containing the "previously flooded / flooded before" condition (15 words or fewer) and update `quote` to match it. | every 2 weeks |
+| `src_settled_*` settled.govt.nz (unclear) | kb_auction_unconditional, kb_leaky_build_era, kb_monolithic_cladding, kb_flood_insurance_limit, kb_insurance_condition, kb_title_freehold, kb_title_cross_lease, kb_title_cross_lease_flats_plan, kb_title_unit_title | Real Estate Authority copyright: "personal or in-house use only"; no automation clause, so unclear. | every 2 weeks |
 | `rbnz_lvr`, `rbnz_dti` rbnz.govt.nz (prohibited) | kb_rbnz_lvr, kb_rbnz_dti, kb_fhl_lvr_not_restricted, kb_fhl_dti_not_restricted | Terms forbid robots and scrapers | every 2 weeks; also after each RBNZ Financial Policy Committee announcement |
-| `src_akl_rating_valuation` Auckland Council (unclear) | kb_cv_not_market | Council terms unclear on automated access | every 2 weeks |
+| `src_akl_rating_valuation`, `src_akl_overland_flow`, `src_akl_home_search_tips`, `src_akl_landslide_maps` Auckland Council (unclear) | kb_cv_not_market, kb_overland_flow_path, kb_coastal_inundation_meaning, kb_landslide_map_context | Council terms unclear on automated access | every 2 weeks |
 | `bank_rates_snapshot` banks (unclear) | not a KB item | See `jobs/rates-refresh/config/banks.yaml` | per that file |
 
 ## Items checked automatically, with a manual fallback

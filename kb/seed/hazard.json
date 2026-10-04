@@ -6,7 +6,7 @@
       "hazard_status": "intersects"
     },
     "claim_en": "Settled.govt.nz states that where a house is in an area that has flooded before, an insurer may limit cover for flood damage.",
-    "quote": "an insurer may limit any cover for flood damage",
+    "quote": "has been previously flooded, an insurer may limit any cover for flood damage",
     "source_id": "src_settled_insurance",
     "source_url": "https://www.settled.govt.nz/blog/what-property-buyers-need-to-know-about-insurance/",
     "source_title": "What property buyers need to know about insurance - settled.govt.nz",
@@ -33,6 +33,73 @@
     "source_type": "official",
     "licence": "CC BY-NC 4.0",
     "next_step_en": "Ask your lawyer to obtain and review the LIM report and other property documents from the council.",
+    "verified_by": null,
+    "verified_at": null,
+    "verified_content_hash": null,
+    "status": "draft",
+    "last_check": null
+  },
+  {
+    "id": "kb_overland_flow_path",
+    "topic": "hazard",
+    "applies_when": {
+      "hazard_layer_intersects": [
+        "overland_flow_path"
+      ]
+    },
+    "claim_en": "Auckland Council says overland flow paths are routes where water naturally flows across the ground, and water can build up and enter homes if a path is blocked (for example by fences, buildings or stored items).",
+    "quote": "Water can build up and enter homes if an overland flow path is blocked",
+    "source_id": "src_akl_overland_flow",
+    "source_url": "https://www.aucklandcouncil.govt.nz/en/environment/looking-after-aucklands-water/managing-overland-flow-paths.html",
+    "source_title": "Managing overland flow paths",
+    "source_type": "official",
+    "licence": "Copyright Auckland Council; no open licence found",
+    "next_step_en": "Ask the council or a drainage engineer about the overland flow path on this property.",
+    "verified_by": null,
+    "verified_at": null,
+    "verified_content_hash": null,
+    "status": "draft",
+    "last_check": null
+  },
+  {
+    "id": "kb_coastal_inundation_meaning",
+    "topic": "hazard",
+    "applies_when": {
+      "hazard_layer_intersects": [
+        "coastal_inundation"
+      ]
+    },
+    "claim_en": "Auckland Council describes coastal inundation areas on its flood map as coastal areas predicted to be covered by sea during large storms.",
+    "quote": "coastal inundation (coastal areas predicted to be covered by sea during large storms)",
+    "source_id": "src_akl_home_search_tips",
+    "source_url": "https://ourauckland.aucklandcouncil.govt.nz/news/2024/09/searching-for-a-home-here-s-what-you-need-to-look-out-for/",
+    "source_title": "Searching for a home? Here's what you need to look out for",
+    "source_type": "official",
+    "licence": "Copyright Auckland Council; no open licence found",
+    "next_step_en": "Ask the council or your insurer what the coastal inundation mapping means for this property.",
+    "verified_by": null,
+    "verified_at": null,
+    "verified_content_hash": null,
+    "status": "draft",
+    "last_check": null
+  },
+  {
+    "id": "kb_landslide_map_context",
+    "topic": "hazard",
+    "applies_when": {
+      "hazard_layer_intersects": [
+        "landslide_shallow",
+        "landslide_large_scale"
+      ]
+    },
+    "claim_en": "Auckland Council says its regional landslide susceptibility maps are not a measure of landslide risk on individual properties and do not predict when a landslide will happen.",
+    "quote": "The susceptibility ratings are not a measure of landslide risk on individual properties.",
+    "source_id": "src_akl_landslide_maps",
+    "source_url": "https://ourauckland.aucklandcouncil.govt.nz/news/2026/08/understanding-auckland-s-regional-landslide-susceptibility-maps/",
+    "source_title": "Understanding Auckland's regional landslide susceptibility maps",
+    "source_type": "official",
+    "licence": "Copyright Auckland Council; no open licence found",
+    "next_step_en": "Check the council property file for geotechnical reports, or ask a geotechnical engineer for site-specific advice.",
     "verified_by": null,
     "verified_at": null,
     "verified_content_hash": null,

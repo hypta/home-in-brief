@@ -167,5 +167,44 @@
     "tos_url": "https://kaingaora.govt.nz/en_NZ/copyright-statement/",
     "tos_checked_at": "2026-10-03",
     "published_or_updated": "2026-05"
+  },
+  {
+    "id": "src_akl_overland_flow",
+    "title": "Managing overland flow paths",
+    "url": "https://www.aucklandcouncil.govt.nz/en/environment/looking-after-aucklands-water/managing-overland-flow-paths.html",
+    "licence": "Copyright Auckland Council; no open licence found",
+    "accessed_at": "2026-10-04",
+    "source_type": "official",
+    "attribution": "Source: Auckland Council (aucklandcouncil.govt.nz), copyright Auckland Council.",
+    "tos_status": "unclear",
+    "tos_url": "https://www.aucklandcouncil.govt.nz/en/terms-and-conditions.html",
+    "tos_checked_at": "2026-10-03",
+    "published_or_updated": null
+  },
+  {
+    "id": "src_akl_home_search_tips",
+    "title": "Searching for a home? Here's what you need to look out for",
+    "url": "https://ourauckland.aucklandcouncil.govt.nz/news/2024/09/searching-for-a-home-here-s-what-you-need-to-look-out-for/",
+    "licence": "Copyright Auckland Council; no open licence found",
+    "accessed_at": "2026-10-04",
+    "source_type": "official",
+    "attribution": "Source: Auckland Council (ourauckland.aucklandcouncil.govt.nz), copyright Auckland Council.",
+    "tos_status": "unclear",
+    "tos_url": "https://www.aucklandcouncil.govt.nz/en/terms-and-conditions.html",
+    "tos_checked_at": "2026-10-03",
+    "published_or_updated": "2024-09"
+  },
+  {
+    "id": "src_akl_landslide_maps",
+    "title": "Understanding Auckland's regional landslide susceptibility maps",
+    "url": "https://ourauckland.aucklandcouncil.govt.nz/news/2026/08/understanding-auckland-s-regional-landslide-susceptibility-maps/",
+    "licence": "Copyright Auckland Council; no open licence found",
+    "accessed_at": "2026-10-04",
+    "source_type": "official",
+    "attribution": "Source: Auckland Council (ourauckland.aucklandcouncil.govt.nz), copyright Auckland Council.",
+    "tos_status": "unclear",
+    "tos_url": "https://www.aucklandcouncil.govt.nz/en/terms-and-conditions.html",
+    "tos_checked_at": "2026-10-03",
+    "published_or_updated": "2026-08"
   }
 ]
