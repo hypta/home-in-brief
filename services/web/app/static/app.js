@@ -27,7 +27,7 @@ async function calculate() {
       household_income: num("income"), existing_debts: num("debts"), rate_pct: num("rate"), household_type: $("household").value || null});
   } catch (e) {
     update.rulesError = Object.assign(e, {fields: e.fields || []});
-    // rejected loan inputs must not blank the property notes: ask again without them
+    // rejected loan inputs (a negative amount, say) must not blank the property notes: ask again without them
     if (e.fields.length) update.rules = await rules({}).catch(() => null);
   }
   if (update.rules) {

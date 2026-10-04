@@ -61,12 +61,14 @@ const WARNINGS = {
   deposit_missing: ["loan", "Enter a deposit to see the loan amount and repayments."],
   income_missing: ["loan", "Enter the household income to see the debt-to-income ratio and First Home Loan figures."],
   cash_purchase_no_loan: ["loan", "The deposit equals the price, so no loan is needed and no repayments are shown."],
+  deposit_exceeds_price: ["loan", "The deposit covers the whole price, so no loan is needed and no repayments are shown. Check the price and the deposit above."],
+  existing_debts_assumed_zero: ["loan", "The debt-to-income ratio assumes you have no other debts. Enter your existing debts above, or 0 if you have none."],
   fhl_skipped_income_missing: ["loan", "First Home Loan was not checked because no income was entered."],
   fhl_no_lenders: ["loan", "First Home Loan lender information is unavailable."],
   cv_unavailable: ["loan", "The council valuation could not be retrieved."],
   cv_invalid: ["loan", "The council valuation could not be used."],
   rates_unavailable: ["loan", "Bank rates could not be read, so bank and First Home Loan repayments are missing. Enter your own interest rate to see a repayment."],
-  rates_snapshot_stale: ["loan", "The oldest bank rate used here is more than 30 days old. Check current rates with the bank."],
+  rates_snapshot_stale: ["loan", (_, r) => `The oldest bank rate used here is more than ${r.rates_stale_after_days} days old. Check current rates with the bank.`],
   bank_skipped: ["loan", id => `${bank(id)} is left out: it has no published rate that applies to this deposit. This does not mean it has no rate.`],
   lem_base_unverified: ["loan", id => `${bank(id)}'s rate here is approximate: the rate its low-equity margin is added to is not confirmed.`],
   title_type_unavailable: ["notes", "The title type could not be confirmed."],
@@ -83,7 +85,7 @@ function warnings(rules, block) {
     const [code, arg] = w.split(":"), known = WARNINGS[code];
     if (HIDDEN.test(code)) return null;
     if (!known) return block === "loan" ? esc("Note: " + words(w)) : null;
-    return known[0] === block ? esc(typeof known[1] === "function" ? known[1](arg) : known[1]) : null;
+    return known[0] === block ? esc(typeof known[1] === "function" ? known[1](arg, rules) : known[1]) : null;
   }).filter(Boolean));
 }
 
@@ -134,7 +136,7 @@ const FLAGS = {
   lvr_over_80: () => "The deposit is under 20% of the price (LVR above 80%). A low-equity margin or a First Home Loan may apply.",
   dti_over_6: r => `Total debt would be more than 6 times income, above the Reserve Bank's high-DTI threshold, and lenders restrict this kind of lending. For this income the threshold is a loan of ${money(r.high_dti_threshold)}.`,
   fhl_deposit_below_5: () => "The First Home Loan scenario is not shown because the deposit is under 5% of the price.",
-  fhl_income_over_cap: () => "The First Home Loan scenario is not shown because the income is above its income cap.",
+  fhl_income_over_cap: r => `The First Home Loan scenario is not shown because the income is above its cap: ${money(r.fhl_income_caps.single)} for one applicant, ${money(r.fhl_income_caps.multiple_or_dependants)} for two or more applicants or one with dependants.`,
   fhl_household_type_unknown: () => "First Home Loan eligibility depends on the household. Choose it in the form above.",
 };
 
@@ -149,7 +151,7 @@ const SCENARIOS = {
       s.per_bank.map(b => [esc(bank(b.bank_id)), pct(b.rate_pct), esc(BASIS[b.basis] || b.basis), esc((b.captured_at || "not recorded").slice(0, 10))]))}</details>`,
   first_home_loan: (s, r) => `<h3>First Home Loan</h3>
     ${s.eligibility === "conditional" ? `<div class="problem">${esc(s.eligibility_note)}</div>` : ""}
-    <div class="note">Sources for the First Home Loan terms used here: ${cite(s.source_ids)} Figures are left blank where a lender's rate or its share of the insurance premium is not published.</div>
+    <div class="note">${esc(s.lmi_note)} ${cite(s.source_ids)}</div>
     ${row("Monthly repayment", span(s.monthly_range, money))}${row("Fortnightly repayment", span(s.fortnightly_range, money))}
     ${stressRow(r, `${span(s.stress_monthly_range, money)} per month.`)}
     ${row("Insurance premium at the full rate", money(s.lmi_amount) + (s.full_premium_assumed_for.length ? `. The full premium is assumed for ${s.full_premium_assumed_for.map(id => esc(bank(id))).join(", ")}.` : ""))}
@@ -167,12 +169,12 @@ function loan(state) {
   const price = r.price_used, rates = ctx.property.annual_rates, out = [];
   out.push(row("Price used", price.basis === "cv" ? `${money(price.value)}, the council valuation (CV) as at ${esc(price.valuation_date)}. Not a market value.`
     : price.basis === "user" ? `${money(price.value)}, your own figure.` : "No price to calculate with."));
-  if (r.loan_amount != null) out.push(row("Loan amount", `${money(r.loan_amount)} (the price less a deposit of ${money(r.deposit)})`));
-  if (r.lvr_pct != null) out.push(row("Loan-to-value ratio (LVR)", `${pct(r.lvr_pct)} of the price is borrowed`));
-  if (r.dti != null) out.push(row("Debt-to-income ratio (DTI)", `${r.dti} times income (existing debts plus this loan, divided by income)`));
+  if (r.loan_amount) out.push(row("Loan amount", `${money(r.loan_amount)} (the price less a deposit of ${money(r.deposit)})`));
+  if (r.loan_amount && r.lvr_pct != null) out.push(row("Loan-to-value ratio (LVR)", `${pct(r.lvr_pct)} of the price is borrowed`));
+  if (r.loan_amount && r.dti != null) out.push(row("Debt-to-income ratio (DTI)", `${r.dti} times income (existing debts plus this loan, divided by income)`));
   out.push(...r.flags.map(f => `<div class="note">${esc(FLAGS[f.id] ? FLAGS[f.id](r) : "Note: " + words(f.id))} ${cite(f.source_ids)}</div>`));
   out.push(...r.scenarios.map(s => SCENARIOS[s.id] ? SCENARIOS[s.id](s, r) : `<h3>${esc(words(s.id))}</h3>`));
-  if (r.scenarios.length) out.push(`<div class="muted">Repayments are principal and interest over 30 years. They do not include council rates, insurance, utilities or maintenance.${r.rates_snapshot_date ? ` Bank rates were collected by hand from each bank's website; the oldest is from ${esc(r.rates_snapshot_date)}. ${cite("bank_rates_snapshot")}` : ""}</div>`);
+  if (r.scenarios.length) out.push(`<div class="muted">Repayments are principal and interest over ${r.loan_term_years} years. They do not include council rates, insurance, utilities or maintenance.${r.rates_snapshot_date ? ` Bank rates were collected by hand from each bank's website; the oldest is from ${esc(r.rates_snapshot_date)}. ${cite("bank_rates_snapshot")}` : ""}</div>`);
   out.push(row("Council rates (not included above)", ratesText(rates) ? `${ratesText(rates)} ${cite(rates.source_id)}` : missing(rates)));
   return out.join("") + warnings(r, "loan") + notes(state, "loan", "Lending notes");
 }

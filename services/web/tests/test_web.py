@@ -53,7 +53,7 @@ def test_rules_post_is_relayed_and_a_validation_error_passes_through(sent):
     assert r.status_code == 200 and r.json()["lvr_pct"] == 82.35
     assert sent.call_args.args == ("POST", "http://localhost:8080/v1/rules") and sent.call_args.kwargs["json"] == body
 
-    sent.return_value = upstream(422, (FIXTURES / "rules_error_deposit_over_price.json").read_bytes())
+    sent.return_value = upstream(422, (FIXTURES / "rules_error_negative_deposit.json").read_bytes())
     r = client.post("/api/rules", json=body)
     assert r.status_code == 422 and r.json()["error"]["fields"][0]["field"] == "user_inputs.deposit"
 

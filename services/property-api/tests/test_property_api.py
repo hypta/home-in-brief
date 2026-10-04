@@ -275,7 +275,7 @@ def test_map_data_is_clipped_to_the_window_around_the_parcel():
 
 
 def test_http_endpoints():
-    assert client.get("/healthz").json() == {"status": "ok"}
+    assert client.get("/health").json() == client.get("/healthz").json() == {"status": "ok"}
     assert client.get("/v1/addresses", params={"q": "44 lorne"}).json()[0]["address_id"] == DRY
     body = client.get("/v1/property-context", params={"address_id": FLOODED}).json()
     assert body["schema_version"] == "0.1" and body["property"]["cladding"] == {

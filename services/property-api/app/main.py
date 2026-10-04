@@ -11,8 +11,9 @@ app = FastAPI(title="property-api", version="0.1.0")
 app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 
-@app.get("/healthz")
-def healthz() -> dict:
+@app.get("/health")
+@app.get("/healthz")  # local use; Cloud Run reserves some paths ending in z
+def health() -> dict:
     return {"status": "ok"}
 
 

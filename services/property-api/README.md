@@ -11,7 +11,7 @@ links and source credits). Every field carries `status` (`found` / `not_found` /
 | `GET /v1/addresses?q=` | Up to 8 Auckland addresses starting with the typed text |
 | `GET /v1/property-context?address_id=` | `PropertyContext` for a LINZ `address_id` |
 | `GET /v1/map?address_id=` | GeoJSON (WGS84) for the report map: parcel, address point and hazard features within about 120 m. Not part of the hand-off contract |
-| `GET /healthz` | Health check |
+| `GET /health` | Health check (`/healthz` gives the same answer locally; Cloud Run reserves some paths ending in `z`) |
 
 ## Run locally
 

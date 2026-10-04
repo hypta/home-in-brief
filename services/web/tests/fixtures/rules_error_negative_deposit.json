@@ -5,7 +5,7 @@
   "fields": [
    {
     "field": "user_inputs.deposit",
-    "message": "must not exceed the price used (340000.0)"
+    "message": "Input should be greater than or equal to 0"
    }
   ]
  }
