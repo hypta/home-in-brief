@@ -6,6 +6,18 @@ is `allowed`. For every other source the job makes **no request** and records
 quote. Terms were reviewed on 2026-10-03 (not legal advice; some terms were read from search
 summaries only, see `tos_url` per source).
 
+## Quick way: mark reviewed items with one command
+
+After checking items against their sources, run (reviewer name = the person who checked, not the author):
+
+```
+python kb/mark_verified.py --by "Reviewer Name" kb_auction_unconditional kb_nhc_building_cap
+```
+
+It sets `status`, `verified_by`, `verified_at` (current UTC time) and `verified_content_hash` for the listed
+ids only, then runs `kb/validate.py`. Use `--dry-run` to preview. Commit the seed changes afterwards; the local
+rules-api reads the seed files on every request, and a deployed one needs `scripts/seed_firestore.py`.
+
 ## How to check one item
 
 Verification is bound to the exact text that was reviewed. An item is only `verified` if
