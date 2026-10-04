@@ -45,11 +45,11 @@
     "applies_when": {
       "fhl_eligible": true
     },
-    "claim_en": "Kāinga Ora states that from 1 July 2025 the First Home Loan insurance premium on new applications increases from 0.5% to 1.2% of the loan value.",
-    "quote": "will increase from 0.5% to 1.2% of the loan value",
-    "source_id": "kainga_ora_fhl",
-    "source_url": "https://kaingaora.govt.nz/assets/Home-ownership/First-Home-Loan-brochures/FHL-Insurance-Premium_FAQs.pdf",
-    "source_title": "First Home Loan - Insurance Premium Changes FAQs (22 May 2025) - Kāinga Ora",
+    "claim_en": "The Kāinga Ora brochure lists paying a 1.2% Lender’s Mortgage Insurance premium as a First Home Loan requirement.",
+    "quote": "pay a 1.2% Lender’s Mortgage Insurance (LMI) premium",
+    "source_id": "kainga_ora_fhl_brochure",
+    "source_url": "https://kaingaora.govt.nz/assets/Home-ownership/First-Home-Loan-brochures/Kainga-Ora-First-Home-Loan-Brochure.pdf",
+    "source_title": "First Home Loan brochure - Kāinga Ora",
     "source_type": "official",
     "licence": "Copyright Kāinga Ora; may be reproduced free of charge without further permission if accurate and not misleading, acknowledging the source and copyright status",
     "next_step_en": "Ask your lender how the First Home Loan premium would apply to your loan amount.",
@@ -63,7 +63,7 @@
     "id": "kb_fhl_govt_not_funding_premium",
     "topic": "lending",
     "applies_when": {
-      "lvr_over": 80
+      "fhl_eligible": true
     },
     "claim_en": "Kāinga Ora states that after 1 July 2025 the Government will not provide funding to cover part of the First Home Loan insurance premium.",
     "quote": "the Government will not provide funding to cover part of the insurance premium",
@@ -145,7 +145,7 @@
     "applies_when": {
       "fhl_eligible": true
     },
-    "claim_en": "The Kāinga Ora brochure lists before-tax income limits of $95,000 for an individual buyer and $150,000 for an individual buyer with dependants.",
+    "claim_en": "The Kāinga Ora brochure lists $95,000 for an individual buyer and $150,000 for an individual buyer with dependants as First Home Loan income thresholds.",
     "quote": "$95,000 for an individual buyer – $150,000 for an individual buyer with dependants",
     "source_id": "kainga_ora_fhl_brochure",
     "source_url": "https://kaingaora.govt.nz/assets/Home-ownership/First-Home-Loan-brochures/Kainga-Ora-First-Home-Loan-Brochure.pdf",
@@ -165,7 +165,7 @@
     "applies_when": {
       "fhl_eligible": true
     },
-    "claim_en": "The Kāinga Ora brochure lists a before-tax income limit of $150,000 combined for multiple buyers.",
+    "claim_en": "The Kāinga Ora brochure lists $150,000 combined for multiple buyers as a First Home Loan income threshold.",
     "quote": "$150,000 combined for multiple buyers",
     "source_id": "kainga_ora_fhl_brochure",
     "source_url": "https://kaingaora.govt.nz/assets/Home-ownership/First-Home-Loan-brochures/Kainga-Ora-First-Home-Loan-Brochure.pdf",
@@ -193,6 +193,26 @@
     "source_type": "official",
     "licence": "Copyright Reserve Bank of New Zealand; may be reproduced without permission if RBNZ is acknowledged as source and owner (not Creative Commons)",
     "next_step_en": "Ask each lender what interest rate and fees apply at your deposit level.",
+    "verified_by": null,
+    "verified_at": null,
+    "verified_content_hash": null,
+    "status": "draft",
+    "last_check": null
+  },
+  {
+    "id": "kb_fhl_income_basis",
+    "topic": "lending",
+    "applies_when": {
+      "fhl_eligible": true
+    },
+    "claim_en": "The Kāinga Ora brochure states that First Home Loan applicants need a before-tax income from the last 12 months less than the listed thresholds.",
+    "quote": "have a before-tax income from the last 12 months less than",
+    "source_id": "kainga_ora_fhl_brochure",
+    "source_url": "https://kaingaora.govt.nz/assets/Home-ownership/First-Home-Loan-brochures/Kainga-Ora-First-Home-Loan-Brochure.pdf",
+    "source_title": "First Home Loan brochure - Kāinga Ora",
+    "source_type": "official",
+    "licence": "Copyright Kāinga Ora; may be reproduced free of charge without further permission if accurate and not misleading, acknowledging the source and copyright status",
+    "next_step_en": "Check with a participating lender how your before-tax income from the last 12 months is assessed.",
     "verified_by": null,
     "verified_at": null,
     "verified_content_hash": null,

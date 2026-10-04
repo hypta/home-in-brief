@@ -68,7 +68,7 @@ settled.govt.nz, "last updated" for RBNZ and Auckland Council, the document date
 |---|---|---|
 | `src_nhc_about` naturalhazards.govt.nz (allowed, CC BY-NC 4.0) | kb_nhc_building_cap, kb_nhc_levy, kb_nhc_building_excess | The site sits behind a bot challenge (Incapsula). If a run records `blocked` or `quote_found: null`, check by hand. Cadence: monthly, and whenever there is news about the NHC levy or building cap (Treasury review of the levy and cap was reported in 2025; not verified). |
 | `src_unittitles_guide` unittitles.govt.nz (allowed) | kb_unit_title_body_corporate_insurance | If blocked or the PDF URL changed, check by hand every 2 weeks until fixed. |
-| `kainga_ora_fhl`, `kainga_ora_fhl_brochure` kaingaora.govt.nz (allowed, tentative) | kb_fhl_premium, kb_fhl_govt_not_funding_premium, kb_fhl_deposit_5pct, kb_fhl_income_cap_individual, kb_fhl_income_cap_multiple | Terms were read from a search summary only; re-read the copyright statement in a browser. If blocked, check by hand every 2 weeks. |
+| `kainga_ora_fhl`, `kainga_ora_fhl_brochure` kaingaora.govt.nz (allowed, tentative) | kb_fhl_premium, kb_fhl_govt_not_funding_premium, kb_fhl_deposit_5pct, kb_fhl_income_cap_individual, kb_fhl_income_cap_multiple, kb_fhl_income_basis | Terms were read from a search summary only; re-read the copyright statement in a browser. If blocked, check by hand every 2 weeks. |
 
 ## Reading the job output
 

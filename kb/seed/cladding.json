@@ -4,11 +4,10 @@
     "topic": "cladding",
     "applies_when": {
       "cladding_in": [
-        "monolithic",
-        "plaster"
+        "monolithic"
       ]
     },
-    "claim_en": "Settled.govt.nz links higher leak risk to plaster-style monolithic cladding systems on buildings from the late 1980s to the mid-2000s.",
+    "claim_en": "Settled.govt.nz discusses plaster-style monolithic cladding systems in its guidance on leaky buildings.",
     "quote": "using plaster-style monolithic cladding systems",
     "source_id": "src_settled_leaky",
     "source_url": "https://www.settled.govt.nz/buying-a-home/researching-the-property/learning-about-leaky-buildings/",

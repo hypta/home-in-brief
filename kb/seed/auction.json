@@ -5,14 +5,14 @@
     "applies_when": {
       "always": true
     },
-    "claim_en": "Settled.govt.nz states that auctions are unconditional, so finances are expected to be confirmed before attending an auction.",
+    "claim_en": "Settled.govt.nz states that auctions are unconditional and that buyers need to confirm their finances.",
     "quote": "Because auctions are unconditional, you need to confirm your finances",
     "source_id": "src_settled_auction",
     "source_url": "https://www.settled.govt.nz/buying-a-home/making-an-offer/buying-by-auction/",
     "source_title": "Buying by auction - settled.govt.nz",
     "source_type": "official",
     "licence": "Copyright Real Estate Authority (not Creative Commons); may be reproduced free of charge for personal or in-house use only",
-    "next_step_en": "Confirm finance and insurance arrangements before the auction day.",
+    "next_step_en": "Ask your lender and lawyer what finance and insurance arrangements to confirm for an auction.",
     "verified_by": null,
     "verified_at": null,
     "verified_content_hash": null,
