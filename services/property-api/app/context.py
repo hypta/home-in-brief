@@ -146,7 +146,7 @@ def _council_fields(ra: Optional[dict], ra_err: Optional[str], key: Optional[str
 
 
 def build(address_id: int, typed: Optional[str] = None) -> dict:
-    now = datetime.now().astimezone()
+    now = datetime.now(council.NZ)  # Cloud Run hosts run in UTC
     sources = [{"id": i, "title": t, "url": u, "licence": lic, "attribution": c,
                 "accessed_at": now.date().isoformat()} for i, t, u, lic, c in _SOURCES]
     links = {link["id"]: link for link in (

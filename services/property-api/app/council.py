@@ -4,9 +4,10 @@ from __future__ import annotations
 import html
 import json
 import re
-from datetime import datetime, timezone
+from datetime import datetime
 from functools import lru_cache
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 from shapely import make_valid
 from shapely.geometry import box, mapping, shape
@@ -14,6 +15,7 @@ from shapely.ops import unary_union
 
 from . import http
 
+NZ = ZoneInfo("Pacific/Auckland")
 ARCGIS = "https://services1.arcgis.com/n4yPwebTjJCmXB6W/arcgis/rest/services"
 GEOMAPS = "https://mapspublic.aucklandcouncil.govt.nz/arcgis/rest/services"
 GEOMAPS_VIEWER = "https://geomapspublic.aucklandcouncil.govt.nz/viewer/index.html"
@@ -56,13 +58,13 @@ def _layer_url(cfg: dict) -> str:
 
 
 def _ms_date(ms: Optional[float]) -> Optional[str]:
-    return datetime.fromtimestamp(ms / 1000, timezone.utc).date().isoformat() if ms else None
+    return datetime.fromtimestamp(ms / 1000, NZ).date().isoformat() if ms else None
 
 
 @lru_cache(maxsize=64)
 def data_date(layer_url: str) -> Optional[str]:
     """Layer's last edit date, or None."""
-    # ponytail: cached for the life of the process; add a TTL if instances become long-lived.
+    # Cached for the life of the process; add a TTL if instances become long-lived.
     info = http.request("GET", layer_url, {"f": "json"}).get("editingInfo") or {}
     return _ms_date(info.get("dataLastEditDate") or info.get("lastEditDate"))
 
@@ -97,7 +99,7 @@ def hazard(cfg: dict, parcel_geojson: Optional[dict], lat: float, lng: float) ->
         if is_line:
             params.update(distance=POINT_LINE_TOLERANCE_M, units="esriSRUnit_Meter")
     body = http.request("POST", _layer_url(cfg) + "/query", params)
-    # ponytail: a cut-off answer would understate overlap and class, so fail the layer instead;
+    # A cut-off answer would understate overlap and class, so fail the layer instead;
     # page with resultOffset if large parcels turn out to hit the server's record limit.
     if body.get("exceededTransferLimit") or (body.get("properties") or {}).get("exceededTransferLimit"):
         raise RuntimeError("upstream answer truncated at the record limit")

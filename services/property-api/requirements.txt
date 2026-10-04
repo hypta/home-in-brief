@@ -3,3 +3,4 @@ uvicorn[standard]>=0.30
 pydantic>=2.7
 requests>=2.31
 shapely>=2.0
+tzdata>=2024.1

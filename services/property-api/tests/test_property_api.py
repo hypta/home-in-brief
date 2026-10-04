@@ -1,5 +1,8 @@
 """Each test replays real responses recorded on the date in tests/fixtures/manifest.json."""
+import time
+from datetime import datetime
 from unittest.mock import Mock
+from zoneinfo import ZoneInfo
 
 import pytest
 from fastapi.testclient import TestClient
@@ -86,6 +89,7 @@ def test_flood_layers_report_overlap_and_line_crossing():
     assert hz["coastal_inundation"].status == "none"
     assert all(h.source_id for h in hz.values())
     assert [name for name, h in hz.items() if not h.data_date] == ["coastal_erosion"]  # that server gives no date
+    assert hz["flood_plain"].data_date == "2026-10-03"  # last edited 01:07 that day in New Zealand, still 2 October in UTC
     assert hz["coastal_erosion"].status == "none"
 
 
@@ -244,6 +248,17 @@ def test_context_matches_what_rules_api_reads():
     ids = {s.id for s in ctx.sources}
     assert all(s.attribution and s.licence for s in ctx.sources)
     assert {h.source_id for h in ctx.hazards} <= ids and ctx.property.cv.source_id in ids
+
+
+def test_timestamps_are_new_zealand_time_on_a_utc_host(monkeypatch):
+    monkeypatch.setenv("TZ", "UTC")
+    time.tzset()
+    ctx = build(FLOODED)
+    monkeypatch.undo()
+    time.tzset()
+    nz = datetime.now(ZoneInfo("Pacific/Auckland"))
+    assert datetime.fromisoformat(ctx.generated_at).utcoffset() == nz.utcoffset()
+    assert ctx.sources[0].accessed_at == nz.date().isoformat()
 
 
 def test_map_data_is_clipped_to_the_window_around_the_parcel():

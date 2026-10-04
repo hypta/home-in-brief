@@ -127,7 +127,7 @@
    "crosses_parcel": null,
    "classes": [],
    "susceptibility": null,
-   "data_date": "2026-10-02",
+   "data_date": "2026-10-03",
    "reason": null,
    "source_id": "ac_flood_plains"
   },
@@ -140,7 +140,7 @@
    "crosses_parcel": null,
    "classes": [],
    "susceptibility": null,
-   "data_date": "2026-10-02",
+   "data_date": "2026-10-03",
    "reason": null,
    "source_id": "ac_flood_prone"
   },
@@ -213,7 +213,7 @@
     "Very Low"
    ],
    "susceptibility": null,
-   "data_date": "2022-08-17",
+   "data_date": "2022-08-18",
    "reason": "region_wide_layer_class_is_the_finding",
    "source_id": "ac_liquefaction"
   },
@@ -226,7 +226,7 @@
    "crosses_parcel": null,
    "classes": [],
    "susceptibility": null,
-   "data_date": "2024-02-25",
+   "data_date": "2024-02-26",
    "reason": null,
    "source_id": "ac_tsunami"
   },
