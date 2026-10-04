@@ -3,9 +3,9 @@
     "id": "kb_flood_insurance_limit",
     "topic": "hazard",
     "applies_when": {
-      "hazard_status": "intersects"
+      "always": true
     },
-    "claim_en": "Settled.govt.nz states that where a house is in an area that has flooded before, an insurer may limit cover for flood damage.",
+    "claim_en": "Settled.govt.nz states that an insurer may limit flood-damage cover if a house is in an area that has previously flooded.",
     "quote": "has been previously flooded, an insurer may limit any cover for flood damage",
     "source_id": "src_settled_insurance",
     "source_url": "https://www.settled.govt.nz/blog/what-property-buyers-need-to-know-about-insurance/",
@@ -54,7 +54,7 @@
     "source_title": "Managing overland flow paths",
     "source_type": "official",
     "licence": "Copyright Auckland Council; no open licence found",
-    "next_step_en": "Ask the council or a drainage engineer about the overland flow path on this property.",
+    "next_step_en": "Ask the council or a drainage engineer whether the mapped overland flow path crosses this property and what the mapping means for it.",
     "verified_by": null,
     "verified_at": null,
     "verified_content_hash": null,
@@ -69,7 +69,7 @@
         "coastal_inundation"
       ]
     },
-    "claim_en": "Auckland Council describes coastal inundation areas on its flood map as coastal areas predicted to be covered by sea during large storms.",
+    "claim_en": "Auckland Council describes coastal inundation as coastal areas predicted to be covered by sea during large storms.",
     "quote": "coastal inundation (coastal areas predicted to be covered by sea during large storms)",
     "source_id": "src_akl_home_search_tips",
     "source_url": "https://ourauckland.aucklandcouncil.govt.nz/news/2024/09/searching-for-a-home-here-s-what-you-need-to-look-out-for/",
