@@ -21,7 +21,7 @@ From the repo root, with `LINZ_API_KEY` in `.env` (see `.env.example`):
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -r services/property-api/requirements.txt pytest httpx
 cd services/property-api
-PYTHONPATH=../../shared ../../.venv/bin/uvicorn app.main:app --port 8080 --env-file ../../.env
+PYTHONPATH=../../shared ../../.venv/bin/uvicorn app.main:app --port 8081 --env-file ../../.env
 ```
 
 ## Tests
