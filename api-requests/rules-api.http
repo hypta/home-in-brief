@@ -1,0 +1,139 @@
+# rules-api requests (VS Code "REST Client" extension: humao.rest-client)
+# Start the service first:  make local-api   (or the command in api-requests/README.md)
+# Click "Send Request" above each block.
+
+@rules = http://localhost:8080
+
+### Health check
+GET {{rules}}/healthz
+
+### All sources (licence, attribution, terms status)
+GET {{rules}}/v1/sources
+
+### Latest bank rate snapshot (hand-maintained, 11 banks)
+GET {{rules}}/v1/rates/latest
+
+### Knowledge-base items by id (draft items are visible only when INCLUDE_DRAFT=true)
+GET {{rules}}/v1/kb/items?ids=kb_auction_unconditional,kb_nhc_building_cap
+
+### All visible knowledge-base items
+GET {{rules}}/v1/kb/items
+
+### 1. Spec sample (§6.2/6.3): CV $1,000,000, deposit $120k, income $150k, debts $30k
+# Expect loan_amount 880000, lvr_pct 88.0, dti 6.07, high_dti_threshold 870000
+POST {{rules}}/v1/rules
+Content-Type: application/json
+
+{
+  "property_context": {
+    "property": {
+      "cv": { "value": 1000000, "valuation_date": "2024-05-01", "status": "found", "source_id": "ac_valuation" },
+      "title_type": { "value": "Cross Lease", "status": "found" },
+      "year_built": { "value": 1990, "decade_range": [1990, 1999], "status": "found" }
+    },
+    "hazards": [
+      { "layer": "flood_plain", "priority": "primary", "status": "intersects" },
+      { "layer": "overland_flow_path", "priority": "primary", "status": "none" },
+      { "layer": "coastal_inundation", "priority": "primary", "status": "none" }
+    ]
+  },
+  "user_inputs": {
+    "deposit": 120000,
+    "household_income": 150000,
+    "existing_debts": 30000,
+    "household_type": null
+  }
+}
+
+### 2. Real PropertyContext from property-api: 740 Sandringham Road Extension (flood layers intersect)
+# First Home Loan scenario is "conditional" (income $120k, household_type unknown)
+POST {{rules}}/v1/rules
+Content-Type: application/json
+
+< ./bodies/rules_740_sandringham.json
+
+### 3. Real PropertyContext: 44 Lorne Street (no flood intersection), price overridden to $900k, LVR < 80
+POST {{rules}}/v1/rules
+Content-Type: application/json
+
+< ./bodies/rules_44_lorne_street.json
+
+### 4. First Home Loan: single applicant over the $95k cap -> no FHL scenario, flag fhl_income_over_cap
+POST {{rules}}/v1/rules
+Content-Type: application/json
+
+{
+  "property_context": { "property": { "cv": { "value": 750000, "status": "found" } }, "hazards": [] },
+  "user_inputs": { "deposit": 50000, "household_income": 110000, "existing_debts": 0, "household_type": "single" }
+}
+
+### 5. User-supplied interest rate and chat-supplied build year/cladding (leaky-building items)
+POST {{rules}}/v1/rules
+Content-Type: application/json
+
+{
+  "property_context": {
+    "property": {
+      "cv": { "value": 820000, "status": "found" },
+      "year_built": { "value": null, "status": "not_found", "reason": "no_record" },
+      "cladding": { "value": null, "status": "unavailable", "reason": "no_free_source" }
+    },
+    "hazards": []
+  },
+  "user_inputs": {
+    "deposit": 200000,
+    "household_income": 160000,
+    "existing_debts": 5000,
+    "rate_pct": 5.5,
+    "chat_supplied": { "year_built": 1998, "cladding": "monolithic" }
+  }
+}
+
+### 6. "Not found is not no risk": primary hazard layers unavailable -> warnings hazards_partial / hazards_unavailable
+POST {{rules}}/v1/rules
+Content-Type: application/json
+
+{
+  "property_context": {
+    "property": { "cv": { "value": 900000, "status": "found" } },
+    "hazards": [
+      { "layer": "flood_plain", "priority": "primary", "status": "unavailable", "reason": "service_timeout" },
+      { "layer": "flood_prone_area", "priority": "primary", "status": "not_found", "reason": "no_record" },
+      { "layer": "overland_flow_path", "priority": "primary", "status": "none" }
+    ]
+  },
+  "user_inputs": { "deposit": 180000, "household_income": 140000, "existing_debts": 0 }
+}
+
+### 7. CV missing -> use price_override
+POST {{rules}}/v1/rules
+Content-Type: application/json
+
+{
+  "property_context": { "property": { "cv": { "value": null, "status": "unavailable", "reason": "service_down" } }, "hazards": [] },
+  "user_inputs": { "price_override": 950000, "deposit": 190000, "household_income": 170000, "existing_debts": 0 }
+}
+
+### 8. Cash purchase (deposit equals price) -> warning cash_purchase_no_loan
+POST {{rules}}/v1/rules
+Content-Type: application/json
+
+{
+  "property_context": { "property": { "cv": { "value": 600000, "status": "found" } }, "hazards": [] },
+  "user_inputs": { "deposit": 600000, "household_income": 90000, "existing_debts": 0 }
+}
+
+### 9. Validation error (negative deposit) -> 422 {"error": {...}}
+POST {{rules}}/v1/rules
+Content-Type: application/json
+
+{
+  "property_context": { "property": {}, "hazards": [] },
+  "user_inputs": { "deposit": -5 }
+}
+
+### 10. Wrong method -> 405 method_not_allowed
+GET {{rules}}/v1/rules
+
+### OpenAPI contract
+GET {{rules}}/openapi.json

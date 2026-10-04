@@ -1,0 +1,541 @@
+{
+  "info": {
+    "name": "home-buyer-copilot (local)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "rules",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "property",
+      "value": "http://localhost:8081"
+    }
+  ],
+  "item": [
+    {
+      "name": "rules-api",
+      "item": [
+        {
+          "name": "Health check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{rules}}/healthz",
+              "host": [
+                "{{rules}}"
+              ],
+              "path": [
+                "healthz"
+              ]
+            }
+          }
+        },
+        {
+          "name": "All sources (licence, attribution, terms status)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{rules}}/v1/sources",
+              "host": [
+                "{{rules}}"
+              ],
+              "path": [
+                "v1",
+                "sources"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Latest bank rate snapshot (hand-maintained, 11 banks)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{rules}}/v1/rates/latest",
+              "host": [
+                "{{rules}}"
+              ],
+              "path": [
+                "v1",
+                "rates",
+                "latest"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Knowledge-base items by id (draft items are visible only when INCLUDE_DRAFT=true)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{rules}}/v1/kb/items?ids=kb_auction_unconditional,kb_nhc_building_cap",
+              "host": [
+                "{{rules}}"
+              ],
+              "path": [
+                "v1",
+                "kb",
+                "items"
+              ],
+              "query": [
+                {
+                  "key": "ids",
+                  "value": "kb_auction_unconditional,kb_nhc_building_cap"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "All visible knowledge-base items",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{rules}}/v1/kb/items",
+              "host": [
+                "{{rules}}"
+              ],
+              "path": [
+                "v1",
+                "kb",
+                "items"
+              ]
+            }
+          }
+        },
+        {
+          "name": "1. Spec sample (§6.2/6.3): CV $1,000,000, deposit $120k, income $150k, debts $30k",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{rules}}/v1/rules",
+              "host": [
+                "{{rules}}"
+              ],
+              "path": [
+                "v1",
+                "rules"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"property_context\": {\n    \"property\": {\n      \"cv\": { \"value\": 1000000, \"valuation_date\": \"2024-05-01\", \"status\": \"found\", \"source_id\": \"ac_valuation\" },\n      \"title_type\": { \"value\": \"Cross Lease\", \"status\": \"found\" },\n      \"year_built\": { \"value\": 1990, \"decade_range\": [1990, 1999], \"status\": \"found\" }\n    },\n    \"hazards\": [\n      { \"layer\": \"flood_plain\", \"priority\": \"primary\", \"status\": \"intersects\" },\n      { \"layer\": \"overland_flow_path\", \"priority\": \"primary\", \"status\": \"none\" },\n      { \"layer\": \"coastal_inundation\", \"priority\": \"primary\", \"status\": \"none\" }\n    ]\n  },\n  \"user_inputs\": {\n    \"deposit\": 120000,\n    \"household_income\": 150000,\n    \"existing_debts\": 30000,\n    \"household_type\": null\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "2. Real PropertyContext from property-api: 740 Sandringham Road Extension (flood layers intersect)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{rules}}/v1/rules",
+              "host": [
+                "{{rules}}"
+              ],
+              "path": [
+                "v1",
+                "rules"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"property_context\": {\n    \"property\": {\n      \"cv\": {\n        \"value\": 340000.0,\n        \"valuation_date\": \"2024-05-01\",\n        \"status\": \"found\",\n        \"reason\": null,\n        \"source_id\": \"ac_valuation\"\n      },\n      \"title_type\": {\n        \"value\": \"Freehold\",\n        \"status\": \"found\",\n        \"reason\": null,\n        \"source_id\": \"linz_titles\",\n        \"linz_types\": [\n          \"Freehold\"\n        ]\n      },\n      \"year_built\": {\n        \"value\": null,\n        \"status\": \"not_found\",\n        \"reason\": \"property_category_has_no_build_decade\",\n        \"source_id\": \"ac_property_page\",\n        \"decade_range\": null,\n        \"property_category\": \"OP\"\n      },\n      \"cladding\": {\n        \"value\": null,\n        \"status\": \"unavailable\",\n        \"reason\": \"no_free_source\",\n        \"source_id\": null\n      },\n      \"last_sale\": {\n        \"status\": \"unavailable\",\n        \"reason\": \"no_licensed_source\",\n        \"source_id\": null,\n        \"price\": null,\n        \"date\": null\n      },\n      \"annual_rates\": {\n        \"status\": \"not_found\",\n        \"reason\": \"non_rateable_property\",\n        \"source_id\": \"ac_valuation\",\n        \"value\": null,\n        \"rating_year\": \"2026/2027\"\n      },\n      \"land_value\": {\n        \"status\": \"found\",\n        \"reason\": null,\n        \"source_id\": \"ac_valuation\",\n        \"value\": 290000.0\n      },\n      \"improvements_value\": {\n        \"status\": \"found\",\n        \"reason\": null,\n        \"source_id\": \"ac_valuation\",\n        \"value\": 50000.0\n      },\n      \"rateability\": {\n        \"status\": \"found\",\n        \"reason\": null,\n        \"source_id\": \"ac_valuation\",\n        \"value\": \"Non Rateable\"\n      },\n      \"improvement_description\": {\n        \"status\": \"found\",\n        \"reason\": null,\n        \"source_id\": \"ac_valuation\",\n        \"value\": \"RESERVE LAND\"\n      },\n      \"land_use\": {\n        \"status\": \"found\",\n        \"reason\": null,\n        \"source_id\": \"ac_valuation\",\n        \"value\": \"Recreational - vacant\"\n      },\n      \"land_area_m2\": {\n        \"status\": \"found\",\n        \"reason\": null,\n        \"source_id\": \"ac_valuation\",\n        \"value\": 668.0\n      },\n      \"floor_area_m2\": {\n        \"status\": \"not_found\",\n        \"reason\": \"not_on_council_page\",\n        \"source_id\": \"ac_property_page\",\n        \"value\": null\n      },\n      \"building_site_coverage_m2\": {\n        \"status\": \"found\",\n        \"reason\": null,\n        \"source_id\": \"ac_property_page\",\n        \"value\": 0.0\n      },\n      \"legal_description\": {\n        \"status\": \"found\",\n        \"reason\": null,\n        \"source_id\": \"ac_valuation\",\n        \"value\": \"Lot 1 DP 46871\"\n      },\n      \"record_of_title\": {\n        \"status\": \"found\",\n        \"reason\": null,\n        \"source_id\": \"ac_valuation\",\n        \"value\": \"NA51D/614\"\n      },\n      \"valuation_number\": {\n        \"status\": \"found\",\n        \"reason\": null,\n        \"source_id\": \"ac_valuation\",\n        \"value\": \"02270-00000087900\"\n      },\n      \"local_board\": {\n        \"status\": \"found\",\n        \"reason\": null,\n        \"source_id\": \"ac_property_page\",\n        \"value\": \"Puketapapa\"\n      }\n    },\n    \"hazards\": [\n      {\n        \"layer\": \"flood_plain\",\n        \"priority\": \"primary\",\n        \"status\": \"intersects\",\n        \"geometry\": \"polygon\",\n        \"overlap_pct\": 51.2,\n        \"crosses_parcel\": null,\n        \"classes\": [],\n        \"susceptibility\": null,\n        \"data_date\": \"2026-10-02\",\n        \"reason\": null,\n        \"source_id\": \"ac_flood_plains\"\n      },\n      {\n        \"layer\": \"flood_prone_area\",\n        \"priority\": \"primary\",\n        \"status\": \"intersects\",\n        \"geometry\": \"polygon\",\n        \"overlap_pct\": 50.8,\n        \"crosses_parcel\": null,\n        \"classes\": [],\n        \"susceptibility\": null,\n        \"data_date\": \"2026-10-02\",\n        \"reason\": null,\n        \"source_id\": \"ac_flood_prone\"\n      },\n      {\n        \"layer\": \"overland_flow_path\",\n        \"priority\": \"primary\",\n        \"status\": \"intersects\",\n        \"geometry\": \"line\",\n        \"overlap_pct\": null,\n        \"crosses_parcel\": true,\n        \"classes\": [],\n        \"susceptibility\": null,\n        \"data_date\": \"2026-03-24\",\n        \"reason\": null,\n        \"source_id\": \"ac_overland_flow\"\n      },\n      {\n        \"layer\": \"coastal_inundation\",\n        \"priority\": \"primary\",\n        \"status\": \"none\",\n        \"geometry\": \"polygon\",\n        \"overlap_pct\": null,\n        \"crosses_parcel\": null,\n        \"classes\": [],\n        \"susceptibility\": null,\n        \"data_date\": \"2025-05-30\",\n        \"reason\": null,\n        \"source_id\": \"ac_coastal\"\n      },\n      {\n        \"layer\": \"landslide_shallow\",\n        \"priority\": \"secondary\",\n        \"status\": \"intersects\",\n        \"geometry\": \"polygon\",\n        \"overlap_pct\": null,\n        \"crosses_parcel\": null,\n        \"classes\": [\n          \"Very Low\"\n        ],\n        \"susceptibility\": \"Very Low\",\n        \"data_date\": \"2025-09-16\",\n        \"reason\": \"region_wide_layer_class_is_the_finding\",\n        \"source_id\": \"ac_landslide\"\n      },\n      {\n        \"layer\": \"landslide_large_scale\",\n        \"priority\": \"secondary\",\n        \"status\": \"intersects\",\n        \"geometry\": \"polygon\",\n        \"overlap_pct\": null,\n        \"crosses_parcel\": null,\n        \"classes\": [\n          \"Very Low\"\n        ],\n        \"susceptibility\": \"Very Low\",\n        \"data_date\": \"2025-09-16\",\n        \"reason\": \"region_wide_layer_class_is_the_finding\",\n        \"source_id\": \"ac_landslide\"\n      },\n      {\n        \"layer\": \"liquefaction\",\n        \"priority\": \"secondary\",\n        \"status\": \"intersects\",\n        \"geometry\": \"polygon\",\n        \"overlap_pct\": null,\n        \"crosses_parcel\": null,\n        \"classes\": [\n          \"Possible\",\n          \"Very Low\"\n        ],\n        \"susceptibility\": null,\n        \"data_date\": \"2022-08-17\",\n        \"reason\": \"region_wide_layer_class_is_the_finding\",\n        \"source_id\": \"ac_liquefaction\"\n      },\n      {\n        \"layer\": \"tsunami_evacuation_zone\",\n        \"priority\": \"secondary\",\n        \"status\": \"none\",\n        \"geometry\": \"polygon\",\n        \"overlap_pct\": null,\n        \"crosses_parcel\": null,\n        \"classes\": [],\n        \"susceptibility\": null,\n        \"data_date\": \"2024-02-25\",\n        \"reason\": null,\n        \"source_id\": \"ac_tsunami\"\n      },\n      {\n        \"layer\": \"coastal_erosion\",\n        \"priority\": \"secondary\",\n        \"status\": \"none\",\n        \"geometry\": \"polygon\",\n        \"overlap_pct\": null,\n        \"crosses_parcel\": null,\n        \"classes\": [],\n        \"susceptibility\": null,\n        \"data_date\": null,\n        \"reason\": null,\n        \"source_id\": \"ac_coastal_erosion\"\n      }\n    ],\n    \"schema_version\": \"0.1\",\n    \"generated_at\": \"2026-10-04T11:32:10+13:00\",\n    \"address\": {\n      \"status\": \"found\",\n      \"reason\": null,\n      \"source_id\": \"linz_addresses\",\n      \"input\": null,\n      \"matched\": \"740 Sandringham Road Extension, Wesley, Auckland\",\n      \"linz_address_id\": 2100210,\n      \"lat\": -36.9011800815,\n      \"lng\": 174.731118103\n    },\n    \"parcel\": {\n      \"status\": \"found\",\n      \"reason\": null,\n      \"source_id\": \"linz_parcels\",\n      \"parcel_id\": 4807871,\n      \"spatial_method\": \"parcel\"\n    },\n    \"links\": [\n      {\n        \"id\": \"homes\",\n        \"label\": \"Homes.co.nz\",\n        \"url\": \"https://www.google.com/search?q=site%3Ahomes.co.nz+%22740+Sandringham+Road+Extension%22+Auckland\",\n        \"prefilled\": true,\n        \"kind\": \"site_search\"\n      },\n      {\n        \"id\": \"oneroof\",\n        \"label\": \"OneRoof\",\n        \"url\": \"https://www.google.com/search?q=site%3Aoneroof.co.nz+%22740+Sandringham+Road+Extension%22+Auckland\",\n        \"prefilled\": true,\n        \"kind\": \"site_search\"\n      },\n      {\n        \"id\": \"council_valuation\",\n        \"label\": \"Auckland Council property search\",\n        \"url\": \"https://www.aucklandcouncil.govt.nz/en/property-rates-valuations/find-property-rates-valuation/12344049554.html\",\n        \"prefilled\": true,\n        \"kind\": \"direct\"\n      },\n      {\n        \"id\": \"council_flood_viewer\",\n        \"label\": \"Auckland Council Flood Viewer\",\n        \"url\": \"https://experience.arcgis.com/experience/cbde7f2134404f4d90adce5396a0a630\",\n        \"prefilled\": false,\n        \"kind\": \"home\"\n      },\n      {\n        \"id\": \"council_geomaps\",\n        \"label\": \"Auckland Council GeoMaps (zoning, pipes and all council layers)\",\n        \"url\": \"https://geomapspublic.aucklandcouncil.govt.nz/viewer/index.html?task=select&entity=rateacckey&values=12344049554\",\n        \"prefilled\": true,\n        \"kind\": \"direct\"\n      },\n      {\n        \"id\": \"nhc_claims_map\",\n        \"label\": \"NHC Natural Hazards Portal\",\n        \"url\": \"https://www.naturalhazardsportal.govt.nz/\",\n        \"prefilled\": false,\n        \"kind\": \"home\"\n      }\n    ],\n    \"sources\": [\n      {\n        \"id\": \"linz_addresses\",\n        \"title\": \"NZ Addresses - LINZ\",\n        \"url\": \"https://data.linz.govt.nz/layer/123113-nz-addresses/\",\n        \"licence\": \"CC BY 4.0\",\n        \"accessed_at\": \"2026-10-04\",\n        \"source_type\": \"official\",\n        \"attribution\": \"Contains data sourced from the LINZ Data Service licensed for reuse under CC BY 4.0\"\n      },\n      {\n        \"id\": \"linz_parcels\",\n        \"title\": \"NZ Primary Parcels - LINZ\",\n        \"url\": \"https://data.linz.govt.nz/layer/50772-nz-primary-parcels/\",\n        \"licence\": \"CC BY 4.0\",\n        \"accessed_at\": \"2026-10-04\",\n        \"source_type\": \"official\",\n        \"attribution\": \"Contains data sourced from the LINZ Data Service licensed for reuse under CC BY 4.0\"\n      },\n      {\n        \"id\": \"linz_titles\",\n        \"title\": \"NZ Property Titles - LINZ\",\n        \"url\": \"https://data.linz.govt.nz/layer/50804-nz-property-titles/\",\n        \"licence\": \"CC BY 4.0\",\n        \"accessed_at\": \"2026-10-04\",\n        \"source_type\": \"official\",\n        \"attribution\": \"Contains data sourced from the LINZ Data Service licensed for reuse under CC BY 4.0\"\n      },\n      {\n        \"id\": \"ac_flood_plains\",\n        \"title\": \"Flood Plains - Auckland Council\",\n        \"url\": \"https://www.arcgis.com/home/item.html?id=0d50200579364e0bb6cda2be0893fc8b\",\n        \"licence\": \"No licence stated: internal and external use, with disclaimer\",\n        \"accessed_at\": \"2026-10-04\",\n        \"source_type\": \"official\",\n        \"attribution\": \"Source: Auckland Council. Indicative only; not a substitute for a LIM or a site-specific assessment.\"\n      },\n      {\n        \"id\": \"ac_flood_prone\",\n        \"title\": \"Flood Prone Areas - Auckland Council\",\n        \"url\": \"https://www.arcgis.com/home/item.html?id=0be75c47bc1a4f28b9a7745a3eba5cbf\",\n        \"licence\": \"Creative Commons (version not stated)\",\n        \"accessed_at\": \"2026-10-04\",\n        \"source_type\": \"official\",\n        \"attribution\": \"Source: Auckland Council. Indicative only; not a substitute for a LIM or a site-specific assessment.\"\n      },\n      {\n        \"id\": \"ac_overland_flow\",\n        \"title\": \"Overland Flow Paths - Auckland Council\",\n        \"url\": \"https://www.arcgis.com/home/item.html?id=8217a19b1079402bbd026f5a869e8eed\",\n        \"licence\": \"Creative Commons (version not stated)\",\n        \"accessed_at\": \"2026-10-04\",\n        \"source_type\": \"official\",\n        \"attribution\": \"Source: Auckland Council. Indicative only; not a substitute for a LIM or a site-specific assessment.\"\n      },\n      {\n        \"id\": \"ac_coastal\",\n        \"title\": \"Coastal Inundation 1% AEP - Auckland Council\",\n        \"url\": \"https://www.arcgis.com/home/item.html?id=e1b4f3e57dc64b6395098a17ac979eeb\",\n        \"licence\": \"Creative Commons (version not stated)\",\n        \"accessed_at\": \"2026-10-04\",\n        \"source_type\": \"official\",\n        \"attribution\": \"Source: Auckland Council. Indicative only; not a substitute for a LIM or a site-specific assessment.\"\n      },\n      {\n        \"id\": \"ac_landslide\",\n        \"title\": \"Landslide Susceptibility 2025 (shallow and large scale) - Auckland Council\",\n        \"url\": \"https://www.arcgis.com/home/item.html?id=7bc3e13a8c194946b478736afcd9d840\",\n        \"licence\": \"CC BY 4.0\",\n        \"accessed_at\": \"2026-10-04\",\n        \"source_type\": \"official\",\n        \"attribution\": \"Source: Auckland Council. Indicative only; not a substitute for a LIM or a site-specific assessment.\"\n      },\n      {\n        \"id\": \"ac_liquefaction\",\n        \"title\": \"Liquefaction Vulnerability Basic Assessment - Auckland Council\",\n        \"url\": \"https://www.arcgis.com/home/item.html?id=89f292e28e194457bf04262647bc1905\",\n        \"licence\": \"CC BY 4.0\",\n        \"accessed_at\": \"2026-10-04\",\n        \"source_type\": \"official\",\n        \"attribution\": \"Source: Auckland Council. Indicative only; not a substitute for a LIM or a site-specific assessment.\"\n      },\n      {\n        \"id\": \"ac_tsunami\",\n        \"title\": \"Tsunami Evacuation Zone - Auckland Council\",\n        \"url\": \"https://www.arcgis.com/home/item.html?id=3fb25ea90d24498b98571f8e84328987\",\n        \"licence\": \"CC BY 4.0\",\n        \"accessed_at\": \"2026-10-04\",\n        \"source_type\": \"official\",\n        \"attribution\": \"Source: Auckland Council. Indicative only; not a substitute for a LIM or a site-specific assessment.\"\n      },\n      {\n        \"id\": \"ac_coastal_erosion\",\n        \"title\": \"Coastal Erosion - ASCIE 2130 (RCP8.5+) - Auckland Council GeoMaps\",\n        \"url\": \"https://mapspublic.aucklandcouncil.govt.nz/arcgis/rest/services/UnitaryPlan/PNPSUDCoastalErosionPolygon/MapServer/0\",\n        \"licence\": \"GeoMaps terms: personal and business use; no substantial copying without consent\",\n        \"accessed_at\": \"2026-10-04\",\n        \"source_type\": \"official\",\n        \"attribution\": \"Source: Auckland Council. Indicative only; not a substitute for a LIM or a site-specific assessment.\"\n      },\n      {\n        \"id\": \"ac_valuation\",\n        \"title\": \"Rate Assessment (valuation and rates) - Auckland Council GeoMaps\",\n        \"url\": \"https://mapspublic.aucklandcouncil.govt.nz/arcgis/rest/services/Landbase/MapServer/37\",\n        \"licence\": \"GeoMaps terms: personal and business use; no substantial copying without consent\",\n        \"accessed_at\": \"2026-10-04\",\n        \"source_type\": \"official\",\n        \"attribution\": \"Source: Auckland Council (copyright). Council valuations do not represent current market value.\"\n      },\n      {\n        \"id\": \"ac_property_page\",\n        \"title\": \"Find your property rates or valuation - Auckland Council\",\n        \"url\": \"https://www.aucklandcouncil.govt.nz/en/property-rates-valuations/find-property-rates-valuation.html\",\n        \"licence\": \"Website terms: reproduction for informational purposes with acknowledgement\",\n        \"accessed_at\": \"2026-10-04\",\n        \"source_type\": \"official\",\n        \"attribution\": \"Source: Auckland Council (subject to copyright).\"\n      }\n    ]\n  },\n  \"user_inputs\": {\n    \"price_override\": null,\n    \"deposit\": 60000,\n    \"household_income\": 120000,\n    \"existing_debts\": 10000,\n    \"rate_pct\": null,\n    \"household_type\": null,\n    \"chat_supplied\": {\n      \"year_built\": null,\n      \"cladding\": null\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "3. Real PropertyContext: 44 Lorne Street (no flood intersection), price overridden to $900k, LVR < 80",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{rules}}/v1/rules",
+              "host": [
+                "{{rules}}"
+              ],
+              "path": [
+                "v1",
+                "rules"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"property_context\": {\n    \"property\": {\n      \"cv\": {\n        \"value\": 65000000.0,\n        \"valuation_date\": \"2024-05-01\",\n        \"status\": \"found\",\n        \"reason\": null,\n        \"source_id\": \"ac_valuation\"\n      },\n      \"title_type\": {\n        \"value\": \"Freehold\",\n        \"status\": \"found\",\n        \"reason\": null,\n        \"source_id\": \"linz_titles\",\n        \"linz_types\": [\n          \"Freehold\"\n        ]\n      },\n      \"year_built\": {\n        \"value\": null,\n        \"status\": \"not_found\",\n        \"reason\": \"property_category_has_no_build_decade\",\n        \"source_id\": \"ac_property_page\",\n        \"decade_range\": null,\n        \"property_category\": \"OX\"\n      },\n      \"cladding\": {\n        \"value\": null,\n        \"status\": \"unavailable\",\n        \"reason\": \"no_free_source\",\n        \"source_id\": null\n      },\n      \"last_sale\": {\n        \"status\": \"unavailable\",\n        \"reason\": \"no_licensed_source\",\n        \"source_id\": null,\n        \"price\": null,\n        \"date\": null\n      },\n      \"annual_rates\": {\n        \"status\": \"found\",\n        \"reason\": null,\n        \"source_id\": \"ac_valuation\",\n        \"value\": 46162.29,\n        \"rating_year\": \"2026/2027\"\n      },\n      \"land_value\": {\n        \"status\": \"found\",\n        \"reason\": null,\n        \"source_id\": \"ac_valuation\",\n        \"value\": 24500000.0\n      },\n      \"improvements_value\": {\n        \"status\": \"found\",\n        \"reason\": null,\n        \"source_id\": \"ac_valuation\",\n        \"value\": 40500000.0\n      },\n      \"rateability\": {\n        \"status\": \"found\",\n        \"reason\": null,\n        \"source_id\": \"ac_valuation\",\n        \"value\": \"Mixed Rateable\"\n      },\n      \"improvement_description\": {\n        \"status\": \"found\",\n        \"reason\": null,\n        \"source_id\": \"ac_valuation\",\n        \"value\": \"CENTRAL CITY LIBRARY\"\n      },\n      \"land_use\": {\n        \"status\": \"found\",\n        \"reason\": null,\n        \"source_id\": \"ac_valuation\",\n        \"value\": \"Multi-use in community service\"\n      },\n      \"land_area_m2\": {\n        \"status\": \"found\",\n        \"reason\": null,\n        \"source_id\": \"ac_valuation\",\n        \"value\": 3257.0\n      },\n      \"floor_area_m2\": {\n        \"status\": \"found\",\n        \"reason\": null,\n        \"source_id\": \"ac_property_page\",\n        \"value\": 12181.0\n      },\n      \"building_site_coverage_m2\": {\n        \"status\": \"found\",\n        \"reason\": null,\n        \"source_id\": \"ac_property_page\",\n        \"value\": 3200.0\n      },\n      \"legal_description\": {\n        \"status\": \"found\",\n        \"reason\": null,\n        \"source_id\": \"ac_valuation\",\n        \"value\": \"Lot 1 DP 84127\"\n      },\n      \"record_of_title\": {\n        \"status\": \"found\",\n        \"reason\": null,\n        \"source_id\": \"ac_valuation\",\n        \"value\": \"NA40B/1036\"\n      },\n      \"valuation_number\": {\n        \"status\": \"found\",\n        \"reason\": null,\n        \"source_id\": \"ac_valuation\",\n        \"value\": \"00006-05200120000\"\n      },\n      \"local_board\": {\n        \"status\": \"found\",\n        \"reason\": null,\n        \"source_id\": \"ac_property_page\",\n        \"value\": \"Waitemata\"\n      }\n    },\n    \"hazards\": [\n      {\n        \"layer\": \"flood_plain\",\n        \"priority\": \"primary\",\n        \"status\": \"none\",\n        \"geometry\": \"polygon\",\n        \"overlap_pct\": null,\n        \"crosses_parcel\": null,\n        \"classes\": [],\n        \"susceptibility\": null,\n        \"data_date\": \"2026-10-02\",\n        \"reason\": null,\n        \"source_id\": \"ac_flood_plains\"\n      },\n      {\n        \"layer\": \"flood_prone_area\",\n        \"priority\": \"primary\",\n        \"status\": \"none\",\n        \"geometry\": \"polygon\",\n        \"overlap_pct\": null,\n        \"crosses_parcel\": null,\n        \"classes\": [],\n        \"susceptibility\": null,\n        \"data_date\": \"2026-10-02\",\n        \"reason\": null,\n        \"source_id\": \"ac_flood_prone\"\n      },\n      {\n        \"layer\": \"overland_flow_path\",\n        \"priority\": \"primary\",\n        \"status\": \"none\",\n        \"geometry\": \"line\",\n        \"overlap_pct\": null,\n        \"crosses_parcel\": null,\n        \"classes\": [],\n        \"susceptibility\": null,\n        \"data_date\": \"2026-03-24\",\n        \"reason\": null,\n        \"source_id\": \"ac_overland_flow\"\n      },\n      {\n        \"layer\": \"coastal_inundation\",\n        \"priority\": \"primary\",\n        \"status\": \"none\",\n        \"geometry\": \"polygon\",\n        \"overlap_pct\": null,\n        \"crosses_parcel\": null,\n        \"classes\": [],\n        \"susceptibility\": null,\n        \"data_date\": \"2025-05-30\",\n        \"reason\": null,\n        \"source_id\": \"ac_coastal\"\n      },\n      {\n        \"layer\": \"landslide_shallow\",\n        \"priority\": \"secondary\",\n        \"status\": \"intersects\",\n        \"geometry\": \"polygon\",\n        \"overlap_pct\": null,\n        \"crosses_parcel\": null,\n        \"classes\": [\n          \"Low\",\n          \"Moderate\",\n          \"Very Low\"\n        ],\n        \"susceptibility\": \"Moderate\",\n        \"data_date\": \"2025-09-16\",\n        \"reason\": \"region_wide_layer_class_is_the_finding\",\n        \"source_id\": \"ac_landslide\"\n      },\n      {\n        \"layer\": \"landslide_large_scale\",\n        \"priority\": \"secondary\",\n        \"status\": \"intersects\",\n        \"geometry\": \"polygon\",\n        \"overlap_pct\": null,\n        \"crosses_parcel\": null,\n        \"classes\": [\n          \"Low\"\n        ],\n        \"susceptibility\": \"Low\",\n        \"data_date\": \"2025-09-16\",\n        \"reason\": \"region_wide_layer_class_is_the_finding\",\n        \"source_id\": \"ac_landslide\"\n      },\n      {\n        \"layer\": \"liquefaction\",\n        \"priority\": \"secondary\",\n        \"status\": \"intersects\",\n        \"geometry\": \"polygon\",\n        \"overlap_pct\": null,\n        \"crosses_parcel\": null,\n        \"classes\": [\n          \"Very Low\"\n        ],\n        \"susceptibility\": null,\n        \"data_date\": \"2022-08-17\",\n        \"reason\": \"region_wide_layer_class_is_the_finding\",\n        \"source_id\": \"ac_liquefaction\"\n      },\n      {\n        \"layer\": \"tsunami_evacuation_zone\",\n        \"priority\": \"secondary\",\n        \"status\": \"none\",\n        \"geometry\": \"polygon\",\n        \"overlap_pct\": null,\n        \"crosses_parcel\": null,\n        \"classes\": [],\n        \"susceptibility\": null,\n        \"data_date\": \"2024-02-25\",\n        \"reason\": null,\n        \"source_id\": \"ac_tsunami\"\n      },\n      {\n        \"layer\": \"coastal_erosion\",\n        \"priority\": \"secondary\",\n        \"status\": \"none\",\n        \"geometry\": \"polygon\",\n        \"overlap_pct\": null,\n        \"crosses_parcel\": null,\n        \"classes\": [],\n        \"susceptibility\": null,\n        \"data_date\": null,\n        \"reason\": null,\n        \"source_id\": \"ac_coastal_erosion\"\n      }\n    ],\n    \"schema_version\": \"0.1\",\n    \"generated_at\": \"2026-10-04T11:32:13+13:00\",\n    \"address\": {\n      \"status\": \"found\",\n      \"reason\": null,\n      \"source_id\": \"linz_addresses\",\n      \"input\": null,\n      \"matched\": \"44 Lorne Street, Auckland Central, Auckland\",\n      \"linz_address_id\": 1132249,\n      \"lat\": -36.8516927167,\n      \"lng\": 174.76522205\n    },\n    \"parcel\": {\n      \"status\": \"found\",\n      \"reason\": null,\n      \"source_id\": \"linz_parcels\",\n      \"parcel_id\": 4995117,\n      \"spatial_method\": \"parcel\"\n    },\n    \"links\": [\n      {\n        \"id\": \"homes\",\n        \"label\": \"Homes.co.nz\",\n        \"url\": \"https://www.google.com/search?q=site%3Ahomes.co.nz+%2244+Lorne+Street%22+Auckland\",\n        \"prefilled\": true,\n        \"kind\": \"site_search\"\n      },\n      {\n        \"id\": \"oneroof\",\n        \"label\": \"OneRoof\",\n        \"url\": \"https://www.google.com/search?q=site%3Aoneroof.co.nz+%2244+Lorne+Street%22+Auckland\",\n        \"prefilled\": true,\n        \"kind\": \"site_search\"\n      },\n      {\n        \"id\": \"council_valuation\",\n        \"label\": \"Auckland Council property search\",\n        \"url\": \"https://www.aucklandcouncil.govt.nz/en/property-rates-valuations/find-property-rates-valuation/12345450368.html\",\n        \"prefilled\": true,\n        \"kind\": \"direct\"\n      },\n      {\n        \"id\": \"council_flood_viewer\",\n        \"label\": \"Auckland Council Flood Viewer\",\n        \"url\": \"https://experience.arcgis.com/experience/cbde7f2134404f4d90adce5396a0a630\",\n        \"prefilled\": false,\n        \"kind\": \"home\"\n      },\n      {\n        \"id\": \"council_geomaps\",\n        \"label\": \"Auckland Council GeoMaps (zoning, pipes and all council layers)\",\n        \"url\": \"https://geomapspublic.aucklandcouncil.govt.nz/viewer/index.html?task=select&entity=rateacckey&values=12345450368\",\n        \"prefilled\": true,\n        \"kind\": \"direct\"\n      },\n      {\n        \"id\": \"nhc_claims_map\",\n        \"label\": \"NHC Natural Hazards Portal\",\n        \"url\": \"https://www.naturalhazardsportal.govt.nz/\",\n        \"prefilled\": false,\n        \"kind\": \"home\"\n      }\n    ],\n    \"sources\": [\n      {\n        \"id\": \"linz_addresses\",\n        \"title\": \"NZ Addresses - LINZ\",\n        \"url\": \"https://data.linz.govt.nz/layer/123113-nz-addresses/\",\n        \"licence\": \"CC BY 4.0\",\n        \"accessed_at\": \"2026-10-04\",\n        \"source_type\": \"official\",\n        \"attribution\": \"Contains data sourced from the LINZ Data Service licensed for reuse under CC BY 4.0\"\n      },\n      {\n        \"id\": \"linz_parcels\",\n        \"title\": \"NZ Primary Parcels - LINZ\",\n        \"url\": \"https://data.linz.govt.nz/layer/50772-nz-primary-parcels/\",\n        \"licence\": \"CC BY 4.0\",\n        \"accessed_at\": \"2026-10-04\",\n        \"source_type\": \"official\",\n        \"attribution\": \"Contains data sourced from the LINZ Data Service licensed for reuse under CC BY 4.0\"\n      },\n      {\n        \"id\": \"linz_titles\",\n        \"title\": \"NZ Property Titles - LINZ\",\n        \"url\": \"https://data.linz.govt.nz/layer/50804-nz-property-titles/\",\n        \"licence\": \"CC BY 4.0\",\n        \"accessed_at\": \"2026-10-04\",\n        \"source_type\": \"official\",\n        \"attribution\": \"Contains data sourced from the LINZ Data Service licensed for reuse under CC BY 4.0\"\n      },\n      {\n        \"id\": \"ac_flood_plains\",\n        \"title\": \"Flood Plains - Auckland Council\",\n        \"url\": \"https://www.arcgis.com/home/item.html?id=0d50200579364e0bb6cda2be0893fc8b\",\n        \"licence\": \"No licence stated: internal and external use, with disclaimer\",\n        \"accessed_at\": \"2026-10-04\",\n        \"source_type\": \"official\",\n        \"attribution\": \"Source: Auckland Council. Indicative only; not a substitute for a LIM or a site-specific assessment.\"\n      },\n      {\n        \"id\": \"ac_flood_prone\",\n        \"title\": \"Flood Prone Areas - Auckland Council\",\n        \"url\": \"https://www.arcgis.com/home/item.html?id=0be75c47bc1a4f28b9a7745a3eba5cbf\",\n        \"licence\": \"Creative Commons (version not stated)\",\n        \"accessed_at\": \"2026-10-04\",\n        \"source_type\": \"official\",\n        \"attribution\": \"Source: Auckland Council. Indicative only; not a substitute for a LIM or a site-specific assessment.\"\n      },\n      {\n        \"id\": \"ac_overland_flow\",\n        \"title\": \"Overland Flow Paths - Auckland Council\",\n        \"url\": \"https://www.arcgis.com/home/item.html?id=8217a19b1079402bbd026f5a869e8eed\",\n        \"licence\": \"Creative Commons (version not stated)\",\n        \"accessed_at\": \"2026-10-04\",\n        \"source_type\": \"official\",\n        \"attribution\": \"Source: Auckland Council. Indicative only; not a substitute for a LIM or a site-specific assessment.\"\n      },\n      {\n        \"id\": \"ac_coastal\",\n        \"title\": \"Coastal Inundation 1% AEP - Auckland Council\",\n        \"url\": \"https://www.arcgis.com/home/item.html?id=e1b4f3e57dc64b6395098a17ac979eeb\",\n        \"licence\": \"Creative Commons (version not stated)\",\n        \"accessed_at\": \"2026-10-04\",\n        \"source_type\": \"official\",\n        \"attribution\": \"Source: Auckland Council. Indicative only; not a substitute for a LIM or a site-specific assessment.\"\n      },\n      {\n        \"id\": \"ac_landslide\",\n        \"title\": \"Landslide Susceptibility 2025 (shallow and large scale) - Auckland Council\",\n        \"url\": \"https://www.arcgis.com/home/item.html?id=7bc3e13a8c194946b478736afcd9d840\",\n        \"licence\": \"CC BY 4.0\",\n        \"accessed_at\": \"2026-10-04\",\n        \"source_type\": \"official\",\n        \"attribution\": \"Source: Auckland Council. Indicative only; not a substitute for a LIM or a site-specific assessment.\"\n      },\n      {\n        \"id\": \"ac_liquefaction\",\n        \"title\": \"Liquefaction Vulnerability Basic Assessment - Auckland Council\",\n        \"url\": \"https://www.arcgis.com/home/item.html?id=89f292e28e194457bf04262647bc1905\",\n        \"licence\": \"CC BY 4.0\",\n        \"accessed_at\": \"2026-10-04\",\n        \"source_type\": \"official\",\n        \"attribution\": \"Source: Auckland Council. Indicative only; not a substitute for a LIM or a site-specific assessment.\"\n      },\n      {\n        \"id\": \"ac_tsunami\",\n        \"title\": \"Tsunami Evacuation Zone - Auckland Council\",\n        \"url\": \"https://www.arcgis.com/home/item.html?id=3fb25ea90d24498b98571f8e84328987\",\n        \"licence\": \"CC BY 4.0\",\n        \"accessed_at\": \"2026-10-04\",\n        \"source_type\": \"official\",\n        \"attribution\": \"Source: Auckland Council. Indicative only; not a substitute for a LIM or a site-specific assessment.\"\n      },\n      {\n        \"id\": \"ac_coastal_erosion\",\n        \"title\": \"Coastal Erosion - ASCIE 2130 (RCP8.5+) - Auckland Council GeoMaps\",\n        \"url\": \"https://mapspublic.aucklandcouncil.govt.nz/arcgis/rest/services/UnitaryPlan/PNPSUDCoastalErosionPolygon/MapServer/0\",\n        \"licence\": \"GeoMaps terms: personal and business use; no substantial copying without consent\",\n        \"accessed_at\": \"2026-10-04\",\n        \"source_type\": \"official\",\n        \"attribution\": \"Source: Auckland Council. Indicative only; not a substitute for a LIM or a site-specific assessment.\"\n      },\n      {\n        \"id\": \"ac_valuation\",\n        \"title\": \"Rate Assessment (valuation and rates) - Auckland Council GeoMaps\",\n        \"url\": \"https://mapspublic.aucklandcouncil.govt.nz/arcgis/rest/services/Landbase/MapServer/37\",\n        \"licence\": \"GeoMaps terms: personal and business use; no substantial copying without consent\",\n        \"accessed_at\": \"2026-10-04\",\n        \"source_type\": \"official\",\n        \"attribution\": \"Source: Auckland Council (copyright). Council valuations do not represent current market value.\"\n      },\n      {\n        \"id\": \"ac_property_page\",\n        \"title\": \"Find your property rates or valuation - Auckland Council\",\n        \"url\": \"https://www.aucklandcouncil.govt.nz/en/property-rates-valuations/find-property-rates-valuation.html\",\n        \"licence\": \"Website terms: reproduction for informational purposes with acknowledgement\",\n        \"accessed_at\": \"2026-10-04\",\n        \"source_type\": \"official\",\n        \"attribution\": \"Source: Auckland Council (subject to copyright).\"\n      }\n    ]\n  },\n  \"user_inputs\": {\n    \"price_override\": 900000,\n    \"deposit\": 250000,\n    \"household_income\": 180000,\n    \"existing_debts\": 0,\n    \"rate_pct\": null,\n    \"household_type\": null,\n    \"chat_supplied\": {\n      \"year_built\": null,\n      \"cladding\": null\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "4. First Home Loan: single applicant over the $95k cap -> no FHL scenario, flag fhl_income_over_cap",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{rules}}/v1/rules",
+              "host": [
+                "{{rules}}"
+              ],
+              "path": [
+                "v1",
+                "rules"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"property_context\": { \"property\": { \"cv\": { \"value\": 750000, \"status\": \"found\" } }, \"hazards\": [] },\n  \"user_inputs\": { \"deposit\": 50000, \"household_income\": 110000, \"existing_debts\": 0, \"household_type\": \"single\" }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "5. User-supplied interest rate and chat-supplied build year/cladding (leaky-building items)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{rules}}/v1/rules",
+              "host": [
+                "{{rules}}"
+              ],
+              "path": [
+                "v1",
+                "rules"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"property_context\": {\n    \"property\": {\n      \"cv\": { \"value\": 820000, \"status\": \"found\" },\n      \"year_built\": { \"value\": null, \"status\": \"not_found\", \"reason\": \"no_record\" },\n      \"cladding\": { \"value\": null, \"status\": \"unavailable\", \"reason\": \"no_free_source\" }\n    },\n    \"hazards\": []\n  },\n  \"user_inputs\": {\n    \"deposit\": 200000,\n    \"household_income\": 160000,\n    \"existing_debts\": 5000,\n    \"rate_pct\": 5.5,\n    \"chat_supplied\": { \"year_built\": 1998, \"cladding\": \"monolithic\" }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "6. \"Not found is not no risk\": primary hazard layers unavailable -> warnings hazards_partial / hazards_unavailable",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{rules}}/v1/rules",
+              "host": [
+                "{{rules}}"
+              ],
+              "path": [
+                "v1",
+                "rules"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"property_context\": {\n    \"property\": { \"cv\": { \"value\": 900000, \"status\": \"found\" } },\n    \"hazards\": [\n      { \"layer\": \"flood_plain\", \"priority\": \"primary\", \"status\": \"unavailable\", \"reason\": \"service_timeout\" },\n      { \"layer\": \"flood_prone_area\", \"priority\": \"primary\", \"status\": \"not_found\", \"reason\": \"no_record\" },\n      { \"layer\": \"overland_flow_path\", \"priority\": \"primary\", \"status\": \"none\" }\n    ]\n  },\n  \"user_inputs\": { \"deposit\": 180000, \"household_income\": 140000, \"existing_debts\": 0 }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "7. CV missing -> use price_override",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{rules}}/v1/rules",
+              "host": [
+                "{{rules}}"
+              ],
+              "path": [
+                "v1",
+                "rules"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"property_context\": { \"property\": { \"cv\": { \"value\": null, \"status\": \"unavailable\", \"reason\": \"service_down\" } }, \"hazards\": [] },\n  \"user_inputs\": { \"price_override\": 950000, \"deposit\": 190000, \"household_income\": 170000, \"existing_debts\": 0 }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "8. Cash purchase (deposit equals price) -> warning cash_purchase_no_loan",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{rules}}/v1/rules",
+              "host": [
+                "{{rules}}"
+              ],
+              "path": [
+                "v1",
+                "rules"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"property_context\": { \"property\": { \"cv\": { \"value\": 600000, \"status\": \"found\" } }, \"hazards\": [] },\n  \"user_inputs\": { \"deposit\": 600000, \"household_income\": 90000, \"existing_debts\": 0 }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "9. Validation error (negative deposit) -> 422 {\"error\": {...}}",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{rules}}/v1/rules",
+              "host": [
+                "{{rules}}"
+              ],
+              "path": [
+                "v1",
+                "rules"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"property_context\": { \"property\": {}, \"hazards\": [] },\n  \"user_inputs\": { \"deposit\": -5 }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "10. Wrong method -> 405 method_not_allowed",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{rules}}/v1/rules",
+              "host": [
+                "{{rules}}"
+              ],
+              "path": [
+                "v1",
+                "rules"
+              ]
+            }
+          }
+        },
+        {
+          "name": "OpenAPI contract",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{rules}}/openapi.json",
+              "host": [
+                "{{rules}}"
+              ],
+              "path": [
+                "openapi.json"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "property-api",
+      "item": [
+        {
+          "name": "Health check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{property}}/healthz",
+              "host": [
+                "{{property}}"
+              ],
+              "path": [
+                "healthz"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Address search (prefix match, up to 8 Auckland addresses, ~2 s)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{property}}/v1/addresses?q=740 Sandringham",
+              "host": [
+                "{{property}}"
+              ],
+              "path": [
+                "v1",
+                "addresses"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "740 Sandringham"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "PropertyContext for a LINZ address_id (740 Sandringham Road Extension, a public reserve)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{property}}/v1/property-context?address_id=2100210",
+              "host": [
+                "{{property}}"
+              ],
+              "path": [
+                "v1",
+                "property-context"
+              ],
+              "query": [
+                {
+                  "key": "address_id",
+                  "value": "2100210"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "PropertyContext for 44 Lorne Street (Auckland Central Library)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{property}}/v1/property-context?address_id=1132249",
+              "host": [
+                "{{property}}"
+              ],
+              "path": [
+                "v1",
+                "property-context"
+              ],
+              "query": [
+                {
+                  "key": "address_id",
+                  "value": "1132249"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GeoJSON for the development map (not part of the hand-off contract)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{property}}/v1/map?address_id=2100210",
+              "host": [
+                "{{property}}"
+              ],
+              "path": [
+                "v1",
+                "map"
+              ],
+              "query": [
+                {
+                  "key": "address_id",
+                  "value": "2100210"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
