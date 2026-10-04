@@ -142,10 +142,12 @@ def test_fhl_lists_all_lenders():
 def test_fhl_unknown_values_are_null_not_defaulted():
     s = fhl()
     by = {x.bank_id: x for x in s.lenders}
-    asb = by["asb"]  # special_applies null
-    assert asb.rate_pct is None and asb.rate_basis == "unknown"
-    assert asb.candidate_rates.special == 4.99
-    assert asb.monthly is None and asb.monthly_if_full_premium is None
+    unknown = by["nzhl"]  # special_applies null, lmi_passthrough_pct null
+    assert unknown.rate_pct is None and unknown.rate_basis == "unknown"
+    assert unknown.candidate_rates.special == 4.99
+    assert unknown.monthly is None and unknown.monthly_if_full_premium is None
+    asb = by["asb"]  # special_applies true (LEM exemption), passthrough 1.2
+    assert asb.rate_basis == "special" and asb.rate_pct == 4.99
     kiwi = by["kiwibank"]  # special_applies true, passthrough 1.00
     assert kiwi.rate_basis == "special" and kiwi.rate_pct == 5.15
     assert kiwi.lmi_amount == 8800 and kiwi.loan_with_lmi == 888800
