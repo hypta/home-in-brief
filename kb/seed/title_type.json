@@ -15,10 +15,10 @@
     "source_type": "official",
     "licence": "Copyright Real Estate Authority (not Creative Commons); may be reproduced free of charge for personal or in-house use only",
     "next_step_en": "Ask your lawyer to check the record of title for registered interests.",
-    "verified_by": null,
-    "verified_at": null,
-    "verified_content_hash": null,
-    "status": "draft",
+    "verified_by": "Kevin",
+    "verified_at": "2026-10-04T08:56:34Z",
+    "verified_content_hash": "0d8060e1b5ad8af42e099755aa552f3a4a6ac6288d7d7a4d7a441d6369c095ce",
+    "status": "verified",
     "last_check": null
   },
   {
@@ -37,10 +37,10 @@
     "source_type": "official",
     "licence": "Copyright Real Estate Authority (not Creative Commons); may be reproduced free of charge for personal or in-house use only",
     "next_step_en": "Ask your lawyer to check the flats plan against the actual buildings and the lease terms.",
-    "verified_by": null,
-    "verified_at": null,
-    "verified_content_hash": null,
-    "status": "draft",
+    "verified_by": "Kevin",
+    "verified_at": "2026-10-04T08:56:43Z",
+    "verified_content_hash": "71143593c5c5b9adc6025aec66d21c96f8fff7116482031bec4487e68d42f2bb",
+    "status": "verified",
     "last_check": null
   },
   {
@@ -59,10 +59,10 @@
     "source_type": "official",
     "licence": "Copyright Real Estate Authority (not Creative Commons); may be reproduced free of charge for personal or in-house use only",
     "next_step_en": "Ask your lawyer to compare the flats plan on the title with the property.",
-    "verified_by": null,
-    "verified_at": null,
-    "verified_content_hash": null,
-    "status": "draft",
+    "verified_by": "Kevin",
+    "verified_at": "2026-10-04T08:56:02Z",
+    "verified_content_hash": "a939b856748da2170e6a3e692dae5cafb5c39da27eed3f08a7b6b8b8e759a3c0",
+    "status": "verified",
     "last_check": null
   },
   {
@@ -81,10 +81,10 @@
     "source_type": "official",
     "licence": "Copyright Real Estate Authority (not Creative Commons); may be reproduced free of charge for personal or in-house use only",
     "next_step_en": "Request the body corporate rules, meeting minutes, maintenance plan and levy details.",
-    "verified_by": null,
-    "verified_at": null,
-    "verified_content_hash": null,
-    "status": "draft",
+    "verified_by": "Kevin",
+    "verified_at": "2026-10-04T08:56:49Z",
+    "verified_content_hash": "84f41879bafb17a646b6e752da9e4072c8e54a217d58fba4eee475e317577c9e",
+    "status": "verified",
     "last_check": null
   },
   {

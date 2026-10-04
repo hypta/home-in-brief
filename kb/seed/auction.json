@@ -13,10 +13,10 @@
     "source_type": "official",
     "licence": "Copyright Real Estate Authority (not Creative Commons); may be reproduced free of charge for personal or in-house use only",
     "next_step_en": "Ask your lender and lawyer what finance and insurance arrangements to confirm for an auction.",
-    "verified_by": null,
-    "verified_at": null,
-    "verified_content_hash": null,
-    "status": "draft",
+    "verified_by": "Kevin",
+    "verified_at": "2026-10-04T08:54:03Z",
+    "verified_content_hash": "4d49958a43ed08578d467ba3f8999a9197fee66092e7b2574a24394ea562e1ab",
+    "status": "verified",
     "last_check": null
   }
 ]

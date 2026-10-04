@@ -16,10 +16,10 @@
     "source_type": "official",
     "licence": "Copyright Real Estate Authority (not Creative Commons); may be reproduced free of charge for personal or in-house use only",
     "next_step_en": "Ask for the building's age and cladding details and consider a pre-purchase building inspection.",
-    "verified_by": null,
-    "verified_at": null,
-    "verified_content_hash": null,
-    "status": "draft",
+    "verified_by": "Kevin",
+    "verified_at": "2026-10-04T08:54:34Z",
+    "verified_content_hash": "fb71bf3f2476e44de02e18587d1b93c9cfeeb8a57db5bb6ca4211d4791ba0981",
+    "status": "verified",
     "last_check": null
   }
 ]

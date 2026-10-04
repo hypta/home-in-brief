@@ -15,10 +15,10 @@
     "source_type": "official",
     "licence": "Copyright Real Estate Authority (not Creative Commons); may be reproduced free of charge for personal or in-house use only",
     "next_step_en": "Ask whether the cladding is monolithic and consider a pre-purchase building inspection.",
-    "verified_by": null,
-    "verified_at": null,
-    "verified_content_hash": null,
-    "status": "draft",
+    "verified_by": "Kevin",
+    "verified_at": "2026-10-04T08:55:02Z",
+    "verified_content_hash": "3ba7d95aaef4ad89c73558cdff167211ff27c61c602b061f1f25432ee55e99c3",
+    "status": "verified",
     "last_check": null
   }
 ]
