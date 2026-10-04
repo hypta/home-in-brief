@@ -6,7 +6,8 @@ A and B share this one repo; the submission is a single GitHub link.
 
 | Directory | Owner | Notes |
 |---|---|---|
-| `services/property-api/` | A | calls rules-api (see section 11) |
+| `services/property-api/` | A | private Cloud Run service (section 8b) |
+| `services/web/` | A | the only public Cloud Run service: report page and relay to the private services (section 8c) |
 | `services/rules-api/` | B | private Cloud Run service |
 | `jobs/rates-refresh/` | B | Cloud Run job; scheduler code kept but disabled, rates maintained by hand (`RATES_UPDATE.md`) |
 | `jobs/kb-refresh/` | B | Cloud Run job, weekly |
@@ -16,7 +17,7 @@ A and B share this one repo; the submission is a single GitHub link.
 - The Docker build context is always the repo root (`docker build -f <dir>/Dockerfile .`), so Dockerfiles can `COPY shared/ ...`.
 - All paths in `cloudbuild.yaml` and this file are relative to the repo root.
 - Suggested: add `.github/CODEOWNERS` mapping each directory above to its owner (not created yet).
-- A's image is a commented-out step in `cloudbuild.yaml`; enable it by uncommenting the step and its `images:` line.
+- `cloudbuild.yaml` builds A's property-api and web images together with B's three images.
 
 Commands are listed in order and are **not executed by any script**. Run them yourself.
 
@@ -153,6 +154,87 @@ gcloud run services add-iam-policy-binding rules-api --region=$REGION \
 
 export RULES_API_URL=$(gcloud run services describe rules-api --region=$REGION --format='value(status.url)')
 ```
+
+## 8b. Deploy property-api (private)
+
+property-api uses no Firestore. Its only secret is the LINZ Data Service key. Only the public web service
+(`web-sa`) may call it, with an ID token as in section 11 (`audience` = the property-api URL); browsers never
+call it directly.
+
+```bash
+# identity of the public web service, the only caller of property-api
+gcloud iam service-accounts create web-sa --display-name=web-sa
+
+# LINZ key: read from the unquoted LINZ_API_KEY=... line in .env, so it is never typed or printed
+gcloud secrets create LINZ_API_KEY --replication-policy=automatic
+grep '^LINZ_API_KEY=' .env | cut -d= -f2- | tr -d '\n' | gcloud secrets versions add LINZ_API_KEY --data-file=-
+gcloud secrets add-iam-policy-binding LINZ_API_KEY \
+  --member=serviceAccount:$(SA property-api-sa) --role=roles/secretmanager.secretAccessor
+
+gcloud run deploy property-api \
+  --image=$IMG/property-api:$TAG --region=$REGION \
+  --service-account=$(SA property-api-sa) \
+  --no-allow-unauthenticated \
+  --set-secrets=LINZ_API_KEY=LINZ_API_KEY:latest
+
+gcloud run services add-iam-policy-binding property-api --region=$REGION \
+  --member=serviceAccount:$(SA web-sa) --role=roles/run.invoker
+
+export PROPERTY_API_URL=$(gcloud run services describe property-api --region=$REGION --format='value(status.url)')
+```
+
+For the judging period add `--min-instances=1`, as for rules-api in section 8.
+
+Check as a user who has `run.invoker` on the service. The check uses `/v1/addresses` rather than `/healthz`
+because Cloud Run reserves some paths ending in `z`
+([known issues](https://docs.cloud.google.com/run/docs/known-issues)). The two address ids are the public
+facilities used in the tests:
+
+```bash
+TOKEN=$(gcloud auth print-identity-token)
+mkdir -p out
+curl -s -o /dev/null -w '%{http_code}\n' "$PROPERTY_API_URL/v1/addresses?q=740%20sandringham"   # no token: 403
+curl -s -H "Authorization: Bearer $TOKEN" "$PROPERTY_API_URL/v1/addresses?q=740%20sandringham"
+curl -s -H "Authorization: Bearer $TOKEN" "$PROPERTY_API_URL/v1/property-context?address_id=2100210" -o out/ctx_2100210.json
+curl -s -H "Authorization: Bearer $TOKEN" "$PROPERTY_API_URL/v1/property-context?address_id=1132249" -o out/ctx_1132249.json
+```
+
+Compare the two files with the same requests against a local run (`services/property-api/README.md`). Only
+`generated_at` should differ; both must carry a New Zealand offset (`+13:00` or `+12:00`).
+
+## 8c. Deploy web (public)
+
+The only service that allows unauthenticated access. It serves the report page and relays the page's API calls
+to property-api and rules-api as `web-sa` (created in section 8b), so `web-sa` needs `run.invoker` on both.
+Deploy it after sections 8 and 8b, which export `RULES_API_URL` and `PROPERTY_API_URL`.
+
+```bash
+gcloud run services add-iam-policy-binding rules-api --region=$REGION \
+  --member=serviceAccount:$(SA web-sa) --role=roles/run.invoker
+
+gcloud run deploy web \
+  --image=$IMG/web:$TAG --region=$REGION \
+  --service-account=$(SA web-sa) \
+  --allow-unauthenticated \
+  --set-env-vars=PROPERTY_API_URL=$PROPERTY_API_URL,RULES_API_URL=$RULES_API_URL,LINZ_BASEMAPS_KEY=$(grep '^LINZ_BASEMAPS_KEY=' .env | cut -d= -f2-)
+
+export WEB_URL=$(gcloud run services describe web --region=$REGION --format='value(status.url)')
+```
+
+`LINZ_BASEMAPS_KEY` is a plain environment variable, not a secret: the page hands it to browsers, which fetch the
+map tiles themselves. Without it the map uses OpenStreetMap. For the judging period add `--min-instances=1`, as
+for rules-api in section 8.
+
+Check without a token. The relay answers only the paths listed in `services/web/README.md`:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' $WEB_URL/                                   # 200, the page
+curl -s "$WEB_URL/api/addresses?q=740%20sandringham"                                 # property-api through the relay
+curl -s -o /dev/null -w '%{http_code}\n' $WEB_URL/api/rates/latest                   # 200, rules-api through the relay
+curl -s -o /dev/null -w '%{http_code}\n' $WEB_URL/api/anything-else                  # 404
+```
+
+A 502 with `"code": "upstream_auth"` means a `run.invoker` binding for `web-sa` is missing.
 
 ## 9. Cloud Run jobs
 
