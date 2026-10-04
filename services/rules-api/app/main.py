@@ -60,6 +60,7 @@ def _visible(items: list[KbItem], warnings: Optional[list[str]] = None) -> list[
 
 
 @app.get("/healthz", responses=ERRORS)
+@app.get("/health", responses=ERRORS)  # Cloud Run reserves some paths ending in "z"; use /health when deployed
 def healthz() -> dict:
     return {"status": "ok"}
 

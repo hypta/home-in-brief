@@ -16,7 +16,7 @@ Each flag is `{id, source_ids}`. A flag is only listed when it applies.
 | `lvr_over_80` | Deposit is under 20% of the price | Unrounded LVR > 80 | Say a low-equity margin or First Home Loan may apply; cite `rbnz_lvr`. |
 | `dti_over_6` | Total debt exceeds 6x income | Unrounded DTI > 6 | Say lenders restrict high-DTI lending and the figure is above the RBNZ threshold; cite `rbnz_dti`. Show `high_dti_threshold`. |
 | `fhl_deposit_below_5` | Deposit is below the 5% First Home Loan minimum | deposit / price < 5% while LVR > 80 | Say the First Home Loan scenario is not shown because the deposit is under 5%. |
-| `fhl_income_over_cap` | Income is above the First Home Loan cap for this household | Income over $150,000, or over $95,000 for a single applicant | Say the First Home Loan scenario is not shown; quote the caps (`income_caps`). |
+| `fhl_income_over_cap` | Income is above the First Home Loan cap for this household | Income over $150,000, or over $95,000 for a single applicant | Say the First Home Loan scenario is not shown; quote the caps (`fhl_income_caps`). |
 | `fhl_household_type_unknown` | Eligibility depends on household type, which was not given | Income between $95,000 and $150,000 and `household_type` is null | The scenario is present with `eligibility: "conditional"`; show `eligibility_note` and ask for the household type. |
 
 ## Warnings (`warnings[]`)
@@ -27,8 +27,10 @@ Each flag is `{id, source_ids}`. A flag is only listed when it applies.
 |---|---|---|---|
 | `price_missing` | No price to calculate with | No `price_override` and no usable CV | Ask the user for a price; show no loan figures. |
 | `deposit_missing` | Price known, deposit not | `deposit` is null | Ask for a deposit. |
+| `existing_debts_assumed_zero` | DTI and the high-DTI threshold were calculated with no other debts | `existing_debts` is null or not sent | Say the DTI assumes the user has no other debts, and ask for the figure (enter 0 to confirm none). |
 | `income_missing` | DTI and First Home Loan cannot be checked | `household_income` is null | Ask for income if the user wants DTI or First Home Loan figures. |
 | `cash_purchase_no_loan` | Deposit equals the price | deposit == price | Say no loan is needed, so no repayment scenarios are shown. |
+| `deposit_exceeds_price` | Deposit is larger than the price used | deposit > price | Treated like a cash purchase: loan is 0, no repayment scenarios. Say the deposit covers the whole price and invite the user to check the amounts (price override or deposit). Not an error (HTTP 200). |
 | `fhl_skipped_income_missing` | First Home Loan not evaluated | LVR > 80 but income is null | Ask for income. |
 | `fhl_no_lenders` | The snapshot has no First Home Loan lenders | Eligible but no bank has `fhl.lender` | Say lender information is unavailable. |
 
@@ -85,13 +87,31 @@ Each flag is `{id, source_ids}`. A flag is only listed when it applies.
 | `first_home_loan.full_premium_assumed_for` | bank ids | Ranges for these banks assume the full 1.2% premium; say so. |
 | `disclaimer` | text | Show verbatim with the report. |
 
+## First Home Loan note ids (`first_home_loan.note_ids`)
+
+Short codes for explanatory notes on the First Home Loan scenario. Show the suggested text next to the lender figures.
+
+| Note id | Meaning | Suggested display text |
+|---|---|---|
+| `fhl_passthrough_varies` | Kāinga Ora charges lenders a 1.2% premium, and each lender passes on a different share to the borrower; some shares are unknown | "The First Home Loan premium is 1.2% of the loan, but each lender passes on a different share of it. Where a lender's share is unknown, we assume the full 1.2% is added to your loan, so your actual repayment may be lower." Use `lmi_note` for the exact wording and `full_premium_assumed_for` for the banks affected. |
+
+## Fields that are always present
+
+| Field | Meaning | Presentation |
+|---|---|---|
+| `loan_term_years` | Loan term used for every repayment figure (30) | Say "over 30 years" from this value instead of hard-coding it. |
+| `stress_add_pp` | Percentage points added to the rate for the stress figures (2.0) | Say "if rates rose by 2 percentage points". |
+| `rates_stale_after_days` | Days after which `rates_snapshot_date` counts as stale (30) | Use it to word the `rates_snapshot_stale` message. |
+| `default_rate_pct` | Median 1-year standard rate in the snapshot, 2 decimals; null with no rates | Offer as the suggested starting rate; say it is the median of the snapshot. |
+| `fhl_income_caps` | First Home Loan income caps: `single` and `multiple_or_dependants` | Quote when `fhl_income_over_cap` is raised; the `first_home_loan` scenario is not returned then. Same values as `first_home_loan.income_caps`. |
+
 ## Error responses
 
 All 4xx and 5xx responses use `{"error": {"code", "message", "fields": [{"field", "message"}]}}`.
 
 | Code | Status | Meaning |
 |---|---|---|
-| `validation_error` | 422 | Bad input; `fields` names each field and the reason. |
+| `validation_error` | 422 | Bad input (for example a negative deposit); `fields` names each field and the reason. A deposit above the price is not an error: see `deposit_exceeds_price`. |
 | `not_found` | 404 | Resource missing (for example no rates snapshot). |
 | `method_not_allowed` | 405 | Wrong HTTP method for the path. |
 | `http_error` | other 4xx | Any other HTTP error raised by the framework. |

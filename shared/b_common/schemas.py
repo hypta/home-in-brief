@@ -313,6 +313,17 @@ class RulesOutput(BaseModel):
     high_dti_threshold: Optional[float] = None
     rates_snapshot_date: Optional[str] = None
     stress_add_pp: float = 2.0
+    loan_term_years: Optional[int] = Field(
+        None, description="Loan term in years used for every repayment figure (30).")
+    rates_stale_after_days: Optional[int] = Field(
+        None, description="Age in days after which the rates snapshot counts as stale (`rates_snapshot_stale`).")
+    default_rate_pct: Optional[float] = Field(
+        None, description="Median 1-year standard rate (%) across the banks in the rates snapshot, 2 decimals; "
+                          "null when the snapshot has no such rates. A suggested starting rate for the user.")
+    fhl_income_caps: dict[str, int] = Field(
+        default_factory=dict,
+        description="First Home Loan income caps by household (`single`, `multiple_or_dependants`). Always "
+                    "returned, including when `first_home_loan` is not (flag `fhl_income_over_cap`).")
     scenarios: list[Scenario] = Field(default_factory=list)
     flags: list[Flag] = Field(
         default_factory=list, description="Active flags only. Codes are listed in CODES.md.")

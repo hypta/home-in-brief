@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import math
 import re
+import statistics
 from zoneinfo import ZoneInfo
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -30,13 +31,11 @@ FHL_PREMIUM_PCT = 1.2
 FHL_MIN_DEPOSIT_PCT = 5.0
 FHL_CAP_SINGLE = 95000
 FHL_CAP_MULTIPLE_OR_DEPENDANTS = 150000
-FHL_CONDITIONAL_NOTE = (
-    "Eligible only for two or more applicants, or a single applicant with dependants "
-    "(income cap $150,000); single applicants are capped at $95,000."
-)
+FHL_INCOME_CAPS = {"single": FHL_CAP_SINGLE, "multiple_or_dependants": FHL_CAP_MULTIPLE_OR_DEPENDANTS}
 FHL_LMI_NOTE = (
-    "Pass-through share of the 1.2% premium differs by lender and is unknown where "
-    "shown as null; lmi_amount_if_full_premium is a reference only."
+    "Kāinga Ora charges lenders a 1.2% lenders' mortgage insurance premium, and each lender passes on a "
+    "different share of it to the borrower. For lenders that have not published their share, the repayment "
+    "range assumes the full 1.2% premium is added to the loan."
 )
 TERM_YEARS = 30
 MONTHLY, FORTNIGHTLY = 12, 26
@@ -52,6 +51,23 @@ class InputError(ValueError):
     def __init__(self, field_name: str, reason: str):
         super().__init__(f"{field_name}: {reason}")
         self.field_name, self.reason = field_name, reason
+
+
+def money(x: float) -> str:
+    """Whole-dollar display for user-facing text, e.g. 340000.0 -> "$340,000"."""
+    return f"${x:,.0f}"
+
+
+FHL_CONDITIONAL_NOTE = (
+    "Eligible only for two or more applicants, or a single applicant with dependants "
+    f"(income cap {money(FHL_CAP_MULTIPLE_OR_DEPENDANTS)}); single applicants are capped at {money(FHL_CAP_SINGLE)}."
+)
+
+
+def default_rate_pct(snap: Optional[RatesSnapshot]) -> Optional[float]:
+    """Median 1-year standard rate across the banks in the snapshot, 2 decimals; None if there is none."""
+    vals = [r for b in snap.banks if (r := (b.standard or {}).get("1y")) is not None] if snap else []
+    return round(statistics.median(vals), 2) if vals else None
 
 
 def payment(principal: float, rate_pct: float, periods_per_year: int, years: int = TERM_YEARS) -> int:
@@ -326,7 +342,7 @@ def first_home_loan(
     return FirstHomeLoanScenario(
         eligibility="conditional" if conditional else "eligible",
         eligibility_note=FHL_CONDITIONAL_NOTE if conditional else None,
-        income_caps={"single": FHL_CAP_SINGLE, "multiple_or_dependants": FHL_CAP_MULTIPLE_OR_DEPENDANTS},
+        income_caps=dict(FHL_INCOME_CAPS),
         lmi_amount=round(loan * FHL_PREMIUM_PCT / 100, 2),
         lmi_note=FHL_LMI_NOTE,
         lenders=lenders,
@@ -350,12 +366,18 @@ def compute_with_raw(
         rates_snapshot_date=snapshot_date(snap),
         deposit=ui.deposit,
         stress_add_pp=STRESS_ADD_PP,
+        loan_term_years=TERM_YEARS,
+        rates_stale_after_days=STALE_DAYS,
+        default_rate_pct=default_rate_pct(snap),
+        fhl_income_caps=dict(FHL_INCOME_CAPS),
     )
     if out.rates_snapshot_date:
         age = now.astimezone(NZ_TZ).date() - datetime.fromisoformat(out.rates_snapshot_date).date()
         if age > timedelta(days=STALE_DAYS):
             warnings.append("rates_snapshot_stale")
     income, debts = ui.household_income, ui.existing_debts or 0.0
+    if ui.existing_debts is None:
+        warnings.append("existing_debts_assumed_zero")
     if income is not None:
         out.high_dti_threshold = round(6 * income - debts, 2)
 
@@ -365,10 +387,10 @@ def compute_with_raw(
     elif ui.deposit is None:
         warnings.append("deposit_missing")
     else:
+        loan = max(price - ui.deposit, 0.0)
         if ui.deposit > price:
-            raise InputError("deposit", "must not exceed the price used (%s)" % price)
-        loan = price - ui.deposit
-        if loan == 0:
+            warnings.append("deposit_exceeds_price")
+        elif loan == 0:
             warnings.append("cash_purchase_no_loan")
         lvr = raw.lvr = loan / price * 100
         out.loan_amount = round(loan, 2)

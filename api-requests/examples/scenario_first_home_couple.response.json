@@ -1,6 +1,6 @@
 {
     "schema_version": "0.1",
-    "generated_at": "2026-10-04T07:15:13+00:00",
+    "generated_at": "2026-10-04T08:17:46+00:00",
     "price_used": {
         "value": 950000.0,
         "basis": "user",
@@ -13,6 +13,13 @@
     "high_dti_threshold": 772000.0,
     "rates_snapshot_date": "2026-09-27",
     "stress_add_pp": 2.0,
+    "loan_term_years": 30,
+    "rates_stale_after_days": 30,
+    "default_rate_pct": 5.79,
+    "fhl_income_caps": {
+        "single": 95000,
+        "multiple_or_dependants": 150000
+    },
     "scenarios": [
         {
             "id": "bank_standard",
@@ -111,7 +118,7 @@
                 "multiple_or_dependants": 150000
             },
             "lmi_amount": 10260.0,
-            "lmi_note": "Pass-through share of the 1.2% premium differs by lender and is unknown where shown as null; lmi_amount_if_full_premium is a reference only.",
+            "lmi_note": "Kāinga Ora charges lenders a 1.2% lenders' mortgage insurance premium, and each lender passes on a different share of it to the borrower. For lenders that have not published their share, the repayment range assumes the full 1.2% premium is added to the loan.",
             "monthly": null,
             "stress_monthly": null,
             "stress_delta_monthly": null,
@@ -319,10 +326,14 @@
     "kb_items": [
         "kb_auction_unconditional",
         "kb_flood_insurance_limit",
+        "kb_lim_next_step",
+        "kb_overland_flow_path",
+        "kb_landslide_map_context",
         "kb_insurance_condition",
         "kb_nhc_building_cap",
         "kb_nhc_levy",
         "kb_nhc_building_excess",
+        "kb_nhc_land_cover_limits",
         "kb_rbnz_lvr",
         "kb_rbnz_dti",
         "kb_fhl_premium",

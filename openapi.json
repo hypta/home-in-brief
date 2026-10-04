@@ -5,6 +5,46 @@
     "version": "0.1.0"
   },
   "paths": {
+    "/health": {
+      "get": {
+        "summary": "Healthz",
+        "operationId": "healthz_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Healthz Health Get"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/healthz": {
       "get": {
         "summary": "Healthz",
@@ -1485,6 +1525,50 @@
             "type": "number",
             "title": "Stress Add Pp",
             "default": 2.0
+          },
+          "loan_term_years": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Loan Term Years",
+            "description": "Loan term in years used for every repayment figure (30)."
+          },
+          "rates_stale_after_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rates Stale After Days",
+            "description": "Age in days after which the rates snapshot counts as stale (`rates_snapshot_stale`)."
+          },
+          "default_rate_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Rate Pct",
+            "description": "Median 1-year standard rate (%) across the banks in the rates snapshot, 2 decimals; null when the snapshot has no such rates. A suggested starting rate for the user."
+          },
+          "fhl_income_caps": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Fhl Income Caps",
+            "description": "First Home Loan income caps by household (`single`, `multiple_or_dependants`). Always returned, including when `first_home_loan` is not (flag `fhl_income_over_cap`)."
           },
           "scenarios": {
             "items": {

@@ -54,11 +54,13 @@ def test_api_422_names_field():
     assert r.status_code == 422 and "deposit" in json.dumps(r.json()["error"]["fields"])
 
 
-def test_api_deposit_over_price_422():
+def test_api_deposit_over_price_is_200_cash_purchase():
+    # Spec change (integration feedback): deposit above the price is treated like a cash purchase, not a 422.
     r = TestClient(app).post("/v1/rules", json={"user_inputs": {"price_override": 500000, "deposit": 600000}})
-    assert r.status_code == 422
-    d = r.json()["error"]["fields"][0]
-    assert d["field"] == "user_inputs.deposit" and "exceed" in d["message"]
+    assert r.status_code == 200
+    d = r.json()
+    assert d["loan_amount"] == 0 and d["lvr_pct"] == 0 and d["scenarios"] == []
+    assert "deposit_exceeds_price" in d["warnings"]
 
 
 def test_payment_numerically_stable():
