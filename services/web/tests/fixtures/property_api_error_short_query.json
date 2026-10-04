@@ -1,0 +1,1 @@
+{"detail":[{"type":"string_too_short","loc":["query","q"],"msg":"String should have at least 3 characters","input":"ab","ctx":{"min_length":3}}]}

@@ -1,0 +1,12 @@
+{
+ "error": {
+  "code": "validation_error",
+  "message": "Request validation failed.",
+  "fields": [
+   {
+    "field": "user_inputs.deposit",
+    "message": "must not exceed the price used (340000.0)"
+   }
+  ]
+ }
+}
