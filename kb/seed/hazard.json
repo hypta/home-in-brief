@@ -33,10 +33,10 @@
     "source_type": "official",
     "licence": "CC BY-NC 4.0",
     "next_step_en": "Ask your lawyer to obtain and review the LIM report and other property documents from the council.",
-    "verified_by": null,
-    "verified_at": null,
-    "verified_content_hash": null,
-    "status": "draft",
+    "verified_by": "Ting Wang",
+    "verified_at": "2026-10-04T09:30:47Z",
+    "verified_content_hash": "92d80f11c12834087926e9018a3580eb9eff2243d6cea56922dfda60ceee42ef",
+    "status": "verified",
     "last_check": null
   },
   {
@@ -55,10 +55,10 @@
     "source_type": "official",
     "licence": "Copyright Auckland Council; no open licence found",
     "next_step_en": "Ask the council or a drainage engineer whether the mapped overland flow path crosses this property and what the mapping means for it.",
-    "verified_by": null,
-    "verified_at": null,
-    "verified_content_hash": null,
-    "status": "draft",
+    "verified_by": "Ting Wang",
+    "verified_at": "2026-10-04T10:02:39Z",
+    "verified_content_hash": "f71582a17a30e852582ced0bf60bb880b9f5ee807fd10660d55f8aa887ef5e02",
+    "status": "verified",
     "last_check": null
   },
   {
@@ -77,10 +77,10 @@
     "source_type": "official",
     "licence": "Copyright Auckland Council; no open licence found",
     "next_step_en": "Ask the council or your insurer what the coastal inundation mapping means for this property.",
-    "verified_by": null,
-    "verified_at": null,
-    "verified_content_hash": null,
-    "status": "draft",
+    "verified_by": "Ting Wang",
+    "verified_at": "2026-10-04T10:02:39Z",
+    "verified_content_hash": "20f272640dd91b369a47553c2d1c8ee4707a4e3f7d32b16c35c08f21b4ec1c36",
+    "status": "verified",
     "last_check": null
   },
   {
@@ -92,7 +92,7 @@
         "landslide_large_scale"
       ]
     },
-    "claim_en": "Auckland Council says its regional landslide susceptibility maps are not a measure of landslide risk on individual properties and do not predict when a landslide will happen.",
+    "claim_en": "Auckland Council says its regional landslide susceptibility ratings are not a measure of landslide risk on individual properties and do not predict if or when a landslide might happen.",
     "quote": "The susceptibility ratings are not a measure of landslide risk on individual properties.",
     "source_id": "src_akl_landslide_maps",
     "source_url": "https://ourauckland.aucklandcouncil.govt.nz/news/2026/08/understanding-auckland-s-regional-landslide-susceptibility-maps/",
@@ -100,10 +100,10 @@
     "source_type": "official",
     "licence": "Copyright Auckland Council; no open licence found",
     "next_step_en": "Check the council property file for geotechnical reports, or ask a geotechnical engineer for site-specific advice.",
-    "verified_by": null,
-    "verified_at": null,
-    "verified_content_hash": null,
-    "status": "draft",
+    "verified_by": "Ting Wang",
+    "verified_at": "2026-10-04T10:07:26Z",
+    "verified_content_hash": "073248888dfed0a9863e4d66311c166cfa91c1437602caa38037e72dfe547d95",
+    "status": "verified",
     "last_check": null
   }
 ]

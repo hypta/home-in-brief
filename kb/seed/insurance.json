@@ -33,10 +33,10 @@
     "source_type": "official",
     "licence": "CC BY-NC 4.0",
     "next_step_en": "Check your private insurance policy for cover above the Natural Hazards Commission cap.",
-    "verified_by": null,
-    "verified_at": null,
-    "verified_content_hash": null,
-    "status": "draft",
+    "verified_by": "Ting Wang",
+    "verified_at": "2026-10-04T09:30:47Z",
+    "verified_content_hash": "91a1de46e4267596f2f5833a7c9de8acb723eb367f0212adc7b02fb589a38428",
+    "status": "verified",
     "last_check": null
   },
   {
@@ -55,10 +55,10 @@
     "source_type": "official",
     "licence": "Crown copyright (MBIE); reproduction for personal and non-commercial use permitted with the source indicated and disclaimers reproduced",
     "next_step_en": "Ask for the body corporate insurance policy and check whether you need separate cover for your unit and contents.",
-    "verified_by": null,
-    "verified_at": null,
-    "verified_content_hash": null,
-    "status": "draft",
+    "verified_by": "Ting Wang",
+    "verified_at": "2026-10-04T10:02:39Z",
+    "verified_content_hash": "7e5242a078330cbde8fc1e17bd9d2d06fae17695e853aca062c5e86cb7af8bee",
+    "status": "verified",
     "last_check": null
   },
   {
@@ -75,10 +75,10 @@
     "source_type": "official",
     "licence": "CC BY-NC 4.0",
     "next_step_en": "Ask your insurer how the Natural Hazards Insurance levy appears in the quoted premium.",
-    "verified_by": null,
-    "verified_at": null,
-    "verified_content_hash": null,
-    "status": "draft",
+    "verified_by": "Ting Wang",
+    "verified_at": "2026-10-04T09:30:47Z",
+    "verified_content_hash": "92dbbf1c2b896a54ed8a00e294bf463e99909a9b428b8870613a72e1faef34c3",
+    "status": "verified",
     "last_check": null
   },
   {
@@ -95,10 +95,10 @@
     "source_type": "official",
     "licence": "CC BY-NC 4.0",
     "next_step_en": "Ask your insurer about its own excess in addition to the Natural Hazards Commission excess.",
-    "verified_by": null,
-    "verified_at": null,
-    "verified_content_hash": null,
-    "status": "draft",
+    "verified_by": "Ting Wang",
+    "verified_at": "2026-10-04T09:30:47Z",
+    "verified_content_hash": "5a57b4414e4a5573c78aa32498a37194ac79f60e48696636b3101af18bcf24b7",
+    "status": "verified",
     "last_check": null
   },
   {
@@ -115,10 +115,10 @@
     "source_type": "official",
     "licence": "CC BY-NC 4.0",
     "next_step_en": "Ask your insurer and the Natural Hazards Commission which parts of the land are covered.",
-    "verified_by": null,
-    "verified_at": null,
-    "verified_content_hash": null,
-    "status": "draft",
+    "verified_by": "Ting Wang",
+    "verified_at": "2026-10-04T09:30:47Z",
+    "verified_content_hash": "e05d3f6193048b35a95ba80269a627ab793084ec63c96679f23d88ed32c04edd",
+    "status": "verified",
     "last_check": null
   }
 ]

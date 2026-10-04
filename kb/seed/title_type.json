@@ -103,10 +103,10 @@
     "source_type": "official",
     "licence": "Crown copyright (MBIE); reproduction for personal and non-commercial use permitted with the source indicated and disclaimers reproduced",
     "next_step_en": "Ask your lawyer for the body corporate's current levy amounts, budget and long-term maintenance plan.",
-    "verified_by": null,
-    "verified_at": null,
-    "verified_content_hash": null,
-    "status": "draft",
+    "verified_by": "Ting Wang",
+    "verified_at": "2026-10-04T10:02:39Z",
+    "verified_content_hash": "758a4cc930ca25b198156d4ddd8f2ded13ec41fe7a429043f768a273a1e10c52",
+    "status": "verified",
     "last_check": null
   }
 ]

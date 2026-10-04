@@ -5,7 +5,7 @@
     "applies_when": {
       "lvr_over": 80
     },
-    "claim_en": "The Reserve Bank explainer states that up to 25% of new loans can have an LVR above 80%.",
+    "claim_en": "The Reserve Bank explainer states that, for owner-occupiers, up to 25% of new loans can have an LVR above 80%.",
     "quote": "Up to 25% of new loans can have an LVR above 80%",
     "source_id": "rbnz_lvr",
     "source_url": "https://www.rbnz.govt.nz/education/explainers/loan-to-value-restrictions-explained",
@@ -13,10 +13,10 @@
     "source_type": "official",
     "licence": "Copyright Reserve Bank of New Zealand; may be reproduced without permission if RBNZ is acknowledged as source and owner (not Creative Commons)",
     "next_step_en": "Ask your lender how it applies the low-deposit lending limit and what extra costs apply.",
-    "verified_by": null,
-    "verified_at": null,
-    "verified_content_hash": null,
-    "status": "draft",
+    "verified_by": "Ting Wang",
+    "verified_at": "2026-10-04T09:45:35Z",
+    "verified_content_hash": "ebc2aa1412708d826877fb6605e7c6c1628c0ba7816aa7f5579b7bf9d07c96c3",
+    "status": "verified",
     "last_check": null
   },
   {
@@ -33,10 +33,10 @@
     "source_type": "official",
     "licence": "Copyright Reserve Bank of New Zealand; may be reproduced without permission if RBNZ is acknowledged as source and owner (not Creative Commons)",
     "next_step_en": "Ask your lender how it calculates your debt-to-income ratio.",
-    "verified_by": null,
-    "verified_at": null,
-    "verified_content_hash": null,
-    "status": "draft",
+    "verified_by": "Ting Wang",
+    "verified_at": "2026-10-04T09:51:18Z",
+    "verified_content_hash": "6af96adaa29834e8b2b710f283994b0be1b231b40b32957c6aee6d39c6474709",
+    "status": "verified",
     "last_check": null
   },
   {
@@ -53,10 +53,10 @@
     "source_type": "official",
     "licence": "Copyright Kāinga Ora; may be reproduced free of charge without further permission if accurate and not misleading, acknowledging the source and copyright status",
     "next_step_en": "Ask your lender how the First Home Loan premium would apply to your loan amount.",
-    "verified_by": null,
-    "verified_at": null,
-    "verified_content_hash": null,
-    "status": "draft",
+    "verified_by": "Ting Wang",
+    "verified_at": "2026-10-04T09:35:40Z",
+    "verified_content_hash": "0069eec3532e464e1d7095050226f5367ddef18f3ce560295fd1e6b642cfcb88",
+    "status": "verified",
     "last_check": null
   },
   {
@@ -73,10 +73,10 @@
     "source_type": "official",
     "licence": "Copyright Kāinga Ora; may be reproduced free of charge without further permission if accurate and not misleading, acknowledging the source and copyright status",
     "next_step_en": "Ask your lender how the First Home Loan premium would apply to your loan amount.",
-    "verified_by": null,
-    "verified_at": null,
-    "verified_content_hash": null,
-    "status": "draft",
+    "verified_by": "Ting Wang",
+    "verified_at": "2026-10-04T09:35:40Z",
+    "verified_content_hash": "538c823b2d626263e7a32d6a2da99448498798664cc506d01a02d6e976f75fe2",
+    "status": "verified",
     "last_check": null
   },
   {
@@ -93,10 +93,10 @@
     "source_type": "official",
     "licence": "Copyright Reserve Bank of New Zealand; may be reproduced without permission if RBNZ is acknowledged as source and owner (not Creative Commons)",
     "next_step_en": "Ask your lender which lending criteria it applies to First Home Loan applications.",
-    "verified_by": null,
-    "verified_at": null,
-    "verified_content_hash": null,
-    "status": "draft",
+    "verified_by": "Ting Wang",
+    "verified_at": "2026-10-04T09:51:18Z",
+    "verified_content_hash": "421d8e88851b6b92f5b72f99bb53935c898830948ffd91782dd786c6e6bfd3b1",
+    "status": "verified",
     "last_check": null
   },
   {
@@ -113,10 +113,10 @@
     "source_type": "official",
     "licence": "Copyright Reserve Bank of New Zealand; may be reproduced without permission if RBNZ is acknowledged as source and owner (not Creative Commons)",
     "next_step_en": "Ask your lender which lending criteria it applies to First Home Loan applications.",
-    "verified_by": null,
-    "verified_at": null,
-    "verified_content_hash": null,
-    "status": "draft",
+    "verified_by": "Ting Wang",
+    "verified_at": "2026-10-04T09:51:18Z",
+    "verified_content_hash": "0e4828928dcf3f8b3a49baacde84811452a27290ffbc52eb07569a29f12a83b4",
+    "status": "verified",
     "last_check": null
   },
   {
@@ -133,10 +133,10 @@
     "source_type": "official",
     "licence": "Copyright Kāinga Ora; may be reproduced free of charge without further permission if accurate and not misleading, acknowledging the source and copyright status",
     "next_step_en": "Check the First Home Loan criteria with a participating lender.",
-    "verified_by": null,
-    "verified_at": null,
-    "verified_content_hash": null,
-    "status": "draft",
+    "verified_by": "Ting Wang",
+    "verified_at": "2026-10-04T09:35:40Z",
+    "verified_content_hash": "69dbb65291aba52de252e571a3e29fb5ef70e710b9022740e7486e2176c9cc9b",
+    "status": "verified",
     "last_check": null
   },
   {
@@ -153,10 +153,10 @@
     "source_type": "official",
     "licence": "Copyright Kāinga Ora; may be reproduced free of charge without further permission if accurate and not misleading, acknowledging the source and copyright status",
     "next_step_en": "Check the First Home Loan income criteria with a participating lender.",
-    "verified_by": null,
-    "verified_at": null,
-    "verified_content_hash": null,
-    "status": "draft",
+    "verified_by": "Ting Wang",
+    "verified_at": "2026-10-04T09:35:40Z",
+    "verified_content_hash": "2aa7db0a656a2cd6ca5630f1802e90a72838d9dbbf7e28463d2709fb1ee8a7ca",
+    "status": "verified",
     "last_check": null
   },
   {
@@ -173,10 +173,10 @@
     "source_type": "official",
     "licence": "Copyright Kāinga Ora; may be reproduced free of charge without further permission if accurate and not misleading, acknowledging the source and copyright status",
     "next_step_en": "Check the First Home Loan income criteria with a participating lender.",
-    "verified_by": null,
-    "verified_at": null,
-    "verified_content_hash": null,
-    "status": "draft",
+    "verified_by": "Ting Wang",
+    "verified_at": "2026-10-04T09:35:40Z",
+    "verified_content_hash": "4ebd9000e72c9eb01778f32ce9d136716a8128daa7fa86111560623b2a219900",
+    "status": "verified",
     "last_check": null
   },
   {
@@ -185,7 +185,7 @@
     "applies_when": {
       "lvr_over": 80
     },
-    "claim_en": "The Reserve Bank LVR explainer states that borrowers may pay higher interest rates and fees, such as a low equity premium or margin.",
+    "claim_en": "The Reserve Bank LVR explainer states that with less than a 20% deposit you may pay higher interest rates and fees, such as a low equity premium or margin, until you reach 20% equity in the property.",
     "quote": "you may pay higher interest rates and fees, like a low equity premium or margin",
     "source_id": "rbnz_lvr",
     "source_url": "https://www.rbnz.govt.nz/education/explainers/loan-to-value-restrictions-explained",
@@ -193,10 +193,10 @@
     "source_type": "official",
     "licence": "Copyright Reserve Bank of New Zealand; may be reproduced without permission if RBNZ is acknowledged as source and owner (not Creative Commons)",
     "next_step_en": "Ask each lender what interest rate and fees apply at your deposit level.",
-    "verified_by": null,
-    "verified_at": null,
-    "verified_content_hash": null,
-    "status": "draft",
+    "verified_by": "Ting Wang",
+    "verified_at": "2026-10-04T09:51:18Z",
+    "verified_content_hash": "291e761f427dd84ee3bbf4e779951a8482b290aaf67d07864a31638640291c86",
+    "status": "verified",
     "last_check": null
   },
   {
@@ -213,10 +213,10 @@
     "source_type": "official",
     "licence": "Copyright Kāinga Ora; may be reproduced free of charge without further permission if accurate and not misleading, acknowledging the source and copyright status",
     "next_step_en": "Check with a participating lender how your before-tax income from the last 12 months is assessed.",
-    "verified_by": null,
-    "verified_at": null,
-    "verified_content_hash": null,
-    "status": "draft",
+    "verified_by": "Ting Wang",
+    "verified_at": "2026-10-04T09:35:40Z",
+    "verified_content_hash": "20e1045166a206241c0a30d9f6deecfbb9857ef943cedb6c6c99ebff5dbbfcd8",
+    "status": "verified",
     "last_check": null
   }
 ]

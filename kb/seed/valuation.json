@@ -13,10 +13,10 @@
     "source_type": "official",
     "licence": "Copyright Auckland Council; no open licence found",
     "next_step_en": "Ask a registered valuer about a current market valuation.",
-    "verified_by": null,
-    "verified_at": null,
-    "verified_content_hash": null,
-    "status": "draft",
+    "verified_by": "Ting Wang",
+    "verified_at": "2026-10-04T10:02:39Z",
+    "verified_content_hash": "b267a4b798b763dc4e64001876487cfe8aa3b70cefe0469a1c5ecea85299456f",
+    "status": "verified",
     "last_check": null
   }
 ]
