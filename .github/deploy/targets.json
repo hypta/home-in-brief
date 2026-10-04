@@ -1,0 +1,70 @@
+{
+  "_comment": [
+    "Deploy targets for .github/workflows/deploy.yml (read by .github/deploy/deploy.sh). Deployed in this order.",
+    "paths: a target is rebuilt when any of these changed since the commit it was last deployed from",
+    "(its git_sha label). Include every directory its Dockerfile copies; shared/ is listed for every Python target.",
+    "public: true only for web. Private services get --no-allow-unauthenticated and an invoker binding for the",
+    "runtime identity (the Cloud Run default service account). url_env: env var -> service whose URL it receives.",
+    "env and secrets are merged into what is already set (--update-*), so values set by hand survive a deploy.",
+    "To add a target (for example report-api), add an entry here and, if web calls it, a url_env line on web."
+  ],
+  "targets": [
+    {
+      "name": "rules-api",
+      "kind": "service",
+      "dockerfile": "services/rules-api/Dockerfile",
+      "paths": ["services/rules-api/", "shared/", "kb/", "data/"],
+      "public": false,
+      "env": {"DATA_BACKEND": "firestore"},
+      "secrets": {},
+      "flags": []
+    },
+    {
+      "name": "property-api",
+      "kind": "service",
+      "dockerfile": "services/property-api/Dockerfile",
+      "paths": ["services/property-api/", "shared/"],
+      "public": false,
+      "env": {},
+      "secrets": {"LINZ_API_KEY": "LINZ_API_KEY:latest"},
+      "flags": []
+    },
+    {
+      "name": "web",
+      "kind": "service",
+      "dockerfile": "services/web/Dockerfile",
+      "paths": ["services/web/", "shared/"],
+      "public": true,
+      "env": {},
+      "secrets": {},
+      "url_env": {"RULES_API_URL": "rules-api", "PROPERTY_API_URL": "property-api"},
+      "flags": []
+    },
+    {
+      "name": "kb-refresh",
+      "kind": "job",
+      "dockerfile": "jobs/kb-refresh/Dockerfile",
+      "paths": ["jobs/kb-refresh/", "kb/", "shared/"],
+      "env": {"DATA_BACKEND": "firestore"},
+      "secrets": {},
+      "flags": ["--memory=512Mi", "--max-retries=1", "--task-timeout=15m"]
+    },
+    {
+      "name": "rates-refresh",
+      "kind": "job",
+      "dockerfile": "jobs/rates-refresh/Dockerfile",
+      "paths": ["jobs/rates-refresh/", "shared/"],
+      "env": {"DATA_BACKEND": "firestore", "GEMINI_MODEL": "gemini-2.5-flash"},
+      "secrets": {"GEMINI_API_KEY": "GEMINI_API_KEY:latest"},
+      "flags": ["--memory=2Gi", "--cpu=1", "--max-retries=1", "--task-timeout=15m"]
+    }
+  ],
+  "seeds": {
+    "_comment": "Firestore seed scripts. A script runs when its paths changed since baseline's git_sha, when baseline is not deployed yet, or on deploy_all.",
+    "baseline": "rules-api",
+    "scripts": [
+      {"script": "scripts/seed_firestore.py", "paths": ["kb/seed/"]},
+      {"script": "scripts/seed_rates.py", "paths": ["data/"]}
+    ]
+  }
+}

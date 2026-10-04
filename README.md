@@ -31,7 +31,7 @@ follow-up questions) is owned by B and the frontend (`web`) by A; both are in pr
 | `scripts/` | B | `seed_firestore.py`, `seed_rates.py`, `smoke.py`, `validate_rates_seed.py` |
 | `openapi.json` | B | OpenAPI description of rules-api |
 
-Docs: `LOCAL.md` (run locally), `DEPLOY.md` (Cloud Run + Firestore), `RATES_UPDATE.md` (update rates by hand), `CODES.md` (codes used by the API),
+Docs: `LOCAL.md` (run locally), `DEPLOY.md` (Cloud Run + Firestore, deployed by GitHub Actions), `RATES_UPDATE.md` (update rates by hand), `CODES.md` (codes used by the API),
 `kb/MANUAL_CHECK.md` (verify knowledge-base items by hand).
 
 ## Architecture
@@ -93,7 +93,8 @@ make down
 ```
 
 Ports are published on `127.0.0.1` only, because the emulator and the API have no authentication. More detail in
-`LOCAL.md`. Production deployment (Cloud Run, Firestore, Scheduler, IAM) is in `DEPLOY.md`.
+`LOCAL.md`. Production runs on Cloud Run: a GitHub Actions workflow (`.github/workflows/deploy.yml`) tests every push to
+`main` and deploys the changed services; the one-time GCP setup (Firestore, Workload Identity Federation, Scheduler, IAM) is in `DEPLOY.md`.
 
 ## API (rules-api)
 

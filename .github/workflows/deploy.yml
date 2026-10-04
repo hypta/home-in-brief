@@ -1,0 +1,102 @@
+# Test on every push to main; deploy changed services and jobs to Cloud Run when the tests pass.
+# Setup and the repository variables it reads: DEPLOY.md. Deploy targets and their paths: .github/deploy/targets.json.
+name: test-and-deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      deploy_all:
+        description: Deploy every service and job and re-run the Firestore seed scripts, not only what changed
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      # make setup installs with `uv pip`, so the uv cache is the package cache.
+      - uses: astral-sh/setup-uv@v10
+        with:
+          enable-cache: true
+          cache-dependency-glob: "**/requirements.txt"
+      - run: make setup
+      - run: make test
+
+  deploy:
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      id-token: write
+    concurrency:
+      group: cloud-run-deploy
+      cancel-in-progress: false
+    env:
+      PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      REGION: ${{ vars.GCP_REGION || 'australia-southeast1' }}
+      AR_REPO: ${{ vars.GCP_AR_REPO || 'nz-buyer-report' }}
+      WIF_PROVIDER: ${{ vars.GCP_WIF_PROVIDER }}
+      DEPLOY_SA: ${{ vars.GCP_DEPLOY_SA }}
+    steps:
+      - name: Check GCP configuration
+        id: cfg
+        run: |
+          if [ -z "$PROJECT_ID" ]; then
+            echo "Deploy skipped: repository variable GCP_PROJECT_ID is not set (DEPLOY.md, One-time setup)." >> "$GITHUB_STEP_SUMMARY"
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ -z "$WIF_PROVIDER" ] || [ -z "$DEPLOY_SA" ]; then
+            echo "::error::GCP_PROJECT_ID is set but GCP_WIF_PROVIDER or GCP_DEPLOY_SA is not (DEPLOY.md, One-time setup)."
+            exit 1
+          fi
+          echo "enabled=true" >> "$GITHUB_OUTPUT"
+
+      - if: steps.cfg.outputs.enabled == 'true'
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # deploy.sh diffs against the commit each target was last deployed from
+
+      - if: steps.cfg.outputs.enabled == 'true'
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SA }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - if: steps.cfg.outputs.enabled == 'true'
+        uses: google-github-actions/setup-gcloud@v3
+
+      # Only needed when a Firestore seed script runs (deploy.sh calls make setup then).
+      - if: steps.cfg.outputs.enabled == 'true'
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - if: steps.cfg.outputs.enabled == 'true'
+        uses: astral-sh/setup-uv@v10
+        with:
+          enable-cache: true
+          cache-dependency-glob: "**/requirements.txt"
+
+      - if: steps.cfg.outputs.enabled == 'true'
+        name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+
+      - if: steps.cfg.outputs.enabled == 'true'
+        name: Build, deploy, seed, smoke test
+        env:
+          SHA: ${{ github.sha }}
+          DEPLOY_ALL: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_all }}
+        run: bash .github/deploy/deploy.sh
