@@ -222,7 +222,9 @@ export WEB_URL=$(gcloud run services describe web --region=$REGION --format='val
 ```
 
 `LINZ_BASEMAPS_KEY` is a plain environment variable, not a secret: the page hands it to browsers, which fetch the
-map tiles themselves. Without it the map uses OpenStreetMap. For the judging period add `--min-instances=1`, as
+map tiles themselves. Without it, or when LINZ refuses it, the map uses OpenStreetMap. The current key is a 90-day
+key issued on 2026-10-04; replace it without a rebuild:
+`gcloud run services update web --region=$REGION --update-env-vars LINZ_BASEMAPS_KEY=NEW_KEY`. For the judging period add `--min-instances=1`, as
 for rules-api in section 8.
 
 Check without a token. The relay answers only the paths listed in `services/web/README.md`:
