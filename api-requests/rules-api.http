@@ -52,6 +52,14 @@ Content-Type: application/json
 
 < ./bodies/rules_740_sandringham.json
 
+### Real-world scenario: first-home couple, listing price $950k, 10% deposit, income $130k, debts $8k
+# PropertyContext is property-api's real output for 740 Sandringham Road Extension (flood layers intersect).
+# Full expected response: ./examples/scenario_first_home_couple.response.json
+POST {{rules}}/v1/rules
+Content-Type: application/json
+
+< ./bodies/scenario_first_home_couple.json
+
 ### 3. Real PropertyContext: 44 Lorne Street (no flood intersection), price overridden to $900k, LVR < 80
 POST {{rules}}/v1/rules
 Content-Type: application/json

@@ -1,0 +1,350 @@
+{
+    "schema_version": "0.1",
+    "generated_at": "2026-10-04T07:15:13+00:00",
+    "price_used": {
+        "value": 950000.0,
+        "basis": "user",
+        "valuation_date": null
+    },
+    "deposit": 95000.0,
+    "loan_amount": 855000.0,
+    "lvr_pct": 90.0,
+    "dti": 6.64,
+    "high_dti_threshold": 772000.0,
+    "rates_snapshot_date": "2026-09-27",
+    "stress_add_pp": 2.0,
+    "scenarios": [
+        {
+            "id": "bank_standard",
+            "rate_pct": null,
+            "rate_range_pct": [
+                5.59,
+                6.05
+            ],
+            "low_equity_margin_pct": [
+                0.75,
+                0.75
+            ],
+            "monthly_range": [
+                4903,
+                5154
+            ],
+            "fortnightly_range": [
+                2262,
+                2377
+            ],
+            "stress_monthly": 6304,
+            "stress_delta_monthly": 1150,
+            "per_bank": [
+                {
+                    "bank_id": "kiwibank",
+                    "rate_pct": 6.05,
+                    "basis": "standard",
+                    "captured_at": "2026-09-27T00:00:00+12:00"
+                },
+                {
+                    "bank_id": "westpac",
+                    "rate_pct": 5.94,
+                    "basis": "special+lem",
+                    "captured_at": "2026-09-27T00:00:00+12:00"
+                },
+                {
+                    "bank_id": "anz",
+                    "rate_pct": 5.59,
+                    "basis": "standard",
+                    "captured_at": "2026-09-27T00:00:00+12:00"
+                },
+                {
+                    "bank_id": "asb",
+                    "rate_pct": 5.74,
+                    "basis": "special+lem",
+                    "captured_at": "2026-09-27T00:00:00+12:00"
+                },
+                {
+                    "bank_id": "bnz",
+                    "rate_pct": 5.94,
+                    "basis": "special+lem",
+                    "captured_at": "2026-09-27T00:00:00+12:00"
+                },
+                {
+                    "bank_id": "tsb",
+                    "rate_pct": 5.99,
+                    "basis": "standard",
+                    "captured_at": "2026-10-03T00:00:00+13:00"
+                },
+                {
+                    "bank_id": "sbs",
+                    "rate_pct": 5.59,
+                    "basis": "standard",
+                    "captured_at": "2026-10-03T00:00:00+13:00"
+                },
+                {
+                    "bank_id": "unity",
+                    "rate_pct": 5.79,
+                    "basis": "standard",
+                    "captured_at": "2026-10-03T00:00:00+13:00"
+                },
+                {
+                    "bank_id": "nbs",
+                    "rate_pct": 5.79,
+                    "basis": "standard",
+                    "captured_at": "2026-10-03T00:00:00+13:00"
+                },
+                {
+                    "bank_id": "nzhl",
+                    "rate_pct": 5.74,
+                    "basis": "special+lem",
+                    "captured_at": "2026-10-03T00:00:00+13:00"
+                }
+            ],
+            "source_ids": [
+                "bank_rates_snapshot",
+                "rbnz_lvr"
+            ]
+        },
+        {
+            "id": "first_home_loan",
+            "eligibility": "eligible",
+            "eligibility_note": null,
+            "income_caps": {
+                "single": 95000,
+                "multiple_or_dependants": 150000
+            },
+            "lmi_amount": 10260.0,
+            "lmi_note": "Pass-through share of the 1.2% premium differs by lender and is unknown where shown as null; lmi_amount_if_full_premium is a reference only.",
+            "monthly": null,
+            "stress_monthly": null,
+            "stress_delta_monthly": null,
+            "lenders": [
+                {
+                    "bank_id": "kiwibank",
+                    "name": "Kiwibank",
+                    "captured_at": "2026-09-27T00:00:00+12:00",
+                    "rate_pct": 5.15,
+                    "rate_basis": "special",
+                    "candidate_rates": {
+                        "special": 5.15,
+                        "standard": 6.05
+                    },
+                    "lmi_passthrough_pct": 1.0,
+                    "lmi_amount": 8550.0,
+                    "lmi_amount_if_full_premium": 10260.0,
+                    "loan_with_lmi": 863550.0,
+                    "monthly": 4715,
+                    "fortnightly": 2175,
+                    "stress_monthly": 5832,
+                    "stress_delta_monthly": 1117,
+                    "monthly_if_full_premium": 4725
+                },
+                {
+                    "bank_id": "westpac",
+                    "name": "Westpac",
+                    "captured_at": "2026-09-27T00:00:00+12:00",
+                    "rate_pct": null,
+                    "rate_basis": "unknown",
+                    "candidate_rates": {
+                        "special": 5.19,
+                        "standard": 5.79
+                    },
+                    "lmi_passthrough_pct": null,
+                    "lmi_amount": null,
+                    "lmi_amount_if_full_premium": 10260.0,
+                    "loan_with_lmi": null,
+                    "monthly": null,
+                    "fortnightly": null,
+                    "stress_monthly": null,
+                    "stress_delta_monthly": null,
+                    "monthly_if_full_premium": null
+                },
+                {
+                    "bank_id": "asb",
+                    "name": "ASB",
+                    "captured_at": "2026-09-27T00:00:00+12:00",
+                    "rate_pct": 4.99,
+                    "rate_basis": "special",
+                    "candidate_rates": {
+                        "special": 4.99,
+                        "standard": null
+                    },
+                    "lmi_passthrough_pct": 1.2,
+                    "lmi_amount": 10260.0,
+                    "lmi_amount_if_full_premium": 10260.0,
+                    "loan_with_lmi": 865260.0,
+                    "monthly": 4640,
+                    "fortnightly": 2140,
+                    "stress_monthly": 5751,
+                    "stress_delta_monthly": 1111,
+                    "monthly_if_full_premium": 4640
+                },
+                {
+                    "bank_id": "coop",
+                    "name": "Co-operative Bank",
+                    "captured_at": "2026-10-03T00:00:00+13:00",
+                    "rate_pct": 5.19,
+                    "rate_basis": "special",
+                    "candidate_rates": {
+                        "special": 5.19,
+                        "standard": 5.69
+                    },
+                    "lmi_passthrough_pct": 1.2,
+                    "lmi_amount": 10260.0,
+                    "lmi_amount_if_full_premium": 10260.0,
+                    "loan_with_lmi": 865260.0,
+                    "monthly": 4746,
+                    "fortnightly": 2189,
+                    "stress_monthly": 5867,
+                    "stress_delta_monthly": 1121,
+                    "monthly_if_full_premium": 4746
+                },
+                {
+                    "bank_id": "sbs",
+                    "name": "SBS Bank",
+                    "captured_at": "2026-10-03T00:00:00+13:00",
+                    "rate_pct": 4.99,
+                    "rate_basis": "special",
+                    "candidate_rates": {
+                        "special": 4.99,
+                        "standard": 5.59
+                    },
+                    "lmi_passthrough_pct": 1.2,
+                    "lmi_amount": 10260.0,
+                    "lmi_amount_if_full_premium": 10260.0,
+                    "loan_with_lmi": 865260.0,
+                    "monthly": 4640,
+                    "fortnightly": 2140,
+                    "stress_monthly": 5751,
+                    "stress_delta_monthly": 1111,
+                    "monthly_if_full_premium": 4640
+                },
+                {
+                    "bank_id": "unity",
+                    "name": "Unity",
+                    "captured_at": "2026-10-03T00:00:00+13:00",
+                    "rate_pct": 4.99,
+                    "rate_basis": "special",
+                    "candidate_rates": {
+                        "special": 4.99,
+                        "standard": 5.79
+                    },
+                    "lmi_passthrough_pct": null,
+                    "lmi_amount": null,
+                    "lmi_amount_if_full_premium": 10260.0,
+                    "loan_with_lmi": null,
+                    "monthly": null,
+                    "fortnightly": null,
+                    "stress_monthly": null,
+                    "stress_delta_monthly": null,
+                    "monthly_if_full_premium": 4640
+                },
+                {
+                    "bank_id": "nbs",
+                    "name": "Nelson Building Society",
+                    "captured_at": "2026-10-03T00:00:00+13:00",
+                    "rate_pct": null,
+                    "rate_basis": "unknown",
+                    "candidate_rates": {
+                        "special": 5.19,
+                        "standard": 5.79
+                    },
+                    "lmi_passthrough_pct": 1.2,
+                    "lmi_amount": 10260.0,
+                    "lmi_amount_if_full_premium": 10260.0,
+                    "loan_with_lmi": null,
+                    "monthly": null,
+                    "fortnightly": null,
+                    "stress_monthly": null,
+                    "stress_delta_monthly": null,
+                    "monthly_if_full_premium": null
+                },
+                {
+                    "bank_id": "nzhl",
+                    "name": "NZHL (arranged, lender ASB)",
+                    "captured_at": "2026-10-03T00:00:00+13:00",
+                    "rate_pct": null,
+                    "rate_basis": "unknown",
+                    "candidate_rates": {
+                        "special": 4.99,
+                        "standard": null
+                    },
+                    "lmi_passthrough_pct": null,
+                    "lmi_amount": null,
+                    "lmi_amount_if_full_premium": 10260.0,
+                    "loan_with_lmi": null,
+                    "monthly": null,
+                    "fortnightly": null,
+                    "stress_monthly": null,
+                    "stress_delta_monthly": null,
+                    "monthly_if_full_premium": null
+                }
+            ],
+            "monthly_range": [
+                4640,
+                4746
+            ],
+            "fortnightly_range": [
+                2140,
+                2189
+            ],
+            "stress_monthly_range": [
+                5751,
+                5867
+            ],
+            "full_premium_assumed_for": [
+                "unity"
+            ],
+            "source_ids": [
+                "kainga_ora_fhl_brochure",
+                "kainga_ora_fhl"
+            ],
+            "note_ids": [
+                "fhl_passthrough_varies"
+            ]
+        }
+    ],
+    "flags": [
+        {
+            "id": "lvr_over_80",
+            "source_ids": [
+                "rbnz_lvr"
+            ]
+        },
+        {
+            "id": "dti_over_6",
+            "source_ids": [
+                "rbnz_dti"
+            ]
+        }
+    ],
+    "hazard_gaps": [],
+    "kb_items": [
+        "kb_auction_unconditional",
+        "kb_flood_insurance_limit",
+        "kb_insurance_condition",
+        "kb_nhc_building_cap",
+        "kb_nhc_levy",
+        "kb_nhc_building_excess",
+        "kb_rbnz_lvr",
+        "kb_rbnz_dti",
+        "kb_fhl_premium",
+        "kb_fhl_govt_not_funding_premium",
+        "kb_fhl_lvr_not_restricted",
+        "kb_fhl_dti_not_restricted",
+        "kb_fhl_deposit_5pct",
+        "kb_fhl_income_cap_individual",
+        "kb_fhl_income_cap_multiple",
+        "kb_low_deposit_higher_rates",
+        "kb_fhl_income_basis",
+        "kb_title_freehold",
+        "kb_cv_not_market"
+    ],
+    "kb_includes_draft": true,
+    "kb_items_from_user_input": [],
+    "kb_empty_reason": null,
+    "warnings": [
+        "year_built_unavailable",
+        "cladding_unavailable",
+        "lem_base_unverified:westpac",
+        "bank_skipped:coop"
+    ],
+    "disclaimer": "Information only, not financial or legal advice. Figures come from published sources on the dates shown; confirm with the lender or provider before deciding."
+}
