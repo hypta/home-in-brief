@@ -39,6 +39,19 @@
     "published_or_updated": null
   },
   {
+    "id": "src_nhc_home_buyers",
+    "title": "Before you make an offer on a house - Natural Hazards Commission Toka Tū Ake",
+    "url": "https://www.naturalhazards.govt.nz/be-prepared/home-buyers/before-you-make-an-offer-on-a-house/",
+    "licence": "CC BY-NC 4.0",
+    "accessed_at": "2026-10-04",
+    "source_type": "official",
+    "attribution": "Source: naturalhazards.govt.nz, owned by Natural Hazards Commission Toka Tū Ake, used under CC BY-NC 4.0 (non-commercial).",
+    "tos_status": "allowed",
+    "tos_url": "https://www.naturalhazards.govt.nz/disclaimer/",
+    "tos_checked_at": "2026-10-03",
+    "published_or_updated": null
+  },
+  {
     "id": "src_settled_leaky",
     "title": "Learning about leaky buildings - settled.govt.nz",
     "url": "https://www.settled.govt.nz/buying-a-home/researching-the-property/learning-about-leaky-buildings/",

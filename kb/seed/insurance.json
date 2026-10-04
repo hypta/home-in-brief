@@ -100,5 +100,32 @@
     "verified_content_hash": null,
     "status": "draft",
     "last_check": null
+  },
+  {
+    "id": "kb_nhc_land_cover_limits",
+    "topic": "insurance",
+    "applies_when": {
+      "hazard_layer_intersects": [
+        "flood_plain",
+        "flood_prone_area",
+        "overland_flow_path",
+        "coastal_inundation",
+        "landslide_shallow",
+        "landslide_large_scale"
+      ]
+    },
+    "claim_en": "The Natural Hazards Commission states that its land cover applies to land under the home and under some related buildings and structures within 8 metres of the home, and that land outside the covered areas is not insured.",
+    "quote": "some related buildings and structures within 8 metres of your home",
+    "source_id": "src_nhc_about",
+    "source_url": "https://www.naturalhazards.govt.nz/insurance-and-claims/about-nhcover/",
+    "source_title": "About natural hazards cover - Natural Hazards Commission Toka Tū Ake",
+    "source_type": "official",
+    "licence": "CC BY-NC 4.0",
+    "next_step_en": "Ask your insurer and the Natural Hazards Commission which parts of the land are covered.",
+    "verified_by": null,
+    "verified_at": null,
+    "verified_content_hash": null,
+    "status": "draft",
+    "last_check": null
   }
 ]

@@ -64,5 +64,27 @@
     "verified_content_hash": null,
     "status": "draft",
     "last_check": null
+  },
+  {
+    "id": "kb_unit_title_levies",
+    "topic": "title_type",
+    "applies_when": {
+      "title_type": [
+        "Unit Title"
+      ]
+    },
+    "claim_en": "The unittitles.govt.nz short guide states that unit owners' responsibilities include paying levies set by the body corporate to fund the operation and maintenance of the property.",
+    "quote": "paying levies set by the body corporate to fund the operation and maintenance",
+    "source_id": "src_unittitles_guide",
+    "source_url": "https://www.unittitles.govt.nz/assets/unit-titles/short-guide-to-unit-titles-may-2024.pdf",
+    "source_title": "Short guide to unit titles (May 2024) - unittitles.govt.nz (MBIE)",
+    "source_type": "official",
+    "licence": "Crown copyright (MBIE); reproduction for personal and non-commercial use permitted with the source indicated and disclaimers reproduced",
+    "next_step_en": "Ask your lawyer for the body corporate's current levy amounts, budget and long-term maintenance plan.",
+    "verified_by": null,
+    "verified_at": null,
+    "verified_content_hash": null,
+    "status": "draft",
+    "last_check": null
   }
 ]
