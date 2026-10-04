@@ -5,7 +5,7 @@ from typing import Callable
 from pydantic import BaseModel
 
 TERMS = ("6m", "1y", "18m", "2y", "3y", "4y", "5y")
-DEFAULT_MODEL = "gemini-2.5-flash"  # override with GEMINI_MODEL
+DEFAULT_MODEL = "gemini-3.5-flash-lite"  # override with GEMINI_MODEL
 MAX_CHARS = 80_000
 
 
