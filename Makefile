@@ -5,17 +5,23 @@ BASE ?= http://localhost:8080
 SEED_ENV = FIRESTORE_EMULATOR_HOST=$(EMU_HOST) GOOGLE_CLOUD_PROJECT=local-dev
 RATES_PP = PYTHONPATH=jobs/rates-refresh:shared
 
-.PHONY: setup test up seed rates rates-fetch kb smoke down local-api local-rates local-kb
+.PHONY: setup test test-b test-property-api up seed rates rates-fetch kb smoke down local-api local-rates local-kb
 
 # One-time: create the venv (Python 3.12) and install every service's dependencies plus pytest.
 # Needs uv (https://docs.astral.sh/uv/). Without uv: python3.12 -m venv .venv, then .venv/bin/pip install
 # -r <each requirements.txt> pytest
 setup:
 	uv venv --python 3.12 $(VENV)
-	uv pip install --python $(PY) -r services/rules-api/requirements.txt -r jobs/rates-refresh/requirements.txt -r jobs/kb-refresh/requirements.txt pytest
+	uv pip install --python $(PY) -r services/rules-api/requirements.txt -r jobs/rates-refresh/requirements.txt -r jobs/kb-refresh/requirements.txt -r services/property-api/requirements.txt pytest
 
-test:
-	$(PY) -m pytest -q
+# Each service has its own top-level `app` package, so suites run in separate pytest processes.
+test: test-b test-property-api
+
+test-b:
+	$(PY) -m pytest -q services/rules-api jobs/rates-refresh jobs/kb-refresh kb
+
+test-property-api:
+	cd services/property-api && ../../$(PY) -m pytest tests -q
 
 # --- Docker + Firestore emulator ---
 up:
