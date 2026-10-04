@@ -202,3 +202,161 @@ def test_codes_md_lists_every_code():
 def test_requirements_pinned():
     lines = [l for l in (ROOT / "services/rules-api/requirements.txt").read_text().splitlines() if l.strip()]
     assert lines and all("==" in l for l in lines)
+
+
+# ================= property-api integration =================
+import subprocess
+import sys
+
+from app.calc import parse_year
+
+FIXTURE = ROOT / "services/property-api/fixtures/property_context_740_sandringham_road_extension.json"
+
+
+def found(v, **kw):
+    return {"value": v, "status": "found", **kw}
+
+
+def yb(lo, hi, value=None):
+    return {"property": {"year_built": found(value if value is not None else lo, decade_range=[lo, hi])}}
+
+
+@pytest.mark.parametrize("rng,expect", [
+    ([1980, 1989], True), ([2000, 2009], True), ([1970, 1979], False), ([2010, 2019], False),
+])
+def test_decade_range_overlap_with_rule_1987_2006(rng, expect):
+    n = calc.normalize(PropertyContext.model_validate(yb(*rng)), UserInputs(), [])
+    assert matches({"year_built_between": [1987, 2006]}, SelectContext(year_range=n.year_range)) is expect
+
+
+def test_decade_range_open_lower_bound():
+    n = calc.normalize(PropertyContext.model_validate(yb(None, 1913, value=1913)), UserInputs(), [])
+    assert matches({"year_built_between": [1850, 1900]}, SelectContext(year_range=n.year_range))
+    assert not matches({"year_built_between": [1920, 1930]}, SelectContext(year_range=n.year_range))
+
+
+def test_decade_range_null_is_no_decade_and_chat_used():
+    ctx = PropertyContext.model_validate({"property": {"year_built": {
+        "value": 1980, "status": "found", "decade_range": None}}})
+    w: list[str] = []
+    n = calc.normalize(ctx, UserInputs(chat_supplied={"year_built": 1995}), w)
+    assert n.year_range == (1995, 1995)
+    assert calc.normalize(ctx, UserInputs(), []).year_range is None
+
+
+def test_no_decade_range_key_uses_value():
+    ctx = PropertyContext.model_validate({"property": {"year_built": found(1985)}})
+    assert calc.normalize(ctx, UserInputs(), []).year_range == (1985, 1985)
+
+
+def test_bad_decade_range_unparseable():
+    w: list[str] = []
+    ctx = PropertyContext.model_validate({"property": {"year_built": found(1980, decade_range=[1980])}})
+    assert calc.normalize(ctx, UserInputs(), w).year_range is None and "year_built_unparseable" in w
+
+
+@pytest.mark.parametrize("bad", ["²", "9" * 5000, "abc", "", 5000, -3, 10**30, "١٩٩٠"])
+def test_parse_year_never_raises(bad):
+    assert parse_year(bad) is None
+
+
+def test_year_garbage_through_api_is_not_500():
+    c = TestClient(app, raise_server_exceptions=False)
+    for v in ["²", "9" * 5000, 10**30]:
+        r = c.post("/v1/rules", json={"property_context": {"property": {"year_built": found(v)}},
+                                      "user_inputs": {"chat_supplied": {"year_built": v}}})
+        assert r.status_code == 200, v
+
+
+def test_cv_over_cap_is_unavailable_not_422():
+    ctx = {"property": {"cv": found(2e10)}}
+    out = run(ctx, deposit=1)
+    assert out.price_used.basis == "none" and "cv_invalid" in out.warnings
+    r = TestClient(app).post("/v1/rules", json={"property_context": ctx})
+    assert r.status_code == 200
+
+
+def test_null_cv_uses_override_else_price_missing():
+    ctx = {"property": {"cv": {"value": None, "status": "not_found"}}}
+    out = run(ctx, price_override=900000, deposit=100000)
+    assert out.price_used.basis == "user" and out.lvr_pct == 88.89
+    out = run(ctx, deposit=100000)
+    assert "price_missing" in out.warnings and out.lvr_pct is None
+    ctx2 = {"property": {"cv": {"value": None, "status": "found"}}}
+    assert run(ctx2, deposit=1).price_used.basis == "none"
+
+
+def test_title_type_unresolved_does_not_guess():
+    ctx = {"property": {"title_type": {"value": None, "status": "found",
+                                       "linz_types": ["Freehold", "Cross Lease"]}}}
+    w: list[str] = []
+    n = calc.normalize(PropertyContext.model_validate(ctx), UserInputs(), w)
+    assert n.title_type is None and "title_type_unresolved" in w
+    assert "title_type_unresolved" not in run({"property": {"title_type": found("Freehold", linz_types=["Freehold"])}}).warnings
+
+
+def test_extra_fields_and_null_annual_rates_ignored():
+    ctx = {"property": {"annual_rates": {"status": "not_found", "value": None},
+                        "land_value": {"value": 1, "status": "found"}, "local_board": {"value": "x"},
+                        "cv": found(1e6)},
+           "links": [{"id": "a", "label": "l", "url": "u", "kind": "site_search"}],
+           "address": {"matched": "x"}, "parcel": {}, "sources": [{"id": "a"}]}
+    r = TestClient(app).post("/v1/rules", json={"property_context": ctx, "user_inputs": {"deposit": 1}})
+    assert r.status_code == 200
+
+
+def test_chat_cladding_triggers_cladding_item_and_is_attributed(tmp_path, monkeypatch):
+    seed = tmp_path / "kb" / "seed"
+    seed.mkdir(parents=True)
+    (tmp_path / "data").mkdir()
+    (seed / "a.json").write_text(json.dumps([hashed(dict(
+        id="clad", topic="cladding", claim_en="c", source_id="s", status="verified",
+        applies_when={"cladding_in": ["monolithic", "plaster"]}))]))
+    monkeypatch.setattr("app.main.get_repo", lambda: LocalRepo(tmp_path))
+    ctx = {"property": {"cladding": {"value": None, "status": "unavailable", "reason": "no_free_source"}}}
+    out = TestClient(app).post("/v1/rules", json={
+        "property_context": ctx, "user_inputs": {"chat_supplied": {"cladding": "Plaster"}}}).json()
+    assert out["kb_items"] == ["clad"] and out["kb_items_from_user_input"] == ["clad"]
+
+
+def test_end_to_end_with_property_api_fixture(monkeypatch):
+    monkeypatch.setenv("INCLUDE_DRAFT", "true")
+    body = {"property_context": json.loads(FIXTURE.read_text()),
+            "user_inputs": {"deposit": 40000, "household_income": 120000}}
+    r = TestClient(app).post("/v1/rules", json=body)
+    assert r.status_code == 200
+    out = r.json()
+    assert out["price_used"] == {"value": 340000.0, "basis": "cv", "valuation_date": "2024-05-01"}
+    assert {"kb_flood_insurance_limit", "kb_title_freehold"} <= set(out["kb_items"])
+    assert "year_built_unavailable" in out["warnings"]
+
+
+# ---- property-api models stay compatible with b_common.schemas ----
+def test_property_api_models_validate_their_fixtures():
+    code = (
+        "import json,sys,glob;"
+        "from app.models import PropertyContext;"
+        "fs=sorted(glob.glob('fixtures/*.json')); assert fs;"
+        "[PropertyContext.model_validate(json.load(open(f))) for f in fs];"
+        "print('ok', len(fs))"
+    )
+    env = {"PYTHONPATH": str(ROOT / "shared") + ":" + str(ROOT / "services/property-api"),
+           "PATH": "/usr/bin:/bin"}
+    r = subprocess.run([sys.executable, "-c", code], cwd=ROOT / "services/property-api",
+                       capture_output=True, text=True, env=env)
+    assert r.returncode == 0 and r.stdout.startswith("ok"), r.stderr[-800:]
+
+
+def test_openapi_declares_error_shape():
+    spec = app.openapi()
+    assert "HTTPValidationError" not in spec["components"]["schemas"]
+    for path, ops in spec["paths"].items():
+        for op in ops.values():
+            for code in ("405", "500"):
+                ref = op["responses"][code]["content"]["application/json"]["schema"]["$ref"]
+                assert ref.endswith("/ErrorResponse"), (path, code)
+    post = spec["paths"]["/v1/rules"]["post"]["responses"]
+    assert post["422"]["content"]["application/json"]["schema"]["$ref"].endswith("/ErrorResponse")
+    assert spec["paths"]["/v1/rates/latest"]["get"]["responses"]["404"]["content"]["application/json"]["schema"]["$ref"].endswith("/ErrorResponse")
+    assert "decade_range" in json.dumps(spec["components"]["schemas"]["YearField"])
+    assert set(spec["components"]["schemas"]["ErrorBody"]["properties"]) == {"code", "message", "fields"}

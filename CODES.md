@@ -40,8 +40,9 @@ Each flag is `{id, source_ids}`. A flag is only listed when it applies.
 | `title_type_unavailable` | Title type not used | status is not `found` | Say the title type could not be confirmed. |
 | `year_built_unavailable` | Year built not used | status is not `found` | Ask the user for the year built; do not guess. |
 | `cladding_unavailable` | Cladding not used | status is not `found` | Ask the user for the cladding; do not guess. |
-| `cv_invalid` | CV value present but not a positive finite number | CV `found` with a bad value | Treat as no CV. |
-| `year_built_unparseable` | Year is neither a year nor a decade like `1990s` | Unparseable `year_built.value` | Treat as unknown. |
+| `cv_invalid` | CV value present but unusable | CV `found` but not a finite number in (0, 1e10] | Treat as no CV. |
+| `year_built_unparseable` | Year information is unusable | `year_built.value` is not a year (1000-2200) or a decade such as `1990s`, or `decade_range` is malformed | Treat as unknown. |
+| `title_type_unresolved` | LINZ lists title types but none was chosen | `title_type.value` is null while `linz_types` is not empty | No title-type notes are selected. Say the title type needs confirming (see `linz_types`); do not guess. |
 | `chat_year_built_unparseable` | Same, for the user-supplied year | Unparseable `chat_supplied.year_built` | Ask again. |
 
 ### Hazards
@@ -92,4 +93,14 @@ All 4xx and 5xx responses use `{"error": {"code", "message", "fields": [{"field"
 |---|---|---|
 | `validation_error` | 422 | Bad input; `fields` names each field and the reason. |
 | `not_found` | 404 | Resource missing (for example no rates snapshot). |
+| `method_not_allowed` | 405 | Wrong HTTP method for the path. |
+| `http_error` | other 4xx | Any other HTTP error raised by the framework. |
 | `internal_error` | 500 | Unexpected failure. No details are exposed. |
+
+## Build decade matching
+
+`year_built_between` rules match on the property's decade. When the property context carries
+`year_built.decade_range` (`[from, to]`, inclusive), the rule matches if that range overlaps
+the rule's range; `[null, 1913]` means 1913 or earlier. An explicit `decade_range: null`
+(mixed eras) counts as no decade, so a year supplied in chat is used instead. Without a
+`decade_range`, a single year (or `1990s`) is used. Chat-supplied years are always single years.

@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional, Union
 
 from b_common.schemas import (
+    MAX_AMOUNT,
     BankRate,
     BankStandardScenario,
     CandidateRates,
@@ -94,23 +95,35 @@ class Raw:
     fhl_eligible: bool = False
 
 
-_DECADE = re.compile(r"^\s*(\d{3})0s\s*$")
+_DECADE = re.compile(r"^\s*([0-9]{3})0s\s*$")
+_YEAR = re.compile(r"^\s*[0-9]{1,4}\s*$")
+MIN_YEAR, MAX_YEAR = 1000, 2200
+OPEN_LOW, OPEN_HIGH = -10**6, 10**6  # open-ended decade bounds
 
 
 def parse_year(v: Union[int, str, None]) -> Optional[tuple[int, int]]:
+    """A year or a decade string as an inclusive range; None if it is not a plausible year."""
     if isinstance(v, bool) or v is None:
         return None
     if isinstance(v, int):
-        return (v, v)
+        return (v, v) if MIN_YEAR <= v <= MAX_YEAR else None
     if isinstance(v, str):
-        if v.strip().isdigit():
+        if _YEAR.match(v):
             y = int(v)
-            return (y, y)
+            return (y, y) if MIN_YEAR <= y <= MAX_YEAR else None
         m = _DECADE.match(v)
         if m:
             y = int(m.group(1)) * 10
-            return (y, y + 9)
+            return (y, y + 9) if MIN_YEAR <= y <= MAX_YEAR else None
     return None
+
+
+def parse_decade_range(r: list) -> Optional[tuple[int, int]]:
+    if len(r) != 2 or any(x is not None and (isinstance(x, bool) or not MIN_YEAR <= x <= MAX_YEAR) for x in r):
+        return None
+    lo = OPEN_LOW if r[0] is None else r[0]
+    hi = OPEN_HIGH if r[1] is None else r[1]
+    return (lo, hi) if lo <= hi else None
 
 
 def normalize(ctx: PropertyContext, ui: UserInputs, warnings: list[str]) -> Normalized:
@@ -125,16 +138,26 @@ def normalize(ctx: PropertyContext, ui: UserInputs, warnings: list[str]) -> Norm
 
     if found("cv", p.cv.status):
         v = p.cv.value
-        if v is not None and math.isfinite(v) and v > 0:
+        if v is not None and math.isfinite(v) and 0 < v <= MAX_AMOUNT:
             n.cv_value, n.valuation_date = v, p.cv.valuation_date
         elif v is not None:
             warnings.append("cv_invalid")
     if found("title_type", p.title_type.status):
         n.title_type = p.title_type.value
+        if n.title_type is None and p.title_type.linz_types:
+            warnings.append("title_type_unresolved")  # LINZ lists types but none was chosen: do not guess
     if found("year_built", p.year_built.status):
-        n.year_range = parse_year(p.year_built.value)
-        if p.year_built.value is not None and n.year_range is None:
-            warnings.append("year_built_unparseable")
+        yb = p.year_built
+        if "decade_range" in yb.model_fields_set and yb.decade_range is None:
+            pass  # explicit null: mixed eras, so no decade is known
+        elif yb.decade_range is not None:
+            n.year_range = parse_decade_range(yb.decade_range)
+            if n.year_range is None:
+                warnings.append("year_built_unparseable")
+        else:
+            n.year_range = parse_year(yb.value)
+            if yb.value is not None and n.year_range is None:
+                warnings.append("year_built_unparseable")
     if found("cladding", p.cladding.status):
         n.cladding = p.cladding.value
     chat = ui.chat_supplied

@@ -21,6 +21,26 @@
                 }
               }
             }
+          },
+          "405": {
+            "description": "Method not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -51,11 +71,31 @@
             }
           },
           "422": {
-            "description": "Validation Error",
+            "description": "Validation error",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -97,11 +137,31 @@
             }
           },
           "422": {
-            "description": "Validation Error",
+            "description": "Validation error",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -120,6 +180,36 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/RatesSnapshot"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No rates snapshot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -142,6 +232,26 @@
                   },
                   "type": "array",
                   "title": "Response Sources V1 Sources Get"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -486,6 +596,61 @@
         },
         "type": "object",
         "title": "ChatSupplied"
+      },
+      "ErrorBody": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/ErrorField"
+            },
+            "type": "array",
+            "title": "Fields"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "ErrorBody"
+      },
+      "ErrorField": {
+        "properties": {
+          "field": {
+            "type": "string",
+            "title": "Field"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "field",
+          "message"
+        ],
+        "title": "ErrorField"
+      },
+      "ErrorResponse": {
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ErrorBody"
+          }
+        },
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "title": "ErrorResponse"
       },
       "Fhl": {
         "properties": {
@@ -845,19 +1010,6 @@
         ],
         "title": "Flag"
       },
-      "HTTPValidationError": {
-        "properties": {
-          "detail": {
-            "items": {
-              "$ref": "#/components/schemas/ValidationError"
-            },
-            "type": "array",
-            "title": "Detail"
-          }
-        },
-        "type": "object",
-        "title": "HTTPValidationError"
-      },
       "Hazard": {
         "properties": {
           "layer": {
@@ -1191,7 +1343,7 @@
             "$ref": "#/components/schemas/CV"
           },
           "title_type": {
-            "$ref": "#/components/schemas/StrField"
+            "$ref": "#/components/schemas/TitleField"
           },
           "year_built": {
             "$ref": "#/components/schemas/YearField"
@@ -1564,6 +1716,41 @@
         "type": "object",
         "title": "StrField"
       },
+      "TitleField": {
+        "properties": {
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "linz_types": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Linz Types"
+          }
+        },
+        "type": "object",
+        "title": "TitleField"
+      },
       "UserInputs": {
         "properties": {
           "price_override": {
@@ -1693,46 +1880,6 @@
         ],
         "title": "UserRateScenario"
       },
-      "ValidationError": {
-        "properties": {
-          "loc": {
-            "items": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "integer"
-                }
-              ]
-            },
-            "type": "array",
-            "title": "Location"
-          },
-          "msg": {
-            "type": "string",
-            "title": "Message"
-          },
-          "type": {
-            "type": "string",
-            "title": "Error Type"
-          },
-          "input": {
-            "title": "Input"
-          },
-          "ctx": {
-            "type": "object",
-            "title": "Context"
-          }
-        },
-        "type": "object",
-        "required": [
-          "loc",
-          "msg",
-          "type"
-        ],
-        "title": "ValidationError"
-      },
       "YearField": {
         "properties": {
           "value": {
@@ -1759,11 +1906,33 @@
               }
             ],
             "title": "Status"
+          },
+          "decade_range": {
+            "anyOf": [
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decade Range",
+            "description": "Inclusive [from, to] decade bounds; a null bound is open-ended. year_built_between matches when this range overlaps the rule's range. An explicit null means mixed eras (no decade)."
           }
         },
         "type": "object",
         "title": "YearField",
-        "description": "An int year, or a decade string such as \"1990s\"."
+        "description": "A year, or a decade.\n\nThe council records a build decade: `value` is its first year and `decade_range` is\n`[from, to]` (inclusive). `year_built_between` matches when `decade_range` overlaps\nthe rule's range. `[null, 1913]` means 1913 or earlier (no lower bound). An explicit\n`decade_range: null` (mixed eras) means no decade is known. Without a `decade_range`\nkey, `value` (an int year or a string such as \"1990s\") is used."
       }
     }
   }

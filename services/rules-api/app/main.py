@@ -13,6 +13,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from b_common.content_hash import content_hash
 from b_common.schemas import (
+    ErrorResponse,
     KbItem,
     RatesSnapshot,
     RulesOutput,
@@ -26,6 +27,10 @@ from .select import SelectContext, matches
 
 log = logging.getLogger("rules-api")
 app = FastAPI(title="rules-api", version="0.1.0")
+# Declared so the OpenAPI document shows the real error shape, not FastAPI's default "detail".
+ERRORS = {c: {"model": ErrorResponse, "description": d} for c, d in {
+    405: "Method not allowed", 500: "Internal server error"}.items()}
+ERRORS_422 = {422: {"model": ErrorResponse, "description": "Validation error"}, **ERRORS}
 
 
 def _include_draft() -> bool:
@@ -54,7 +59,7 @@ def _visible(items: list[KbItem], warnings: Optional[list[str]] = None) -> list[
     return out
 
 
-@app.get("/healthz")
+@app.get("/healthz", responses=ERRORS)
 def healthz() -> dict:
     return {"status": "ok"}
 
@@ -105,7 +110,7 @@ def _safe(fn, default, warnings: list[str], tag: str):
         return default, False
 
 
-@app.post("/v1/rules", response_model=RulesOutput)
+@app.post("/v1/rules", response_model=RulesOutput, responses=ERRORS_422)
 def rules(req: RulesRequest) -> RulesOutput:
     repo = get_repo()
     ctx, ui = req.property_context, req.user_inputs
@@ -153,7 +158,7 @@ def _chat_cladding_used(ctx, norm) -> bool:
     return not (c.status == "found" and c.value is not None)
 
 
-@app.get("/v1/kb/items", response_model=list[KbItem])
+@app.get("/v1/kb/items", response_model=list[KbItem], responses=ERRORS_422)
 def kb_items(ids: str = Query("", description="comma-separated ids")) -> list[KbItem]:
     wanted = [i.strip() for i in ids.split(",") if i.strip()]
     items = _visible(get_repo().kb_items())
@@ -163,7 +168,10 @@ def kb_items(ids: str = Query("", description="comma-separated ids")) -> list[Kb
     return items
 
 
-@app.get("/v1/rates/latest", response_model=RatesSnapshot)
+@app.get(
+    "/v1/rates/latest", response_model=RatesSnapshot,
+    responses={404: {"model": ErrorResponse, "description": "No rates snapshot"}, **ERRORS},
+)
 def rates_latest() -> RatesSnapshot:
     snap = get_repo().rates()
     if snap is None:
@@ -171,6 +179,6 @@ def rates_latest() -> RatesSnapshot:
     return snap
 
 
-@app.get("/v1/sources", response_model=list[Source])
+@app.get("/v1/sources", response_model=list[Source], responses=ERRORS)
 def sources() -> list[Source]:
     return get_repo().sources()

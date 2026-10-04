@@ -21,21 +21,46 @@ class CV(_Lenient):
     status: Optional[str] = None
 
 
+class IntField(_Lenient):
+    """Kept for property-api, whose year_built model extends it."""
+
+    value: Optional[int] = None
+    status: Optional[str] = None
+
+
 class StrField(_Lenient):
     value: Optional[str] = None
     status: Optional[str] = None
 
 
+class TitleField(StrField):
+    # title types exactly as LINZ records them; used to tell "unresolved" from "unknown"
+    linz_types: list[str] = Field(default_factory=list)
+
+
 class YearField(_Lenient):
-    """An int year, or a decade string such as "1990s"."""
+    """A year, or a decade.
+
+    The council records a build decade: `value` is its first year and `decade_range` is
+    `[from, to]` (inclusive). `year_built_between` matches when `decade_range` overlaps
+    the rule's range. `[null, 1913]` means 1913 or earlier (no lower bound). An explicit
+    `decade_range: null` (mixed eras) means no decade is known. Without a `decade_range`
+    key, `value` (an int year or a string such as "1990s") is used.
+    """
 
     value: Optional[Union[int, str]] = None
     status: Optional[str] = None
+    decade_range: Optional[list[Optional[int]]] = Field(
+        None,
+        description="Inclusive [from, to] decade bounds; a null bound is open-ended. "
+        "year_built_between matches when this range overlaps the rule's range. "
+        "An explicit null means mixed eras (no decade).",
+    )
 
 
 class Property(_Lenient):
     cv: CV = Field(default_factory=CV)
-    title_type: StrField = Field(default_factory=StrField)
+    title_type: TitleField = Field(default_factory=TitleField)
     year_built: YearField = Field(default_factory=YearField)
     cladding: StrField = Field(default_factory=StrField)
 
@@ -293,3 +318,19 @@ class RulesOutput(BaseModel):
     warnings: list[str] = Field(
         default_factory=list, description="Machine-readable warning codes. Codes are listed in CODES.md.")
     disclaimer: str = DISCLAIMER
+
+
+# ---- Error responses (every 4xx/5xx) ----------------------------------------
+class ErrorField(BaseModel):
+    field: str
+    message: str
+
+
+class ErrorBody(BaseModel):
+    code: str
+    message: str
+    fields: list[ErrorField] = Field(default_factory=list)
+
+
+class ErrorResponse(BaseModel):
+    error: ErrorBody
