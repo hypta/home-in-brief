@@ -168,7 +168,14 @@ class Source(BaseModel):
 class KbItem(BaseModel):
     id: str
     topic: str
-    applies_when: dict[str, Any] = Field(default_factory=dict)
+    applies_when: dict[str, Any] = Field(
+        default_factory=dict,
+        description=(
+            "Selection conditions, AND-ed across keys. Key `hazard_layer_intersects: [layer ids]` matches "
+            "when any listed layer (exact id, any priority) has status `intersects`. It only selects items; "
+            "it does not state flood history or risk level."
+        ),
+    )
     claim_en: str
     quote: Optional[str] = None
     source_id: str

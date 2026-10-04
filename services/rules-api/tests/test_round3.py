@@ -360,3 +360,54 @@ def test_openapi_declares_error_shape():
     assert spec["paths"]["/v1/rates/latest"]["get"]["responses"]["404"]["content"]["application/json"]["schema"]["$ref"].endswith("/ErrorResponse")
     assert "decade_range" in json.dumps(spec["components"]["schemas"]["YearField"])
     assert set(spec["components"]["schemas"]["ErrorBody"]["properties"]) == {"code", "message", "fields"}
+
+
+# ---- applies_when: hazard_layer_intersects ----
+def _hz(*pairs):
+    return SelectContext(hazards=[{"layer": l, "priority": p, "status": s} for l, p, s in pairs])
+
+
+def test_hazard_layer_intersects_overland_only():
+    ctx = _hz(("flood_zone", "primary", "none"), ("overland_flow_path", "primary", "intersects"))
+    assert matches({"hazard_layer_intersects": ["overland_flow_path"]}, ctx)
+    assert not matches({"hazard_status": "intersects", "hazard_layer_intersects": ["flood_zone"]}, ctx)
+
+
+def test_hazard_layer_intersects_coastal_only():
+    ctx = _hz(("overland_flow_path", "primary", "none"), ("coastal_inundation", "primary", "intersects"))
+    assert matches({"hazard_layer_intersects": ["overland_flow_path", "coastal_inundation"]}, ctx)
+    assert not matches({"hazard_layer_intersects": ["overland_flow_path"]}, ctx)
+
+
+def test_hazard_layer_intersects_secondary_layer():
+    ctx = _hz(("landslide_shallow", "secondary", "intersects"))
+    assert matches({"hazard_layer_intersects": ["landslide_shallow"]}, ctx)
+    assert not matches({"hazard_status": "intersects"}, ctx)
+
+
+@pytest.mark.parametrize("status", ["unavailable", "none", "not_found", None])
+def test_hazard_layer_intersects_other_status_no_match(status):
+    assert not matches({"hazard_layer_intersects": ["coastal_inundation"]}, _hz(("coastal_inundation", "primary", status)))
+
+
+def test_hazard_layer_intersects_empty_or_missing_layer():
+    ctx = _hz(("coastal_inundation", "primary", "intersects"))
+    assert not matches({"hazard_layer_intersects": []}, ctx)
+    assert not matches({"hazard_layer_intersects": ["coastal"]}, ctx)  # exact id only
+
+
+def test_hazard_layer_intersects_and_title_type():
+    ctx = _hz(("coastal_inundation", "primary", "intersects"))
+    ctx.title_type = "Cross Lease"
+    aw = {"hazard_layer_intersects": ["coastal_inundation"], "title_type": ["Cross Lease"]}
+    assert matches(aw, ctx)
+    ctx.title_type = "Freehold"
+    assert not matches(aw, ctx)
+
+
+@pytest.mark.parametrize("bad", ["coastal_inundation", [1], ["a", None], {"a": 1}, None])
+def test_hazard_layer_intersects_malformed(bad, caplog):
+    ctx = _hz(("coastal_inundation", "primary", "intersects"))
+    with caplog.at_level("WARNING", logger="rules-api.select"):
+        assert not matches({"hazard_layer_intersects": bad}, ctx)
+    assert "malformed applies_when" in caplog.text

@@ -1100,7 +1100,8 @@
           "applies_when": {
             "additionalProperties": true,
             "type": "object",
-            "title": "Applies When"
+            "title": "Applies When",
+            "description": "Selection conditions, AND-ed across keys. Key `hazard_layer_intersects: [layer ids]` matches when any listed layer (exact id, any priority) has status `intersects`. It only selects items; it does not state flood history or risk level."
           },
           "claim_en": {
             "type": "string",

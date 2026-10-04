@@ -33,6 +33,10 @@ def _check(key: str, arg: Any, ctx: SelectContext) -> Optional[bool]:
         return any(
             h["priority"] == "primary" and h["status"] == arg for h in ctx.hazards
         )
+    if key == "hazard_layer_intersects":
+        if not isinstance(arg, list) or not all(isinstance(x, str) for x in arg):
+            raise TypeError("hazard_layer_intersects must be a list of strings")
+        return any(h.get("layer") in arg and h.get("status") == "intersects" for h in ctx.hazards)
     if key == "fhl_eligible":
         return ctx.fhl_eligible == bool(arg)
     if key == "lvr_over":
