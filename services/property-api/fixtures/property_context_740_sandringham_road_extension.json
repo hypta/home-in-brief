@@ -266,16 +266,16 @@
   {
    "id": "homes",
    "label": "Homes.co.nz",
-   "url": "https://www.google.com/search?q=site%3Ahomes.co.nz+%22740+Sandringham+Road+Extension%22+Auckland",
+   "url": "https://duckduckgo.com/?q=%5Csite%3Ahomes.co.nz+%22740+Sandringham+Road+Extension%22+Wesley+Auckland",
    "prefilled": true,
-   "kind": "site_search"
+   "kind": "first_result"
   },
   {
    "id": "oneroof",
    "label": "OneRoof",
-   "url": "https://www.google.com/search?q=site%3Aoneroof.co.nz+%22740+Sandringham+Road+Extension%22+Auckland",
+   "url": "https://duckduckgo.com/?q=%5Csite%3Aoneroof.co.nz+%22740+Sandringham+Road+Extension%22+Wesley+Auckland",
    "prefilled": true,
-   "kind": "site_search"
+   "kind": "first_result"
   },
   {
    "id": "council_valuation",

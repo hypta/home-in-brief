@@ -57,9 +57,9 @@ _PAGE_FACTS = ("floor_area_m2", "building_site_coverage_m2", "local_board")
 _FACTS = (*_LAYER_FACTS, *_PAGE_FACTS)
 
 
-def _site_search(site: str, number: str, road: str) -> str:
-    """Google search limited to one site; we never fetch that site."""
-    return "https://www.google.com/search?q=" + quote_plus(f'site:{site} "{number} {road}" Auckland')
+def _first_result(site: str, number: str, road: str, suburb: Optional[str]) -> str:
+    """DuckDuckGo link that opens the first result on one site (the leading backslash); we never fetch that site."""
+    return "https://duckduckgo.com/?q=" + quote_plus(" ".join(f'\\site:{site} "{number} {road}" {suburb or ""} Auckland'.split()))
 
 
 def _try(fn: Callable, *args):
@@ -195,7 +195,8 @@ def build(address_id: int, typed: Optional[str] = None) -> dict:
         links["council_geomaps"].update(url=f"{council.GEOMAPS_VIEWER}?task=select&entity=rateacckey&values={key}",
                                         prefilled=True, kind="direct")
     for link_id, site in (("homes", "homes.co.nz"), ("oneroof", "oneroof.co.nz")):
-        links[link_id].update(url=_site_search(site, number, road), prefilled=True, kind="site_search")
+        links[link_id].update(url=_first_result(site, number, road, addr.get("suburb_locality_ascii")),
+                              prefilled=True, kind="first_result")
     ctx["property"] = {
         **_council_fields(ra, ra_err, key, page, page_err),
         "title_type": _title_type(*tt.result()),

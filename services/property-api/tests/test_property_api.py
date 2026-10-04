@@ -149,9 +149,10 @@ def test_cv_rates_and_prefilled_council_link():
     assert (rates.status, rates.reason, rates.rating_year) == ("not_found", "non_rateable_property", "2026/2027")
     links = {l.id: l for l in ctx.links}
     assert links["council_valuation"].kind == "direct" and links["council_valuation"].url.endswith("/12344049554.html")
-    assert links["homes"].kind == links["oneroof"].kind == "site_search"
-    assert links["homes"].url == ("https://www.google.com/search?q=site%3Ahomes.co.nz+"
-                                  "%22740+Sandringham+Road+Extension%22+Auckland")
+    assert links["homes"].kind == links["oneroof"].kind == "first_result"
+    assert links["homes"].url == ("https://duckduckgo.com/?q=%5Csite%3Ahomes.co.nz+"
+                                  "%22740+Sandringham+Road+Extension%22+Wesley+Auckland")
+    assert links["oneroof"].url.startswith("https://duckduckgo.com/?q=%5Csite%3Aoneroof.co.nz+%22740+")
     assert (links["nhc_claims_map"].kind, links["nhc_claims_map"].prefilled) == ("home", False)
     assert links["council_geomaps"].url.endswith("?task=select&entity=rateacckey&values=12344049554")
     assert ctx.property.last_sale.status == ctx.property.cladding.status == "unavailable"

@@ -105,8 +105,8 @@ class Link(BaseModel):
     label: str
     url: str
     prefilled: bool = False  # the URL carries this property or address
-    # direct: the property's page; site_search: a web search limited to that site; home: its front page
-    kind: Literal["direct", "site_search", "home"] = "home"
+    # direct: the property's page; first_result: the first web search result on that site; home: its front page
+    kind: Literal["direct", "first_result", "home"] = "home"
 
 
 class Source(s.Source):

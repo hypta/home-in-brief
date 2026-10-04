@@ -48,8 +48,8 @@ The two fixture addresses are public facilities, not private homes.
 
 Credit lines to display are returned in `sources[].attribution`.
 
-Links to Homes.co.nz and OneRoof are Google searches limited to that site; this service never queries those
-sites or the NHC portal. Council links open the property directly.
+Links to Homes.co.nz and OneRoof open the first DuckDuckGo result for the address on that site; this service
+never queries those sites or the NHC portal. Council links open the property directly.
 
 ## Known limits
 

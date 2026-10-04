@@ -2,7 +2,8 @@
 // Wording of flags and warnings follows CODES.md: "could not check" is never shown as "no risk".
 export const $ = id => document.getElementById(id);
 export const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-export const link = (url, text) => `<a href="${/^https?:\/\//.test(url || "") ? esc(url) : "#"}" target="_blank" rel="noopener">${esc(text)}</a>`;
+// noreferrer: DuckDuckGo only jumps to the first result when the click does not name the page it came from
+export const link = (url, text) => `<a href="${/^https?:\/\//.test(url || "") ? esc(url) : "#"}" target="_blank" rel="noreferrer">${esc(text)}</a>`;
 const LAYERS = {flood_plain:"Flood plains", flood_prone_area:"Flood prone areas", overland_flow_path:"Overland flow paths",
   coastal_inundation:"Coastal inundation (1% AEP)", landslide_shallow:"Landslide susceptibility - shallow",
   landslide_large_scale:"Landslide susceptibility - large scale", liquefaction:"Liquefaction vulnerability",
@@ -190,7 +191,7 @@ function buildNotes(state) {
        : `<p class="muted">${EMPTY[r.kb_empty_reason] || "No build-era or title notes apply to this property."}</p>`));
 }
 
-const LINK_KIND = {direct: " (opens this property)", site_search: " (opens a Google search for this address on that site)", home: " (search for the address there)"};
+const LINK_KIND = {direct: " (opens this property)", first_result: " (opens the first search result for this address on that site)", home: " (search for the address there)"};
 
 export function render(state) {
   const {ctx} = state;
