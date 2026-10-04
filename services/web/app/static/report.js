@@ -107,7 +107,7 @@ function hazards(state) {
   return `${byParcel || ctx.address.status !== "found" ? "" : `<p class="problem">No parcel was matched, so the layers were checked at the address point only and parcel coverage is not calculated.</p>`}
     <h3>Flood layers</h3>${rows("primary") || `<p class="problem">No flood layer was checked. ${NO_RISK_CAVEAT}</p>`}
     <h3>Other mapped hazards</h3>${rows("secondary") || `<p class="problem">No other layer was checked. ${NO_RISK_CAVEAT}</p>`}
-    ${warnings(state.rules, "hazards")}${notes(state, "hazards", "What this can mean for insurance")}`;
+    ${warnings(state.rules, "hazards")}${notes(state, "hazards", "Notes on these hazards and insurance")}`;
 }
 
 function facts({ctx}) {

@@ -1,5 +1,6 @@
 """The relay is tested against real upstream responses recorded in tests/fixtures (see its README)."""
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -12,6 +13,8 @@ from fastapi.testclient import TestClient
 HERE = Path(__file__).resolve()
 ROOT = HERE.parents[3]
 sys.path.insert(0, str(HERE.parents[1]))
+for name in ("PROPERTY_API_URL", "RULES_API_URL"):  # a shell that ran DEPLOY.md exports the real service URLs
+    os.environ.pop(name, None)
 
 from app import main  # noqa: E402
 
