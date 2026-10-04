@@ -281,4 +281,3 @@ def test_http_endpoints():
     assert body["schema_version"] == "0.1" and body["property"]["cladding"] == {
         "value": None, "status": "unavailable", "reason": "no_free_source", "source_id": None}
     assert client.get("/v1/property-context", params={"address_id": 0}).status_code == 422
-    assert "<title>" in client.get("/").text

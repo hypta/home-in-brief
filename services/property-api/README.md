@@ -10,9 +10,8 @@ links and source credits). Every field carries `status` (`found` / `not_found` /
 |---|---|
 | `GET /v1/addresses?q=` | Up to 8 Auckland addresses starting with the typed text |
 | `GET /v1/property-context?address_id=` | `PropertyContext` for a LINZ `address_id` |
-| `GET /v1/map?address_id=` | GeoJSON (WGS84) for the development map: parcel, address point and hazard features within about 120 m. Not part of the hand-off contract |
+| `GET /v1/map?address_id=` | GeoJSON (WGS84) for the report map: parcel, address point and hazard features within about 120 m. Not part of the hand-off contract |
 | `GET /healthz` | Health check |
-| `GET /` | Development page: type an address, pick one, see the lookup |
 
 ## Run locally
 
@@ -46,7 +45,6 @@ The two fixture addresses are public facilities, not private homes.
 | Coastal erosion (ASCIE 2130, RCP8.5+) | Auckland Council GeoMaps server (GeoMaps terms: personal and business use, no substantial copying) | Same; secondary layer |
 | Capital value, land value, value of improvements, annual rates, rateability, improvement description, land use, land area, legal description, record of title | Auckland Council GeoMaps "Rate Assessment" layer (GeoMaps terms: personal and business use, no substantial copying) | One ArcGIS query per request |
 | Build decade, floor area, building site coverage, local board | Auckland Council property page | One page fetch per request, parsed |
-| Map background (development page only) | OpenStreetMap tiles | Loaded by the browser; replace before production use |
 
 Credit lines to display are returned in `sources[].attribution`.
 

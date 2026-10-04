@@ -1,18 +1,14 @@
 """property-api: Auckland address -> PropertyContext (spec 6.2)."""
 from __future__ import annotations
 
-from pathlib import Path
-
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import FileResponse
 
 from . import context, linz
 from .models import AddressSuggestion, PropertyContext
 
 app = FastAPI(title="property-api", version="0.1.0")
 app.add_middleware(GZipMiddleware, minimum_size=1024)
-STATIC = Path(__file__).parent / "static"
 
 
 @app.get("/healthz")
@@ -36,7 +32,7 @@ def property_context(address_id: int = Query(..., ge=1),
 
 @app.get("/v1/map")
 def map_geojson(address_id: int = Query(..., ge=1)) -> dict:
-    """GeoJSON for the development map. Not part of the PropertyContext hand-off."""
+    """GeoJSON for the report map. Not part of the PropertyContext hand-off."""
     try:
         data = context.map_data(address_id)
     except Exception as e:
@@ -45,7 +41,3 @@ def map_geojson(address_id: int = Query(..., ge=1)) -> dict:
         raise HTTPException(404, "address not found in Auckland")
     return data
 
-
-@app.get("/", include_in_schema=False)
-def index() -> FileResponse:
-    return FileResponse(STATIC / "index.html")
