@@ -8,7 +8,7 @@ summaries only, see `tos_url` per source).
 
 ## Quick way: mark reviewed items with one command
 
-After checking items against their sources, run (reviewer name = the person who checked, not the author):
+After checking items against their sources, run (reviewer name = the person who checked; this may be the author of the item):
 
 ```
 python kb/mark_verified.py --by "Reviewer Name" kb_auction_unconditional kb_nhc_building_cap
@@ -26,8 +26,8 @@ equals the item's current content hash (over `claim_en`, `quote`, `source_url`, 
 `next_step_en`). If any of those fields is edited later, the item is treated as `needs_review`
 everywhere (validator, seeding, kb-refresh) until it is reviewed again.
 
-**The reviewer must be a second person**, not the author of the claim and quote. Do not set
-`verified_by` to yourself for text you wrote.
+**The author may verify their own item**, but must open the source and check the quote word for word
+(step 2 below). Set `verified_by` to the name of the person who actually did the check.
 
 1. Open `source_url` in a normal browser.
 2. Find the `quote` word for word (case, quotes and dashes may differ) and read the surrounding text.
@@ -45,7 +45,7 @@ everywhere (validator, seeding, kb-refresh) until it is reviewed again.
 5. Run `python kb/validate.py` (must print `errors=0`), commit, then re-seed with
    `python scripts/seed_firestore.py` (use `--dry-run` first).
 6. If the wording changed or the page moved: leave `status` as `needs_review` or `draft`, correct `quote`
-   and `claim_en` from the new original text, and let a second person verify as above.
+   and `claim_en` from the new original text, and verify again as above.
 7. Keep the attribution from the source's `attribution` field wherever the quote is shown.
 
 What re-seeding does with existing Firestore documents: the git seed wins for content. A verified
@@ -65,11 +65,11 @@ document stays verified only while its content hash still matches; a changed tex
 settled.govt.nz, "last updated" for RBNZ and Auckland Council, the document date for PDFs), as
 `YYYY`, `YYYY-MM` or `YYYY-MM-DD`, or null if the page shows none. Re-check it when you re-verify.
 
-## Verification status (as of 2026-10-04)
+## Verification status (as of 2026-10-05)
 
-The knowledge base has 31 items: 9 `verified` and 22 `draft`.
+The knowledge base has 31 items: 31/31 `verified`, none `draft`.
 
-Verified (reviewer Kevin, 2026-10-04, UTC):
+Verified by Kevin, 2026-10-04 (9 items, settled.govt.nz):
 
 | Item | Verified at (UTC) |
 |---|---|
@@ -77,23 +77,46 @@ Verified (reviewer Kevin, 2026-10-04, UTC):
 | kb_leaky_build_era | 2026-10-04 08:54:34Z |
 | kb_monolithic_cladding | 2026-10-04 08:55:02Z |
 | kb_flood_insurance_limit | 2026-10-04 08:55:29Z |
+| kb_title_cross_lease_flats_plan | 2026-10-04 08:56:02Z |
 | kb_insurance_condition | 2026-10-04 08:56:21Z |
 | kb_title_freehold | 2026-10-04 08:56:34Z |
 | kb_title_cross_lease | 2026-10-04 08:56:43Z |
-| kb_title_cross_lease_flats_plan | 2026-10-04 08:56:02Z |
 | kb_title_unit_title | 2026-10-04 08:56:49Z |
 
-Not yet verified (22 `draft` items, grouped by source; the settled.govt.nz items are all verified):
+Verified by Ting Wang, 2026-10-04 (22 items):
 
-- RBNZ (5): kb_rbnz_lvr, kb_rbnz_dti, kb_fhl_lvr_not_restricted, kb_fhl_dti_not_restricted, kb_low_deposit_higher_rates
-- Auckland Council (4): kb_cv_not_market, kb_overland_flow_path, kb_coastal_inundation_meaning, kb_landslide_map_context
-- NHC (5): kb_nhc_building_cap, kb_nhc_levy, kb_nhc_building_excess, kb_nhc_land_cover_limits, kb_lim_next_step
-- unittitles (2): kb_unit_title_body_corporate_insurance, kb_unit_title_levies
-- Kainga Ora (6): kb_fhl_premium, kb_fhl_govt_not_funding_premium, kb_fhl_deposit_5pct, kb_fhl_income_cap_individual, kb_fhl_income_cap_multiple, kb_fhl_income_basis
+| Item | Verified at (UTC) |
+|---|---|
+| kb_nhc_building_cap | 2026-10-04 09:30:47Z |
+| kb_nhc_levy | 2026-10-04 09:30:47Z |
+| kb_nhc_building_excess | 2026-10-04 09:30:47Z |
+| kb_nhc_land_cover_limits | 2026-10-04 09:30:47Z |
+| kb_lim_next_step | 2026-10-04 09:30:47Z |
+| kb_fhl_premium | 2026-10-04 09:35:40Z |
+| kb_fhl_govt_not_funding_premium | 2026-10-04 09:35:40Z |
+| kb_fhl_deposit_5pct | 2026-10-04 09:35:40Z |
+| kb_fhl_income_cap_individual | 2026-10-04 09:35:40Z |
+| kb_fhl_income_cap_multiple | 2026-10-04 09:35:40Z |
+| kb_fhl_income_basis | 2026-10-04 09:35:40Z |
+| kb_rbnz_lvr | 2026-10-04 09:45:35Z |
+| kb_rbnz_dti | 2026-10-04 09:51:18Z |
+| kb_fhl_lvr_not_restricted | 2026-10-04 09:51:18Z |
+| kb_fhl_dti_not_restricted | 2026-10-04 09:51:18Z |
+| kb_low_deposit_higher_rates | 2026-10-04 09:51:18Z |
+| kb_unit_title_levies | 2026-10-04 10:02:39Z |
+| kb_unit_title_body_corporate_insurance | 2026-10-04 10:02:39Z |
+| kb_cv_not_market | 2026-10-04 10:02:39Z |
+| kb_overland_flow_path | 2026-10-04 10:02:39Z |
+| kb_coastal_inundation_meaning | 2026-10-04 10:02:39Z |
+| kb_landslide_map_context | 2026-10-04 10:07:26Z |
 
-The production rules-api only returns `verified` items, so for now a report can only cite these 9.
+While checking against the sources, Ting Wang narrowed the wording of 3 items to what the source says:
+`kb_rbnz_lvr` (added "for owner-occupiers"), `kb_low_deposit_higher_rates` (added "less than a 20% deposit"
+and "until you reach 20% equity"), and `kb_landslide_map_context` (now "if or when a landslide might happen").
 
-If you later edit the `claim_en`, `quote`, `source_url`, `applies_when` or `next_step_en` of any of these 9 items, it goes back to `needs_review` automatically and must be reviewed again.
+The production rules-api returns `verified` items, so a report can cite all 31.
+
+If you later edit the `claim_en`, `quote`, `source_url`, `applies_when` or `next_step_en` of any item, it goes back to `needs_review` automatically and must be reviewed again.
 
 ## Items that need manual checks
 

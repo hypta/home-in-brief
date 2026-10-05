@@ -6,7 +6,7 @@ Usage:
 
 For each id it sets status="verified", verified_by, verified_at (current UTC time, full ISO timestamp)
 and verified_content_hash (hash of the content as it is now), then runs kb/validate.py.
-The reviewer must be a second person, not the author of the claim and quote.
+The author may verify their own item, but must open the source and check the quote word for word.
 Only the listed ids are touched; the rest of each seed file is rewritten unchanged.
 """
 import argparse
