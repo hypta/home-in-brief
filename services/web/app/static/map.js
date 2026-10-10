@@ -56,7 +56,8 @@ export async function drawMap(request, isCurrent) {
         onEachFeature: (f, l) => l.bindPopup(esc(layerName(layer)) + ": " + esc(f.properties.class || "not classed"))});
     }
     if (pt) L.circleMarker([pt.geometry.coordinates[1], pt.geometry.coordinates[0]], {radius: 6, color: "#111", fillColor: "#fff", fillOpacity: 1}).addTo(map);
-    L.control.layers(aerial && {"Aerial photo (LINZ)": aerial, "Street map (OpenStreetMap)": streets}, overlays, {collapsed: matchMedia("(max-width: 600px)").matches}).addTo(map);  // the open list would cover a phone-width map
+    const layerList = L.control.layers(aerial && {"Aerial photo (LINZ)": aerial, "Street map (OpenStreetMap)": streets}, overlays).addTo(map);
+    if (!matchMedia("(max-width: 600px)").matches) layerList.expand();  // open at first on a wide screen; it folds away when the pointer leaves it or the map is clicked
     // "none mapped" is only said when every layer loaded
     $("mapnote").textContent = (nearby.length ? "Shown within about 120 m: " + nearby.join(", ") + "."
         : g.unavailable.length ? "" : "No flood, coastal or tsunami layer is mapped within about 120 m.")
