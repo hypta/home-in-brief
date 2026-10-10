@@ -122,19 +122,24 @@ def no_contexts(monkeypatch):
     monkeypatch.setattr(main, "_contexts", {})
 
 
-def test_report_is_written_from_documents_fetched_here_not_from_the_browser(sent):
-    sent.side_effect = [upstream(200, CONTEXT.read_bytes()), upstream(200, RULES_OUTPUT), upstream(200, REPORT)]
+@pytest.mark.parametrize("path, answer, asked", [
+    ("report", REPORT, {}),
+    ("followup", recorded("followup_year_supplied.json"), {"question": "It was built in 1997. What should I watch for?", "history": [
+        {"role": "user", "text": "Is it in a flood plain?"}, {"role": "assistant", "text": "Yes."}]}),
+])
+def test_report_and_followup_are_written_from_documents_fetched_here_not_from_the_browser(sent, path, answer, asked):
+    sent.side_effect = [upstream(200, CONTEXT.read_bytes()), upstream(200, RULES_OUTPUT), upstream(200, answer)]
     typed = {**LOAN, "chat_supplied": {"year_built": "RD199B", "cladding": None}}
-    r = client.post("/api/report", json={"address_id": 2100210, "user_inputs": typed, "property_context": {"cv": 1}})
-    assert r.status_code == 200 and r.json() == json.loads(REPORT)
+    r = client.post("/api/" + path, json={"address_id": 2100210, "user_inputs": typed, "property_context": {"cv": 1}, **asked})
+    assert r.status_code == 200 and r.json() == json.loads(answer)
     context, inputs = json.loads(CONTEXT.read_text()), {**LOAN, "chat_supplied": {"year_built": "1990s", "cladding": None}}
     to_property, to_rules, to_report = sent.call_args_list
     assert to_property.args == ("GET", "http://localhost:8081/v1/property-context")
     assert to_property.kwargs["params"] == {"address_id": "2100210"}
     assert to_rules.args == ("POST", "http://localhost:8080/v1/rules")
     assert to_rules.kwargs["json"] == {"property_context": context, "user_inputs": inputs}
-    assert to_report.args == ("POST", "http://localhost:8090/v1/report")
-    assert to_report.kwargs["json"] == {"property_context": context, "user_inputs": inputs, "rules_output": json.loads(RULES_OUTPUT)}
+    assert to_report.args == ("POST", "http://localhost:8090/v1/" + path)
+    assert to_report.kwargs["json"] == {"property_context": context, "user_inputs": inputs, "rules_output": json.loads(RULES_OUTPUT), **asked}
     assert all(0 < call.kwargs["timeout"] <= main.TIMEOUT for call in sent.call_args_list)
 
 
@@ -163,14 +168,15 @@ def test_the_oldest_property_context_makes_room_for_a_new_one(monkeypatch):
     assert list(main._contexts) == ["1", "3"]
 
 
-@pytest.mark.parametrize("answers, status, code", [
-    ([(422, recorded("property_api_error_short_query.json"))], 422, "upstream_error"),
-    ([(200, CONTEXT.read_bytes()), (422, recorded("rules_error_negative_deposit.json"))], 422, "validation_error"),
-    ([(200, CONTEXT.read_bytes()), (200, RULES_OUTPUT), (503, recorded("report_error_model_unavailable.json"))], 503, "model_unavailable"),
+@pytest.mark.parametrize("path, answers, status, code", [
+    ("report", [(422, recorded("property_api_error_short_query.json"))], 422, "upstream_error"),
+    ("report", [(200, CONTEXT.read_bytes()), (422, recorded("rules_error_negative_deposit.json"))], 422, "validation_error"),
+    ("report", [(200, CONTEXT.read_bytes()), (200, RULES_OUTPUT), (503, recorded("report_error_model_unavailable.json"))], 503, "model_unavailable"),
+    ("followup", [(200, CONTEXT.read_bytes()), (200, RULES_OUTPUT), (422, recorded("followup_error_empty_question.json"))], 422, "validation_error"),
 ])
-def test_report_stops_at_the_first_service_that_fails_and_passes_its_error_on(sent, answers, status, code):
+def test_report_and_followup_stop_at_the_first_service_that_fails_and_pass_its_error_on(sent, path, answers, status, code):
     sent.side_effect = [upstream(*answer) for answer in answers]
-    r = client.post("/api/report", json={"address_id": 2100210, "user_inputs": LOAN})
+    r = client.post("/api/" + path, json={"address_id": 2100210, "user_inputs": LOAN})
     assert r.status_code == status and r.json()["error"]["code"] == code and sent.call_count == len(answers)
 
 

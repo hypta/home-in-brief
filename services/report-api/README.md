@@ -88,25 +88,41 @@ Chinese-equivalent branches are not used there. Mock mode still returns the gold
 
 ## Follow-up (`app/followup.py`, `app/followup_prompt.py`)
 
-The whole system is English only (2026-10-10 decision). A question may be in any language and is answered, in
-English. Request: the three documents plus `question` (1-1000 characters) and `history` (at most 6 entries of
+The validated answer is English only (2026-10-10 decision). A question may be in any language and is answered, in
+English; an answer from a Google Search (step 3) is the one exception and follows the language of the question.
+Request: the three documents plus `question` (1-1000 characters) and `history` (at most 6 entries of
 `{role: "user"|"assistant", text}`, text at most 2000 characters; web sends the last 3 turns). No server state.
 Query `refusal_mode`: `exempt` (default) or `strict`.
 
-Response 200: `{language, answer: [{text, source_ids}], out_of_scope, user_supplied, links, dropped, warnings}`.
-`language` is always `"en"`; the field is kept only for compatibility with the existing contract (A reads it).
+Response 200: `{language, answer: [{text, source_ids}], out_of_scope, user_supplied, links, dropped, warnings}`,
+plus `web` when an out-of-scope question was answered from a Google Search (step 3; `answer` is then `[]`).
+`language` describes `answer` and is always `"en"`; the field is kept only for compatibility with the existing
+contract (A reads it).
 `warnings` is `[]` except `rules_rerun_unavailable` (mock mode answered from the input RulesOutput).
 1 or more passing sentences gives 200 (at most 3); 0 gives 502 `validation_failed`.
 
 Steps (INTERFACE_DRAFT 5 and 6.1):
 
-1. Gemini call 1 (classify): out of scope, a stated year built or cladding, suggested links. The question is
-   understood in whatever language it is written in; there is no language detection.
+1. Gemini call 1 (classify): out of scope, whether public web pages can answer it (`searchable`), a stated year built
+   or cladding, suggested links. The question is understood in whatever language it is written in; there is no
+   language detection.
 2. `user_supplied`, checked by code: `year_built` is an integer 1800..this year or a decade such as `1990s`
    that appears in the question as written; `cladding` is one of `monolithic`, `weatherboard`, `brick`,
    `concrete`, `other` and a matching word must appear in the question. A question with a conditional or
    negation word (`if`, `not`, `如果`, `假如`, `不是`, ...) gives no value. Logged as `user_supplied_ignored`.
-3. Out of scope: the answer is one fixed English refusal chosen by code (never translated). `links` are
+3. Out of scope, and classify says web pages can answer it (schools, commute, services nearby, published crime
+   statistics; never advice, verdicts or predictions): a Gemini call with the Google Search tool
+   (`followup.gemini_search`, prompt `followup_prompt.web_prompt` with the matched address, the question and the
+   history), made once more, time allowing, when the first answer names no source. The response carries `web: {text, sources: [{title, url}], search_suggestions}`: the answer in the
+   language of the question, the pages the search grounded it on (`title` is the site's domain, `url` is
+   Google's redirect) and Google's search-suggestions HTML. This text is **not** checked by the validator and is
+   not edited by code: the Gemini API terms for Grounding with Google Search require it to be shown as returned,
+   together with its search suggestions, and do not allow storing it (so the tests use a hand-written answer).
+   When neither answer names a source, the call fails, the mode is `strict` or `REPORT_MOCK` is on, the refusal
+   below is returned instead. Only the route searches: `answer_followup` called directly (the eval script) does
+   not, because an eval run stores what it gets.
+
+   Otherwise the answer is one fixed English refusal chosen by code (never translated). `links` are
    the suggested PropertyContext link ids; if Gemini suggests none, code picks at most 2 by question type
    (valuation or sale: `homes`, `oneroof`, `council_valuation`; flooding: `council_flood_viewer`,
    `council_geomaps`; other hazards: `council_geomaps`, `council_flood_viewer`; anything else: `council_geomaps`),

@@ -64,6 +64,6 @@ def report(req: ReportRequest) -> Report:
 FOLLOWUP_ERRORS = ERRORS | {504: {"model": ErrorResponse, "description": "Request deadline exceeded"}}
 
 
-@app.post("/v1/followup", response_model=FollowupResponse, responses=FOLLOWUP_ERRORS)
+@app.post("/v1/followup", response_model=FollowupResponse, response_model_exclude_none=True, responses=FOLLOWUP_ERRORS)
 def followup(req: FollowupRequest, refusal_mode: Literal["exempt", "strict"] = "exempt") -> FollowupResponse:
-    return answer_followup(req, refusal_mode)
+    return answer_followup(req, refusal_mode, web_search=True)

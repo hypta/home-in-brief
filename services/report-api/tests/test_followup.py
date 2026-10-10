@@ -322,6 +322,83 @@ def test_out_of_scope_exempt(monkeypatch, rules_calls):
     assert not gen.calls["answer"] and len(gen.calls) == 2
 
 
+# Written by hand: the Gemini API terms do not allow storing real results of Grounding with Google Search.
+WEB = followup.WebAnswer(text="Auckland Transport's journey planner gives travel times from an address.",
+                         sources=[followup.WebSource(title="at.govt.nz", url="https://redirect.invalid/1")],
+                         search_suggestions="<div>suggestions</div>")
+
+
+def test_out_of_scope_question_the_web_can_answer_gets_a_search_answer(monkeypatch, rules_calls):
+    asked = []
+    monkeypatch.setattr(followup, "gemini_json", fake(cls(out_of_scope=True, searchable=True, links=["council_geomaps"])))
+    monkeypatch.setattr(followup, "gemini_search", lambda prompt, timeout_s: asked.append(prompt) or WEB)
+    history = [{"role": "user", "text": "Which schools are near?"}, {"role": "assistant", "text": "Wesley Primary School."}]
+    out = post("case1", "How far is it on foot?", history=history).json()
+    assert out["out_of_scope"] is True and out["answer"] == [] and out["web"] == WEB.model_dump()
+    assert out["links"] == ["council_geomaps"]
+    assert asked[0].startswith(fp.TASK_WEB) and "How far is it on foot?" in asked[0] and "Wesley Primary School." in asked[0]
+    assert body("case1")["property_context"]["address"]["matched"] in asked[0]
+
+
+@pytest.mark.parametrize("error", [None, gemini.ModelUnavailable("quota")])
+def test_search_without_a_source_or_without_an_answer_falls_back_to_the_refusal(monkeypatch, rules_calls, error):
+    tries = []
+
+    def search(prompt, timeout_s):
+        tries.append(prompt)
+        if error:
+            raise error
+
+    monkeypatch.setattr(followup, "gemini_json", fake(cls(out_of_scope=True, searchable=True)))
+    monkeypatch.setattr(followup, "gemini_search", search)
+    out = post("case1", "Which school zone is this in?").json()
+    assert out["answer"] == [{"text": followup.REFUSAL_EN, "source_ids": []}] and "web" not in out
+    assert len(tries) == (1 if error else 2)  # an answer without a source is asked for once more
+
+
+def test_gemini_search_lists_each_page_once_and_needs_a_source(monkeypatch):
+    from google import genai
+    from google.genai import types
+
+    def reply(*uris):
+        pages = [types.GroundingChunk(web=types.GroundingChunkWeb(uri=u, title="at.govt.nz")) for u in uris]
+        return types.GenerateContentResponse(candidates=[types.Candidate(
+            content=types.Content(parts=[types.Part(text=" Buses run to the city. ")]),
+            grounding_metadata=types.GroundingMetadata(
+                grounding_chunks=pages, search_entry_point=types.SearchEntryPoint(rendered_content="<div>chips</div>")))])
+
+    replies = [reply("https://redirect.invalid/1", "https://redirect.invalid/1", "https://redirect.invalid/2"), reply()]
+
+    class Client:
+        def __init__(self, **kwargs):
+            self.models = self
+
+        def generate_content(self, **kwargs):
+            assert kwargs["config"].tools[0].google_search is not None
+            return replies.pop(0)
+
+    monkeypatch.setenv("GEMINI_API_KEY", "k")
+    monkeypatch.setattr(genai, "Client", Client)
+    found = followup.gemini_search("prompt", 5)
+    assert found.text == "Buses run to the city." and found.search_suggestions == "<div>chips</div>"
+    assert [s.model_dump() for s in found.sources] == [{"title": "at.govt.nz", "url": "https://redirect.invalid/1"},
+                                                        {"title": "at.govt.nz", "url": "https://redirect.invalid/2"}]
+    assert followup.gemini_search("prompt", 5) is None  # an answer the search grounded on no page
+
+
+def test_advice_questions_and_strict_mode_never_search(monkeypatch, rules_calls):
+    def no_search(prompt, timeout_s):
+        raise AssertionError("must not search")
+
+    monkeypatch.setattr(followup, "gemini_search", no_search)
+    monkeypatch.setattr(followup, "gemini_json", fake(cls(out_of_scope=True, searchable=False)))
+    assert post("case1", "Should I buy it?").json()["answer"][0]["text"] == followup.REFUSAL_EN
+    monkeypatch.setattr(followup, "gemini_json", fake(cls(out_of_scope=True, searchable=True)))
+    assert post("case1", "Which school zone is this in?", mode="strict").status_code == 502
+    asked = followup.FollowupRequest.model_validate(body("case1") | {"question": "Which school zone is this in?"})
+    assert followup.answer_followup(asked).web is None  # only the route searches: an eval run stores what it gets
+
+
 def test_out_of_scope_japanese_question_gets_the_english_refusal(monkeypatch, rules_calls):
     monkeypatch.setattr(followup, "gemini_json", fake({**cls(), "out_of_scope": True}))
     out = post("case1", "この地域の学校はどうですか？").json()

@@ -139,11 +139,12 @@
 
 <section aria-labelledby="h-ask">
 <h2 id="h-ask">7. Ask a follow-up question</h2>
-<p class="pending">Not available yet. You will be able to ask in any language and get an answer in the same language, with sources.</p>
-<form class="field">
+<p class="muted">Ask about this property or this report, in any language.</p>
+<div id="thread" aria-live="polite"></div>
+<form id="ask-form" class="field">
 <label for="question">Your question</label>
-<textarea id="question" rows="2" disabled></textarea>
-<button type="submit" disabled>Ask</button>
+<textarea id="question" rows="2" maxlength="1000" required></textarea>
+<button type="submit" id="ask">Ask</button>
 </form>
 </section>
 

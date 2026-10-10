@@ -14,7 +14,7 @@ a { color:var(--link) }
 .field label { display:block; font-weight:600; margin-top:12px }
 .field :is(input, select, textarea) { width:100%; min-height:44px; padding:10px 12px; font:inherit; color:inherit; background:var(--card); border:1px solid var(--line); border-radius:8px }
 button { min-height:44px; padding:10px 16px; font:inherit; font-weight:600; color:var(--bg); background:var(--link); border:0; border-radius:8px; margin-top:12px; cursor:pointer }
-button:disabled, textarea:disabled { opacity:.5; cursor:not-allowed }
+button:disabled { opacity:.5; cursor:not-allowed }
 .fields { display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:0 16px; align-items:start }
 .fields > :is(h3, p, button) { grid-column:1 / -1; justify-self:start }
 #suggestions { list-style:none; margin:4px 0 0; padding:0 }
@@ -29,10 +29,14 @@ button:disabled, textarea:disabled { opacity:.5; cursor:not-allowed }
 .found { color:var(--ok); background:var(--okbg) }
 /* "none" is neutral on purpose: not mapped is not the same as safe */
 .none, .unavailable, .not_found { color:var(--na); background:var(--nabg) }
-.note, .pending, .problem { padding:10px 12px; border:1px solid var(--line); border-radius:8px; margin-top:6px }
-.pending { border-style:dashed; color:var(--muted) }
+.note, .problem, .msg { padding:10px 12px; border:1px solid var(--line); border-radius:8px; margin-top:6px }
 .problem { color:var(--warn); background:var(--warnbg); border-color:transparent }
 ul.plain { padding-left:1.2em; margin:6px 0 }
+
+/* the follow-up conversation: the visitor's messages sit to the right, the answers to the left */
+.msg { max-width:88%; margin-top:8px }
+.msg.you { width:fit-content; margin-left:auto; background:var(--card) }
+.suggest { display:block; width:100%; height:64px; border:0 }
 
 /* a source reference: the number opens the source details in place */
 .cite { display:inline-block; font-size:.85rem; vertical-align:baseline }

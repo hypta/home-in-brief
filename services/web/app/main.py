@@ -1,5 +1,5 @@
 """web: the only public service. Serves the report page, relays API calls to the private services and asks
-report-api for the summary."""
+report-api for the summary and the answers to follow-up questions."""
 from __future__ import annotations
 
 import json
@@ -19,7 +19,7 @@ from fastapi.staticfiles import StaticFiles
 PROPERTY = os.environ.get("PROPERTY_API_URL", "http://localhost:8081").rstrip("/")
 RULES = os.environ.get("RULES_API_URL", "http://localhost:8080").rstrip("/")
 REPORT = os.environ.get("REPORT_API_URL", "http://localhost:8090").rstrip("/")
-# The relayed part of the public API: browser path -> (private service, its path). POST /api/report is the only other path.
+# The relayed part of the public API: browser path -> (private service, its path). POST /api/report and /api/followup are the only other paths.
 ROUTES = {
     ("GET", "addresses"): (PROPERTY, "/v1/addresses"),
     ("GET", "property-context"): (PROPERTY, "/v1/property-context"),
@@ -30,7 +30,8 @@ ROUTES = {
     ("GET", "sources"): (RULES, "/v1/sources"),
 }
 METADATA = "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity"
-# property-context makes several upstream calls of up to 8 s each. /api/report shares one such limit between its calls.
+# property-context makes several upstream calls of up to 8 s each. /api/report and /api/followup each share one such
+# limit between their calls.
 TIMEOUT = 30
 MAX_BODY = 256 * 1024  # a PropertyContext is about 13 kB
 _tokens: dict[str, tuple[float, str]] = {}
@@ -152,10 +153,9 @@ def relay_get(path: str, request: Request) -> Response:
     return r
 
 
-@app.post("/api/report")
-def report(payload: dict) -> Response:
-    """The summary and next steps for one address. The browser sends the address id and the visitor's inputs only:
-    the documents report-api reads are fetched here, because a browser could send altered ones."""
+def _ask(upstream: str, payload: dict, **asked) -> Response:
+    """report-api's answer for one address. The browser names the address and sends the visitor's inputs: the
+    documents report-api reads are fetched here, because a browser could send altered ones."""
     deadline = time.monotonic() + TIMEOUT
 
     def left() -> float:
@@ -173,7 +173,20 @@ def report(payload: dict) -> Response:
     r = _call("POST", RULES, "/v1/rules", payload=documents, timeout=left())
     if r.status_code != 200:
         return r
-    return _call("POST", REPORT, "/v1/report", payload={**documents, "rules_output": json.loads(r.body)}, timeout=left())
+    return _call("POST", REPORT, upstream, payload={**documents, "rules_output": json.loads(r.body), **asked}, timeout=left())
+
+
+@app.post("/api/report")
+def report(payload: dict) -> Response:
+    """The summary and next steps for one address."""
+    return _ask("/v1/report", payload)
+
+
+@app.post("/api/followup")
+def followup(payload: dict) -> Response:
+    """The answer to one question about that report. The question and the earlier turns are the visitor's own words;
+    report-api checks their size and never reads them as facts."""
+    return _ask("/v1/followup", payload, question=payload.get("question"), history=payload.get("history", []))
 
 
 @app.post("/api/{path:path}")

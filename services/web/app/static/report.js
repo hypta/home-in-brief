@@ -214,27 +214,53 @@ function buildNotes(state) {
        : `<p class="muted">${EMPTY[r.kb_empty_reason] || "No build-era or title notes apply to this property."}</p>`));
 }
 
-// report-api's answer, shown as plain text. It only returns sentences that passed its check against the sources they
-// cite; a source id is a PropertyContext source, a rules-api source or a knowledge-base item.
+// A sentence from report-api, shown as plain text, with the sources it cites: a source id is a PropertyContext source,
+// a rules-api source or a knowledge-base item. A source cited through one of its items needs no second reference.
+function sentence(s, items) {
+  const quoted = new Set(s.source_ids.map(id => items[id]?.source_id));
+  return `${esc(s.text)} ${s.source_ids.filter(id => !quoted.has(id)).map(id => items[id] ? kbCite(items[id]) : cite(id)).join(" ")}`;
+}
+const reworded = n => !n ? "" : `<p class="muted">${n === 1 ? "1 of these sentences is" : n + " of these sentences are"} in the program's own wording, because the model's version did not pass the check against the sources.</p>`;
+
+// report-api only returns sentences that passed its check against the sources they cite.
 function summary({rules, rulesError, kb, report: r, reportError: err}) {
   if (!rules && rulesError) return `<p class="problem">The summary is unavailable until the repayment figures above can be calculated.</p>`;
   if (err) return err.code === "validation_failed"
     ? `<p class="problem">No summary sentence passed the check against its sources, so none is shown. The rest of the report is not affected.</p>`
     : `<p class="problem">The summary is unavailable right now. The rest of the report is not affected.</p><button type="button" id="retry-summary">Try again</button>`;
   if (!r) return `<p class="muted">Writing the summary…</p>`;
-  const items = byId(kb || []);
-  const line = s => {
-    const quoted = new Set(s.source_ids.map(id => items[id]?.source_id));  // a source cited through one of its items needs no second reference
-    return `${esc(s.text)} ${s.source_ids.filter(id => !quoted.has(id)).map(id => items[id] ? kbCite(items[id]) : cite(id)).join(" ")}`;
-  };
-  return list(r.summary.map(line))
-    + (r.dropped ? `<p class="muted">${r.dropped === 1 ? "1 of these sentences is" : r.dropped + " of these sentences are"} in the program's own wording, because the model's version did not pass the check against the sources.</p>` : "")
+  const items = byId(kb || []), line = s => sentence(s, items);
+  return list(r.summary.map(line)) + reworded(r.dropped)
     + (r.next_steps.length ? `<h3>Next steps</h3>${list(r.next_steps.map(line))}` : "")
     + (r.not_found_notes.length ? `<h3>What could not be found</h3>${list(r.not_found_notes.map(n => esc(n.text)))}` : "")
     + `<p class="muted">Summary written by ${esc(r.model)}. A sentence is shown only when it passes a check against the sources it cites.</p>`;
 }
 
 const LINK_KIND = {direct: " (opens this property)", first_result: " (opens the first search result for this address on that site)", home: " (search for the address there)"};
+const linkItem = l => `${link(l.url, l.label)}${LINK_KIND[l.kind] || ""}`;
+
+// An answer Gemini found with Google Search, for a question the report does not cover. The Gemini API terms ask for
+// it to be shown as returned, with Google's search suggestions: the text is plain text, the suggestions are Google's
+// own HTML and sit in a frame that runs no scripts.
+// The language of the text is not known here, so it does not inherit the page's.
+const webAnswer = w => `<p class="muted">Found by Gemini with Google Search. Not checked against this report's sources.</p>
+  <div class="say" lang="">${w.text.split(/\n\s*\n/).map(p => `<p>${esc(p)}</p>`).join("")}</div>${list(w.sources.map(s => link(s.url, s.title || "Source")))}
+  ${w.search_suggestions ? `<iframe class="suggest" title="Google Search suggestions" sandbox="allow-popups allow-popups-to-escape-sandbox" srcdoc="${esc('<base target="_blank">' + w.search_suggestions)}"></iframe>` : ""}`;
+
+// The conversation about this report, in order. A turn holds the question and, once settled, report-api's answer with
+// the knowledge-base items on the page at that time, or the error. The sentences carry the language the answer names.
+// The links an answer names are PropertyContext links; an id the report does not have is left out.
+function thread({ctx, rules, rulesError, kb: onPage, thread: turns}) {
+  const answer = ({answer: a, error: err, added, kb}, items = byId(kb || onPage || [])) => err ? (err.code === "validation_failed"
+      ? `<p class="problem">No answer sentence passed the check against its sources, so none is shown. Try asking in a different way.</p>`
+      : `<p class="problem">The answer is unavailable right now. The rest of the report is not affected.</p><button type="button" id="retry-answer">Try again</button>`)
+    : !a ? `<p class="muted">Answering…</p>`
+    : (a.web ? webAnswer(a.web) : `<div class="say"${a.language ? ` lang="${esc(a.language)}"` : ""}>${a.answer.map(s => sentence(s, items)).join(" ")}</div>` + reworded(a.dropped))
+      + list((a.links || []).map(id => ctx.links.find(l => l.id === id)).filter(Boolean).map(linkItem))
+      + (added?.length ? `<p class="muted">Added to the form above from your question: ${esc(added.join("; "))}.</p>` : "");
+  return turns.map(t => `<div class="msg you">${esc(t.question)}</div><div class="msg">${answer(t)}</div>`).join("")
+    + (!rules && rulesError ? `<p class="problem">Questions are unavailable until the repayment figures above can be calculated.</p>` : "");
+}
 
 // a block that cannot be drawn must not take the others with it
 function draw(id, block, state) {
@@ -242,10 +268,38 @@ function draw(id, block, state) {
   catch (e) { console.error(e); $(id).innerHTML = `<p class="problem">This section could not be shown.</p>`; }
 }
 
-// The summary arrives after the rest and is drawn on its own: redrawing the other blocks would close the sources a reader has opened.
+const listSources = () => { $("sources").innerHTML = cited.map(s => `<li>${link(s.url, s.title)}${s.licence ? " · " + esc(s.licence) : ""}<br><span class="muted">${esc(s.attribution)}</span></li>`).join(""); };
+
+// The summary and the answers arrive after the rest and are drawn on their own: redrawing the other blocks would close the sources a reader has opened.
 export function renderSummary(state) {
   draw("summary", summary, state);
-  $("sources").innerHTML = cited.map(s => `<li>${link(s.url, s.title)}${s.licence ? " · " + esc(s.licence) : ""}<br><span class="muted">${esc(s.attribution)}</span></li>`).join("");
+  listSources();
+}
+
+// One question at a time, and only about a report that has its figures.
+export function renderThread(state) {
+  draw("thread", thread, state);
+  $("ask").disabled = !state.inputs || state.thread.some(t => !t.answer && !t.error);
+  listSources();
+}
+
+// Shows the words of the newest answer the way they would be typed. Only the display is paced: the answer has arrived
+// whole, because its sentences are checked, or its sources attached, before any of it is shown, and its sources and
+// links are on the page from the first word. A reader who asked for less motion gets the words at once, and a screen
+// reader hears them once, when they are complete.
+export function typeAnswer() {
+  const box = $("thread"), el = [...box.querySelectorAll(".msg:not(.you) .say")].at(-1);
+  if (!el || document.hidden || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const nodes = [], walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  while (walk.nextNode()) if (walk.currentNode.data.trim() && !walk.currentNode.parentElement.closest(".cite > div")) nodes.push(walk.currentNode);
+  const texts = nodes.map(n => n.data);
+  let i = 0, at = 0;
+  nodes.forEach(n => n.data = ""); box.ariaBusy = "true";
+  const timer = setInterval(() => {
+    if (at >= (texts[i] || "").length) { i++; at = 0; }
+    if (i >= nodes.length || !el.isConnected) { box.ariaBusy = "false"; return clearInterval(timer); }
+    nodes[i].data = texts[i].slice(0, at += 3);
+  }, 20);
 }
 
 export function render(state) {
@@ -255,7 +309,7 @@ export function render(state) {
   $("meta").textContent = ctx.address.status !== "found" ? gone(ctx.address)
     : `Checked against ${ctx.parcel.spatial_method === "parcel" ? "the parcel boundary" : "the address point only, because no parcel was matched"} · ${ctx.generated_at.slice(0, 16).replace("T", " ")} New Zealand time`;
   draw("hazards", hazards, state); draw("facts", facts, state); draw("loan", loan, state); draw("notes", buildNotes, state);
-  draw("links", () => ctx.links.map(l => `<li>${link(l.url, l.label)}${LINK_KIND[l.kind] || ""}</li>`).join(""));
-  renderSummary(state);
+  draw("links", () => ctx.links.map(l => `<li>${linkItem(l)}</li>`).join(""));
+  renderSummary(state); renderThread(state);
   $("disclaimer").textContent = state.rules?.disclaimer || "";
 }

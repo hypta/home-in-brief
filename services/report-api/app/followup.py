@@ -1,13 +1,15 @@
 """POST /v1/followup: answer one question in English, validated like the summary (INTERFACE_DRAFT 5, 6.1).
 
-The whole system is English only (2026-10-10). A question in any language is understood; the answer is always
-English, and a sentence with CJK script is blocked. `language` in the response is always "en" (kept for the contract).
+The validated answer is English only (2026-10-10). A question in any language is understood; `answer` is always
+English, and a sentence with CJK script is blocked. `language` in the response describes `answer` and is always
+"en" (kept for the contract).
 
 Flow: classify (Gemini: out-of-scope, stated year/cladding) -> code checks user_supplied ->
 optional rules-api re-run with the merged chat_supplied -> fact list (prompt.followup_facts, rebuilt from the
 re-run RulesOutput) -> answer (Gemini rewrites facts, values as placeholders) -> validator.check_rewrite with the
-English-only check -> blocked sentences fall back to their facts' drafts -> code-added prefix. Out of scope: a
-fixed English refusal chosen by code.
+English-only check -> blocked sentences fall back to their facts' drafts -> code-added prefix. Out of scope: an
+answer from a Google Search when classify says web pages can answer it (`web`, in the language of the question,
+shown whole with its sources and never run through the validator), else a fixed English refusal chosen by code.
 
 question and history are untrusted: they never enter the evidence. The one exception (P-V3) is a validated
 year_built that was used for the re-run; it is allowed only in sentences citing kb_items_from_user_input.
@@ -59,6 +61,18 @@ class FollowupRequest(ReportRequest):
     history: list[Turn] = Field(default_factory=list, max_length=6)
 
 
+class WebSource(BaseModel):
+    title: str  # the site's domain, as the search returns it
+    url: str    # Google's redirect to the page
+
+
+class WebAnswer(BaseModel):
+    """An answer grounded in Google Search. Gemini API terms: shown as returned, with its search suggestions."""
+    text: str
+    sources: list[WebSource]
+    search_suggestions: str  # Google's HTML widget
+
+
 class FollowupResponse(BaseModel):
     language: str
     answer: list[Sentence]
@@ -67,11 +81,13 @@ class FollowupResponse(BaseModel):
     links: list[str]
     dropped: int
     warnings: list[str] = Field(default_factory=list)  # e.g. rules_rerun_unavailable (mock mode only)
+    web: Optional[WebAnswer] = None  # set, with an empty `answer`, when an out-of-scope question was answered from a search
 
 
 # ---- Gemini (own wrapper: gemini.gemini_generate is fixed to the summary schema) ---------------
 class ClassifyOut(BaseModel):
     out_of_scope: bool = False
+    searchable: bool = False
     year_built: Optional[str] = None
     cladding: Optional[Literal[cladding_table.VALUES]] = None  # type: ignore[valid-type]  # the 13 shared values
     hypothetical: bool = False
@@ -108,6 +124,35 @@ def gemini_json(prompt: str, schema: type, timeout_s: float) -> str:
     if not resp.text:
         raise gemini.ModelOutputInvalid("empty response")
     return resp.text
+
+
+def gemini_search(prompt: str, timeout_s: float) -> Optional[WebAnswer]:
+    """One Gemini call with the Google Search tool. None when the answer names no source. Replaced in tests."""
+    from google import genai
+    from google.genai import types
+
+    key = os.environ.get("GEMINI_API_KEY")
+    if not key:
+        raise gemini.ModelUnavailable("GEMINI_API_KEY is not set")
+    try:
+        client = genai.Client(api_key=key, http_options=types.HttpOptions(timeout=int(timeout_s * 1000)))
+        resp = client.models.generate_content(
+            model=gemini.model_name(), contents=prompt,
+            config=types.GenerateContentConfig(
+                tools=[types.Tool(google_search=types.GoogleSearch())], temperature=gemini.TEMPERATURE,
+                automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True)))
+        meta = resp.candidates[0].grounding_metadata if resp.candidates else None
+        text = (resp.text or "").strip()
+    except Exception as e:  # timeouts, APIError (429, 5xx, bad key), network
+        msg = str(e).replace(key, "***")[:300]
+        log.warning("gemini search call failed: %s: %s", type(e).__name__, msg)
+        raise gemini.ModelUnavailable(f"{type(e).__name__}: {msg}") from e
+    pages = {c.web.uri: c.web.title or "" for c in (meta and meta.grounding_chunks) or [] if c.web and c.web.uri}
+    if not (text and pages):
+        return None
+    entry = meta.search_entry_point
+    return WebAnswer(text=text, sources=[WebSource(title=t, url=u) for u, t in pages.items()],
+                     search_suggestions=(entry and entry.rendered_content) or "")
 
 
 def _parse(raw: str, schema: type):
@@ -340,8 +385,11 @@ def mock_answer(ev: Evidence, kb_items: dict[str, dict], used: dict) -> tuple[li
 
 # ---- main flow ----------------------------------------------------------------------------------
 def answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
-                    generate: Optional[JsonGenerator] = None, debug: Optional[dict] = None) -> FollowupResponse:
-    """`debug`, when given, receives the fact list, the checked attempts and the composed answer (for eval)."""
+                    generate: Optional[JsonGenerator] = None, debug: Optional[dict] = None,
+                    web_search: bool = False) -> FollowupResponse:
+    """`debug`, when given, receives the fact list, the checked attempts and the composed answer (for eval).
+    `web_search` lets an out-of-scope question be answered from a Google Search. The route turns it on; eval runs
+    leave it off, because the Gemini API terms do not allow storing such answers."""
     generate = generate or gemini_json
     debug = debug if debug is not None else {}
     mock = mock_enabled()
@@ -360,8 +408,23 @@ def answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
     supplied = extract_user_supplied(req.question, c)
     links = [i for i in dict.fromkeys(c.links) if i in link_ids][:3]
 
-    # 2. out of scope: the fixed refusal chosen by code
+    # 2. out of scope: an answer from a Google Search when web pages can answer it, else the fixed refusal
     if c.out_of_scope:
+        address = str((req.property_context.get("address") or {}).get("matched") or "")
+        if c.searchable and web_search and refusal_mode == "exempt" and address:
+            prompt = fp.web_prompt(address, req.question, history)
+            # The model does not always search: asked once more, time allowing, when the answer names no source.
+            # Neither call gets all the time that is left: web, the caller, has its own limit for the whole request.
+            try:
+                web = gemini_search(prompt, clock.budget(0.6))
+                if not web and clock.left() >= 6.0:
+                    web = gemini_search(prompt, clock.budget(0.6))
+            except (gemini.ModelUnavailable, ReportError) as e:
+                log.warning("web answer unavailable: %s", type(e).__name__)
+                web = None
+            if web:
+                return FollowupResponse(language=LANGUAGE, answer=[], out_of_scope=True, user_supplied=supplied,
+                                        links=links, dropped=0, warnings=warnings, web=web)
         refusal = Sentence(text=REFUSAL_EN, source_ids=[])
         links = links or fallback_links(req.question, link_ids)
         if refusal_mode == "strict":
