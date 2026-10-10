@@ -1,6 +1,3 @@
-import json
-from pathlib import Path
-
 import pytest
 from fastapi.testclient import TestClient
 
@@ -8,7 +5,6 @@ from app import calc
 from app.main import app
 from b_common.schemas import PropertyContext, UserInputs
 
-ROOT = Path(__file__).resolve().parents[3]
 client = TestClient(app)
 
 
@@ -81,8 +77,17 @@ def test_cladding_conflict():
 
 
 def test_edge4_integration():
-    d = json.loads((ROOT / "out/golden/inputs/edge4.json").read_text())
-    r = client.post("/v1/rules", json={"property_context": d["property_context"], "user_inputs": d["user_inputs"]})
+    # The golden edge case "edge4": a Leasehold title, a council decade of 1970s and a user who says 1999 and monolithic.
+    prop = {
+        "cv": {"value": 950000, "valuation_date": "2024-05-01", "status": "found", "source_id": "ac_valuation"},
+        "title_type": {"value": "Leasehold", "status": "found", "source_id": "linz_titles"},
+        "year_built": {"value": 1975, "decade_range": [1970, 1979], "status": "found", "source_id": "ac_property_page"},
+        "cladding": {"value": None, "status": "unavailable", "reason": "no_free_source"},
+    }
+    user = {"deposit": 190000, "household_income": 160000, "existing_debts": 0,
+            "chat_supplied": {"year_built": 1999, "cladding": "monolithic"}}
+    r = client.post("/v1/rules", json={"property_context": {"property": prop, "hazards": []}, "user_inputs": user})
+    assert r.status_code == 200
     w = r.json()["warnings"]
     assert "title_type_unmapped" in w and "year_built_user_conflict" in w
     assert "cladding_user_conflict" not in w  # property cladding is unavailable: chat value is used
