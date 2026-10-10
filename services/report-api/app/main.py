@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -12,6 +12,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from b_common.report_schemas import Report, ReportRequest
 from b_common.schemas import ErrorResponse
 
+from .followup import FollowupRequest, FollowupResponse, answer_followup
 from .service import ReportError, build_report
 
 log = logging.getLogger("report-api")
@@ -60,6 +61,9 @@ def report(req: ReportRequest) -> Report:
     return build_report(req)
 
 
-@app.post("/v1/followup", status_code=501, responses={501: {"model": ErrorResponse, "description": "Not implemented"}})
-def followup() -> JSONResponse:
-    return _error(501, "not_implemented", "Follow-up questions are not implemented yet.")
+FOLLOWUP_ERRORS = ERRORS | {504: {"model": ErrorResponse, "description": "Request deadline exceeded"}}
+
+
+@app.post("/v1/followup", response_model=FollowupResponse, responses=FOLLOWUP_ERRORS)
+def followup(req: FollowupRequest, refusal_mode: Literal["exempt", "strict"] = "exempt") -> FollowupResponse:
+    return answer_followup(req, refusal_mode)

@@ -38,11 +38,6 @@ def test_health():
     assert client.get("/health").json() == {"status": "ok"}
 
 
-def test_followup_stub():
-    r = client.post("/v1/followup", json=body("case1"))
-    assert r.status_code == 501 and r.json()["error"]["code"] == "not_implemented"
-
-
 @pytest.mark.parametrize("payload", [{}, {"property_context": {}, "user_inputs": {}},
                                      {"property_context": [], "user_inputs": {}, "rules_output": {}}])
 def test_bad_body_is_422(payload):

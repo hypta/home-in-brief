@@ -12,7 +12,7 @@ Private Cloud Run service; only web calls it.
 | Method | Path | Result |
 |---|---|---|
 | POST | `/v1/report` | Report (below) |
-| POST | `/v1/followup` | `501 not_implemented` (next phase) |
+| POST | `/v1/followup?refusal_mode=exempt\|strict` | Follow-up answer (below) |
 | GET | `/health` | `{"status": "ok"}`; calls nothing |
 
 Request body: `{"property_context": {...}, "user_inputs": {...}, "rules_output": {...}}`. All three keys
@@ -42,11 +42,65 @@ Same shape as rules-api: `{"error": {"code", "message", "fields": [{"field", "me
 | `model_output_invalid` | 502 | Gemini's answer did not match the response schema (after the retry) |
 | `validation_failed` | 502 | No summary sentence passed the validator (after the retry) |
 | `kb_unavailable` | 503 | KB items or sources could not be read from rules-api |
-| `not_implemented` | 501 | `/v1/followup` in this phase |
+| `rules_unavailable` | 503 | Follow-up only: the rules-api re-run with a supplied year or cladding failed |
+| `deadline_exceeded` | 504 | Follow-up only: `REQUEST_DEADLINE_S` ran out between calls |
 | `not_found`, `method_not_allowed` | 404, 405 | Unknown path or method |
 | `internal_error` | 500 | Anything else; no details |
 
+For `/v1/followup`, `validation_error` also covers a missing `question`, a bad `history` entry and an unknown
+`refusal_mode`, and `validation_failed` means no answer sentence passed.
+
 These codes are deliberately not in CODES.md (web's tests require page text for every code listed there).
+
+## Follow-up (`app/followup.py`, `app/followup_prompt.py`)
+
+Request: the three documents plus `question` (1-1000 characters) and `history` (at most 6 entries of
+`{role: "user"|"assistant", text}`, text at most 2000 characters; web sends the last 3 turns). No server state.
+Query `refusal_mode`: `exempt` (default) or `strict`.
+
+Response 200: `{language, answer: [{text, source_ids}], out_of_scope, user_supplied, links, dropped}`.
+1 or more passing sentences gives 200 (at most 3); 0 gives 502 `validation_failed`.
+
+Steps (INTERFACE_DRAFT 5 and 6.1):
+
+1. Gemini call 1 (classify): language, out of scope, a stated year built or cladding, suggested links. The
+   language is corrected by script (a question with Han characters is never `en`).
+2. `user_supplied`, checked by code: `year_built` is an integer 1800..this year or a decade such as `1990s`
+   that appears in the question as written; `cladding` is one of `monolithic`, `weatherboard`, `brick`,
+   `concrete`, `other` and a matching word must appear in the question. A question with a conditional or
+   negation word (`if`, `not`, `如果`, `假如`, `不是`, ...) gives no value. Logged as `user_supplied_ignored`.
+3. Out of scope: the answer is one fixed English refusal chosen by code, translated by a Gemini call that
+   sees only that sentence (English is kept if the translation has digits, URLs or is empty). `links` are
+   the suggested PropertyContext link ids, or all of them. `exempt`: the refusal has `source_ids: []` and skips
+   the validator; `strict`: it goes through the validator, is dropped, and the response is 502.
+4. Merge: values only add to `user_inputs.chat_supplied`. A field PropertyContext has with status `found`
+   wins: the value is not used, it is still returned in `user_supplied`, and the answer says the council
+   data differs (code adds a fixed sentence citing the council source if the model's answer does not).
+   When a used value is new, report-api calls `POST {RULES_API_URL}/v1/rules` (ID token for `https://`) and
+   uses the new RulesOutput; its `kb_items_from_user_input` are the items that depend on the user's value.
+5. Gemini call 2 (answer) from a case-data prompt; `question` and `history` (including assistant turns) are
+   quoted as untrusted data and never enter the evidence. The one exception: a used `year_built` is an allowed
+   number for the `kb_items_from_user_input` items only.
+6. Every sentence goes through `validator.validate`, with these language-dependent additions: for CJK text
+   (Chinese/Japanese/Korean language or script) the 25-word limit is replaced by 60 units (CJK characters
+   plus Latin words and numbers), Chinese verdict and approximation words (安全, 建議, 應該, 必須, 可能, 大約, ...)
+   and English verdict words glued to CJK text are dropped, `兩` and `百分之` count as number words, and `一` is
+   masked before the validator's numeral check (it is part of ordinary words). In every language the
+   publisher names Settled.govt.nz and unittitles.govt.nz are not treated as links; any other domain is.
+   Digits next to CJK characters get a space (`1997年` -> `1997 年`) so the number is read whole. One retry
+   when nothing passes and time allows.
+7. Sentences citing a `kb_items_from_user_input` item get a prefix from code: `依你提供的資訊，` (zh-Hant),
+   `根据你提供的信息，` (zh-Hans), "Based on what you told us, " (English); other languages are translated by
+   Gemini, falling back to English.
+
+Time: one budget, `REQUEST_DEADLINE_S`; each Gemini call gets at most `GEMINI_TIMEOUT_S` and what is left;
+the rules re-run at most 5 s. Mock mode does not cover the follow-up yet.
+
+```
+curl -s 'localhost:8090/v1/followup?refusal_mode=exempt' -H 'content-type: application/json' \
+  -d "$(jq '{property_context, user_inputs, rules_output} + {question: "這間是 1997 年蓋的，要注意什麼？", history: []}' \
+        services/report-api/fixtures/inputs/case1.json)"
+```
 
 ## Validator (`app/validator.py`)
 
