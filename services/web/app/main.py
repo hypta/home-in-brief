@@ -1,6 +1,8 @@
-"""web: the only public service. Serves the report page and relays API calls to the private services."""
+"""web: the only public service. Serves the report page, relays API calls to the private services and asks
+report-api for the summary."""
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
@@ -16,7 +18,8 @@ from fastapi.staticfiles import StaticFiles
 
 PROPERTY = os.environ.get("PROPERTY_API_URL", "http://localhost:8081").rstrip("/")
 RULES = os.environ.get("RULES_API_URL", "http://localhost:8080").rstrip("/")
-# The whole public API: browser path -> (private service, its path). Nothing else is relayed.
+REPORT = os.environ.get("REPORT_API_URL", "http://localhost:8090").rstrip("/")
+# The relayed part of the public API: browser path -> (private service, its path). POST /api/report is the only other path.
 ROUTES = {
     ("GET", "addresses"): (PROPERTY, "/v1/addresses"),
     ("GET", "property-context"): (PROPERTY, "/v1/property-context"),
@@ -27,9 +30,13 @@ ROUTES = {
     ("GET", "sources"): (RULES, "/v1/sources"),
 }
 METADATA = "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity"
-TIMEOUT = 30  # property-context makes several upstream calls of up to 8 s each
+# property-context makes several upstream calls of up to 8 s each. /api/report shares one such limit between its calls.
+TIMEOUT = 30
 MAX_BODY = 256 * 1024  # a PropertyContext is about 13 kB
 _tokens: dict[str, tuple[float, str]] = {}
+# address id -> (expiry, PropertyContext as the page was given it), so the summary is written from what the page shows
+CONTEXT_TTL, CONTEXT_MAX = 600, 100
+_contexts: dict[str, tuple[float, bytes]] = {}
 # A council property category such as RD199B: characters 3-5 are the build decade (LINZ Rating Valuations Rules
 # 2008, Table 21). 191 (before 1914), 192 (1914-1929) and XXX (mixed ages) are valid but are not a decade.
 _CATEGORY = re.compile(r"\s*(?:R[ACDFHNR]|LI)([0-9]{3}|XXX)[ABC]?\s*", re.I)
@@ -75,14 +82,10 @@ def _has_error_body(r: requests.Response) -> bool:
     return isinstance(body, dict) and "error" in body
 
 
-def _relay(method: str, path: str, request: Request, payload: Optional[dict] = None) -> Response:
-    target = ROUTES.get((method, path))
-    if not target:
-        return _error(404, "not_found", "Unknown API path.")
-    base, upstream = target
+def _call(method: str, base: str, upstream: str, params=None, payload: Optional[dict] = None,
+          timeout: float = TIMEOUT) -> Response:
     try:
-        r = requests.request(method, base + upstream, params=request.query_params.multi_items(), json=payload,
-                             headers=_auth(base), timeout=TIMEOUT)
+        r = requests.request(method, base + upstream, params=params, json=payload, headers=_auth(base), timeout=timeout)
     except requests.RequestException as e:
         log.warning("%s %s failed: %s", method, upstream, type(e).__name__)
         return _error(502, "upstream_unavailable", "The service behind this request did not answer.")
@@ -96,6 +99,25 @@ def _relay(method: str, path: str, request: Request, payload: Optional[dict] = N
     return Response(r.content, r.status_code, media_type=r.headers.get("content-type"))
 
 
+def _relay(method: str, path: str, request: Request, payload: Optional[dict] = None) -> Response:
+    target = ROUTES.get((method, path))
+    if not target:
+        return _error(404, "not_found", "Unknown API path.")
+    return _call(method, *target, params=request.query_params.multi_items(), payload=payload)
+
+
+def _remember(context: bytes) -> None:
+    """Kept under the address id the document itself carries: a request can name one address and be answered for another."""
+    try:
+        address_id = str(json.loads(context)["address"]["linz_address_id"])
+    except (ValueError, KeyError, TypeError):
+        return
+    _contexts.pop(address_id, None)
+    _contexts[address_id] = (time.monotonic() + CONTEXT_TTL, context)
+    for oldest in list(_contexts)[:-CONTEXT_MAX]:
+        _contexts.pop(oldest, None)
+
+
 def _year_built(typed):
     """What the visitor typed, or for a council property category its decade (None when it has none); rules-api
     reads years and decades only."""
@@ -103,6 +125,17 @@ def _year_built(typed):
     if not m:
         return typed
     return f"{m[1]}0s" if "193" <= m[1] <= "209" else None
+
+
+def _inputs(payload: dict) -> dict:
+    """The visitor's user_inputs, with a council property category read as its decade."""
+    inputs = payload.get("user_inputs")
+    if not isinstance(inputs, dict):
+        return {}
+    chat = inputs.get("chat_supplied")
+    if isinstance(chat, dict) and "year_built" in chat:
+        chat["year_built"] = _year_built(chat["year_built"])
+    return inputs
 
 
 @app.get("/config.json")
@@ -113,15 +146,39 @@ def config() -> dict:
 
 @app.get("/api/{path:path}")
 def relay_get(path: str, request: Request) -> Response:
-    return _relay("GET", path, request)
+    r = _relay("GET", path, request)
+    if path == "property-context" and r.status_code == 200:
+        _remember(r.body)
+    return r
+
+
+@app.post("/api/report")
+def report(payload: dict) -> Response:
+    """The summary and next steps for one address. The browser sends the address id and the visitor's inputs only:
+    the documents report-api reads are fetched here, because a browser could send altered ones."""
+    deadline = time.monotonic() + TIMEOUT
+
+    def left() -> float:
+        return max(1.0, deadline - time.monotonic())
+
+    address_id = str(payload.get("address_id", ""))
+    expires, context = _contexts.get(address_id, (0.0, b""))
+    if time.monotonic() >= expires:
+        r = _call("GET", PROPERTY, "/v1/property-context", params={"address_id": address_id}, timeout=left())
+        if r.status_code != 200:
+            return r
+        context = r.body
+        _remember(context)
+    documents = {"property_context": json.loads(context), "user_inputs": _inputs(payload)}
+    r = _call("POST", RULES, "/v1/rules", payload=documents, timeout=left())
+    if r.status_code != 200:
+        return r
+    return _call("POST", REPORT, "/v1/report", payload={**documents, "rules_output": json.loads(r.body)}, timeout=left())
 
 
 @app.post("/api/{path:path}")
 def relay_post(path: str, request: Request, payload: dict) -> Response:
-    inputs = payload.get("user_inputs") if path == "rules" else None
-    chat = inputs.get("chat_supplied") if isinstance(inputs, dict) else None
-    if isinstance(chat, dict) and "year_built" in chat:
-        chat["year_built"] = _year_built(chat["year_built"])
+    _inputs(payload)
     return _relay("POST", path, request, payload)
 
 

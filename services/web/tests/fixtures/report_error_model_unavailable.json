@@ -1,0 +1,7 @@
+{
+ "error": {
+  "code": "model_unavailable",
+  "message": "The language model did not answer.",
+  "fields": []
+ }
+}

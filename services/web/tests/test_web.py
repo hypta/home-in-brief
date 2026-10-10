@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 HERE = Path(__file__).resolve()
 ROOT = HERE.parents[3]
 sys.path.insert(0, str(HERE.parents[1]))
-for name in ("PROPERTY_API_URL", "RULES_API_URL"):  # a shell that ran DEPLOY.md exports the real service URLs
+for name in ("PROPERTY_API_URL", "RULES_API_URL", "REPORT_API_URL"):  # a shell that ran DEPLOY.md exports the real service URLs
     os.environ.pop(name, None)
 
 from app import main  # noqa: E402
@@ -107,6 +107,71 @@ def test_https_upstream_gets_a_cached_id_token_until_it_is_refused(sent, monkeyp
     client.get("/api/sources")
     client.get("/api/sources")
     assert metadata.call_count == 2
+
+
+def recorded(name):
+    return (FIXTURES / name).read_bytes()
+
+
+RULES_OUTPUT, REPORT = recorded("rules_output_low_deposit.json"), recorded("report_low_deposit.json")
+LOAN = {"deposit": 60000, "household_income": 120000, "existing_debts": 10000}
+
+
+@pytest.fixture(autouse=True)
+def no_contexts(monkeypatch):
+    monkeypatch.setattr(main, "_contexts", {})
+
+
+def test_report_is_written_from_documents_fetched_here_not_from_the_browser(sent):
+    sent.side_effect = [upstream(200, CONTEXT.read_bytes()), upstream(200, RULES_OUTPUT), upstream(200, REPORT)]
+    typed = {**LOAN, "chat_supplied": {"year_built": "RD199B", "cladding": None}}
+    r = client.post("/api/report", json={"address_id": 2100210, "user_inputs": typed, "property_context": {"cv": 1}})
+    assert r.status_code == 200 and r.json() == json.loads(REPORT)
+    context, inputs = json.loads(CONTEXT.read_text()), {**LOAN, "chat_supplied": {"year_built": "1990s", "cladding": None}}
+    to_property, to_rules, to_report = sent.call_args_list
+    assert to_property.args == ("GET", "http://localhost:8081/v1/property-context")
+    assert to_property.kwargs["params"] == {"address_id": "2100210"}
+    assert to_rules.args == ("POST", "http://localhost:8080/v1/rules")
+    assert to_rules.kwargs["json"] == {"property_context": context, "user_inputs": inputs}
+    assert to_report.args == ("POST", "http://localhost:8090/v1/report")
+    assert to_report.kwargs["json"] == {"property_context": context, "user_inputs": inputs, "rules_output": json.loads(RULES_OUTPUT)}
+    assert all(0 < call.kwargs["timeout"] <= main.TIMEOUT for call in sent.call_args_list)
+
+
+def test_report_reuses_the_property_context_the_page_was_given_until_it_expires(sent):
+    sent.return_value = upstream(200, CONTEXT.read_bytes())
+    client.get("/api/property-context?address_id=2100210&input=740+sand")
+    sent.side_effect = [upstream(200, RULES_OUTPUT), upstream(200, REPORT)]
+    assert client.post("/api/report", json={"address_id": 2100210, "user_inputs": LOAN}).status_code == 200
+    assert [call.args[1].rsplit("/", 1)[1] for call in sent.call_args_list] == ["property-context", "rules", "report"]
+
+    sent.side_effect = None
+    assert client.get("/api/property-context?address_id=1&address_id=2100210").status_code == 200
+    assert list(main._contexts) == ["2100210"]  # kept under the id in the document, not the first one the request named
+
+    main._contexts["2100210"] = (0.0, main._contexts["2100210"][1])
+    sent.side_effect = [upstream(200, CONTEXT.read_bytes()), upstream(200, RULES_OUTPUT), upstream(200, REPORT)]
+    client.post("/api/report", json={"address_id": 2100210, "user_inputs": LOAN})
+    assert sent.call_args_list[4].args[1].endswith("/v1/property-context")
+
+
+def test_the_oldest_property_context_makes_room_for_a_new_one(monkeypatch):
+    monkeypatch.setattr(main, "CONTEXT_MAX", 2)
+    for address_id in (1, 2, 1, 3):
+        main._remember(json.dumps({"address": {"linz_address_id": address_id}}).encode())
+    main._remember(b"[]")
+    assert list(main._contexts) == ["1", "3"]
+
+
+@pytest.mark.parametrize("answers, status, code", [
+    ([(422, recorded("property_api_error_short_query.json"))], 422, "upstream_error"),
+    ([(200, CONTEXT.read_bytes()), (422, recorded("rules_error_negative_deposit.json"))], 422, "validation_error"),
+    ([(200, CONTEXT.read_bytes()), (200, RULES_OUTPUT), (503, recorded("report_error_model_unavailable.json"))], 503, "model_unavailable"),
+])
+def test_report_stops_at_the_first_service_that_fails_and_passes_its_error_on(sent, answers, status, code):
+    sent.side_effect = [upstream(*answer) for answer in answers]
+    r = client.post("/api/report", json={"address_id": 2100210, "user_inputs": LOAN})
+    assert r.status_code == status and r.json()["error"]["code"] == code and sent.call_count == len(answers)
 
 
 def test_page_is_served():

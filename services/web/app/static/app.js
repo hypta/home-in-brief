@@ -1,12 +1,12 @@
-// Page flow: address search -> PropertyContext and map -> rules and knowledge-base notes -> render.
+// Page flow: address search -> PropertyContext and map -> rules and knowledge-base notes -> render -> summary.
 // Each request fails on its own: a failed call only affects the block it feeds.
-import {$, esc, link, render} from "./report.js";
+import {$, byId, esc, link, render, renderSummary} from "./report.js";
 import {drawMap} from "./map.js";
 
-const CLEARED = {rules: null, rulesError: null, kb: []};  // kb: null means the notes could not be loaded
+const CLEARED = {rules: null, rulesError: null, kb: [], report: null, reportError: null};  // kb: null means the notes could not be loaded
 const state = {ctx: null, ...CLEARED, sources: {}, banks: {}};
-const byId = items => Object.fromEntries(items.map(s => [s.id, s]));
 let timer, lastTyped = "", searchSeq = 0, lookupSeq = 0, calcSeq = 0, rulesSources, kbIds, kbItems;
+let asked = {};  // the summary last asked for: its key, the inputs and the pending or settled answer
 
 const show = id => { $(id).scrollIntoView(); $(id).focus({preventScroll: true}); };
 
@@ -21,8 +21,21 @@ const categoryBuilt = text => {
 async function api(path, body) {
   const res = await fetch("/api/" + path, body && {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
   const data = await res.json().catch(() => null);
-  if (!res.ok) throw Object.assign(new Error(data?.error?.message || "HTTP " + res.status), {fields: data?.error?.fields || []});
+  if (!res.ok) throw Object.assign(new Error(data?.error?.message || "HTTP " + res.status), {code: data?.error?.code, fields: data?.error?.fields || []});
   return data;
+}
+
+// One summary request for a lookup and a set of inputs: asking again with nothing changed reuses it, in flight or
+// answered. A failed one is asked again, which is what "Try again" does.
+async function summarise(inputs = asked.inputs) {
+  const mine = calcSeq, address_id = state.ctx.address.linz_address_id, key = JSON.stringify([address_id, state.ctx.generated_at, inputs]);
+  if (key !== asked.key) asked = {key, inputs, answer: api("report", {address_id, user_inputs: inputs})};
+  const {answer} = asked;
+  renderSummary(Object.assign(state, {report: null, reportError: null}));
+  let update;
+  try { update = {report: await answer}; }
+  catch (e) { update = {reportError: e}; if (asked.answer === answer) asked = {inputs}; }
+  if (mine === calcSeq) renderSummary(Object.assign(state, update));
 }
 
 async function calculate() {
@@ -33,13 +46,14 @@ async function calculate() {
   $("year-built-read").textContent = built && `Read as a council property category: built ${built}.`;
   const price = num("price");
   const update = {...CLEARED};
+  let inputs = {price_override: cv.status === "found" && price === cv.value ? null : price, deposit: num("deposit"),
+    household_income: num("income"), existing_debts: num("debts"), rate_pct: num("rate"), household_type: $("household").value || null, chat_supplied};
   try {
-    update.rules = await rules({price_override: cv.status === "found" && price === cv.value ? null : price, deposit: num("deposit"),
-      household_income: num("income"), existing_debts: num("debts"), rate_pct: num("rate"), household_type: $("household").value || null, chat_supplied});
+    update.rules = await rules(inputs);
   } catch (e) {
     update.rulesError = Object.assign(e, {fields: e.fields || []});
     // rejected loan inputs (a negative amount, say) must not blank the property notes: ask again without them
-    if (e.fields.length) update.rules = await rules({chat_supplied}).catch(() => null);
+    if (e.fields.length) update.rules = await rules(inputs = {chat_supplied}).catch(() => null);
   }
   if (update.rules) {
     const ids = update.rules.kb_items.join(",");
@@ -51,6 +65,7 @@ async function calculate() {
   }
   if (mine !== calcSeq) return;
   render(Object.assign(state, update));
+  if (update.rules) summarise(inputs);
 }
 
 async function lookup(a) {
@@ -78,6 +93,13 @@ async function lookup(a) {
     calculate();
   } catch (e) { if (mine === lookupSeq) { state.ctx = null; $("status").textContent = "Lookup failed: " + e.message; } }
 }
+
+// Loan details the visitor typed stay for this tab (sessionStorage), so they are entered once and used for every
+// address checked in it. Only fields inside the form reach this listener: the price and the two facts about the home
+// belong to one address. Storage can be switched off in the browser; the page works without it.
+try { for (const field of $("loan-form").elements) field.value = sessionStorage.getItem("loan." + field.id) || field.value; } catch {}
+$("loan-form").addEventListener("change", e => { try { sessionStorage.setItem("loan." + e.target.id, e.target.value); } catch {} });
+$("summary").addEventListener("click", e => { if (e.target.id === "retry-summary") summarise(); });
 
 $("loan-form").addEventListener("submit", e => {
   e.preventDefault();

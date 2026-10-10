@@ -1,6 +1,7 @@
 // Draws the report blocks from PropertyContext, RulesOutput and knowledge-base items.
 // Wording of flags and warnings follows CODES.md: "could not check" is never shown as "no risk".
 export const $ = id => document.getElementById(id);
+export const byId = items => Object.fromEntries(items.map(i => [i.id, i]));
 export const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 // noreferrer: DuckDuckGo only jumps to the first result when the click does not name the page it came from
 export const link = (url, text) => `<a href="${/^https?:\/\//.test(url || "") ? esc(url) : "#"}" target="_blank" rel="noreferrer">${esc(text)}</a>`;
@@ -40,17 +41,19 @@ function cite(refs, lines = []) {
   }).join(" ");
 }
 
+function kbCite(k) {
+  const s = sources[k.source_id] || {id: k.source_id || k.id, title: k.source_title, url: k.source_url, licence: k.licence};
+  return cite(s, [`Quoted: "${k.quote}"`, s.published_or_updated && "Published or updated " + s.published_or_updated]);
+}
+
 function notes({rules, kb}, block, heading) {
   const mine = (kb || []).filter(k => (TOPIC_BLOCK[k.topic] || "notes") === block), told = new Set(rules?.kb_items_from_user_input);
   if (!mine.length) return "";
-  return `<h3>${heading}</h3>` + mine.map(k => {
-    const s = sources[k.source_id] || {id: k.source_id || k.id, title: k.source_title, url: k.source_url, licence: k.licence};
-    return `<div class="note">${esc(k.claim_en)} ${cite(s, [`Quoted: "${k.quote}"`, s.published_or_updated && "Published or updated " + s.published_or_updated])}
+  return `<h3>${heading}</h3>` + mine.map(k => `<div class="note">${esc(k.claim_en)} ${kbCite(k)}
       ${k.source_type === "secondary" ? `<span class="tag none">secondary source</span>` : ""}
       ${k.status === "verified" ? "" : `<span class="tag draft">draft, not yet checked</span>`}
       ${told.has(k.id) ? `<div class="muted">Based on what you told us.</div>` : ""}
-      ${k.next_step_en ? `<div><b>Next step:</b> ${esc(k.next_step_en)}</div>` : ""}</div>`;
-  }).join("");
+      ${k.next_step_en ? `<div><b>Next step:</b> ${esc(k.next_step_en)}</div>` : ""}</div>`).join("");
 }
 
 // code: [block, text]. A code may carry a layer or bank id after a colon. CODES.md marks the hidden ones as not user-facing.
@@ -191,7 +194,39 @@ function buildNotes(state) {
        : `<p class="muted">${EMPTY[r.kb_empty_reason] || "No build-era or title notes apply to this property."}</p>`));
 }
 
+// report-api's answer, shown as plain text. It only returns sentences that passed its check against the sources they
+// cite; a source id is a PropertyContext source, a rules-api source or a knowledge-base item.
+function summary({rules, rulesError, kb, report: r, reportError: err}) {
+  if (!rules && rulesError) return `<p class="problem">The summary is unavailable until the repayment figures above can be calculated.</p>`;
+  if (err) return err.code === "validation_failed"
+    ? `<p class="problem">No summary sentence passed the check against its sources, so none is shown. The rest of the report is not affected.</p>`
+    : `<p class="problem">The summary is unavailable right now. The rest of the report is not affected.</p><button type="button" id="retry-summary">Try again</button>`;
+  if (!r) return `<p class="muted">Writing the summary…</p>`;
+  const items = byId(kb || []);
+  const line = s => {
+    const quoted = new Set(s.source_ids.map(id => items[id]?.source_id));  // a source cited through one of its items needs no second reference
+    return `${esc(s.text)} ${s.source_ids.filter(id => !quoted.has(id)).map(id => items[id] ? kbCite(items[id]) : cite(id)).join(" ")}`;
+  };
+  return list(r.summary.map(line))
+    + (r.dropped ? `<p class="muted">${r.dropped === 1 ? "1 sentence was" : r.dropped + " sentences were"} left out because the check against the sources did not pass.</p>` : "")
+    + (r.next_steps.length ? `<h3>Next steps</h3>${list(r.next_steps.map(line))}` : "")
+    + (r.not_found_notes.length ? `<h3>What could not be found</h3>${list(r.not_found_notes.map(n => esc(n.text)))}` : "")
+    + `<p class="muted">Summary written by ${esc(r.model)}. A sentence is shown only when it passes a check against the sources it cites.</p>`;
+}
+
 const LINK_KIND = {direct: " (opens this property)", first_result: " (opens the first search result for this address on that site)", home: " (search for the address there)"};
+
+// a block that cannot be drawn must not take the others with it
+function draw(id, block, state) {
+  try { $(id).innerHTML = block(state); }
+  catch (e) { console.error(e); $(id).innerHTML = `<p class="problem">This section could not be shown.</p>`; }
+}
+
+// The summary arrives after the rest and is drawn on its own: redrawing the other blocks would close the sources a reader has opened.
+export function renderSummary(state) {
+  draw("summary", summary, state);
+  $("sources").innerHTML = cited.map(s => `<li>${link(s.url, s.title)}${s.licence ? " · " + esc(s.licence) : ""}<br><span class="muted">${esc(s.attribution)}</span></li>`).join("");
+}
 
 export function render(state) {
   const {ctx} = state;
@@ -199,12 +234,8 @@ export function render(state) {
   $("matched").textContent = ctx.address.matched || "Address not found";
   $("meta").textContent = ctx.address.status !== "found" ? `Not found (${words(ctx.address.reason || ctx.address.status)}).`
     : `Checked against ${ctx.parcel.spatial_method === "parcel" ? "the parcel boundary" : "the address point only, because no parcel was matched"} · ${ctx.generated_at.slice(0, 16).replace("T", " ")} New Zealand time`;
-  const draw = (id, block) => {  // a block that cannot be drawn must not take the others with it
-    try { $(id).innerHTML = block(state); }
-    catch (e) { console.error(e); $(id).innerHTML = `<p class="problem">This section could not be shown.</p>`; }
-  };
-  draw("hazards", hazards); draw("facts", facts); draw("loan", loan); draw("notes", buildNotes);
+  draw("hazards", hazards, state); draw("facts", facts, state); draw("loan", loan, state); draw("notes", buildNotes, state);
   draw("links", () => ctx.links.map(l => `<li>${link(l.url, l.label)}${LINK_KIND[l.kind] || ""}</li>`).join(""));
-  $("sources").innerHTML = cited.map(s => `<li>${link(s.url, s.title)}${s.licence ? " · " + esc(s.licence) : ""}<br><span class="muted">${esc(s.attribution)}</span></li>`).join("");
+  renderSummary(state);
   $("disclaimer").textContent = state.rules?.disclaimer || "";
 }

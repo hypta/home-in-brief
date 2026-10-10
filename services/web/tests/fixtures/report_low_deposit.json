@@ -1,0 +1,121 @@
+{
+ "schema_version": "0.1",
+ "generated_at": "2026-10-10T19:06:42+13:00",
+ "model": "gemini-3.5-flash-lite",
+ "summary": [
+  {
+   "text": "The council Flood Plains layer covers 51.2% of this parcel and the Flood Prone Areas layer covers 50.8%.",
+   "source_ids": [
+    "ac_flood_plains",
+    "ac_flood_prone",
+    "ac_overland_flow",
+    "kb_overland_flow_path"
+   ]
+  },
+  {
+   "text": "Your loan counts as high LVR lending, which the Reserve Bank limits for banks to offer.",
+   "source_ids": [
+    "rbnz_lvr",
+    "kb_rbnz_lvr"
+   ]
+  },
+  {
+   "text": "A First Home Loan option is shown because your income fits and LVR restrictions do not apply.",
+   "source_ids": [
+    "kainga_ora_fhl",
+    "kb_fhl_lvr_not_restricted"
+   ]
+  },
+  {
+   "text": "LINZ records the title as Freehold, meaning you own the land and buildings.",
+   "source_ids": [
+    "linz_titles",
+    "kb_title_freehold"
+   ]
+  },
+  {
+   "text": "The council valuation describes the improvements as RESERVE LAND and the land use as Recreational vacant.",
+   "source_ids": [
+    "ac_valuation"
+   ]
+  }
+ ],
+ "next_steps": [
+  {
+   "text": "Ask the council or a drainage engineer whether the mapped overland flow path crosses this property and what the mapping means for it.",
+   "source_ids": [
+    "kb_overland_flow_path"
+   ],
+   "kb_item": "kb_overland_flow_path"
+  },
+  {
+   "text": "Ask your lender how it applies the low-deposit lending limit and what extra costs apply.",
+   "source_ids": [
+    "kb_rbnz_lvr"
+   ],
+   "kb_item": "kb_rbnz_lvr"
+  },
+  {
+   "text": "Ask your lender which lending criteria it applies to First Home Loan applications.",
+   "source_ids": [
+    "kb_fhl_lvr_not_restricted",
+    "kb_fhl_dti_not_restricted"
+   ],
+   "kb_item": "kb_fhl_lvr_not_restricted"
+  },
+  {
+   "text": "Ask your lawyer to check the record of title for registered interests.",
+   "source_ids": [
+    "kb_title_freehold"
+   ],
+   "kb_item": "kb_title_freehold"
+  },
+  {
+   "text": "Ask insurers about past claims and flood exclusions before making an offer.",
+   "source_ids": [
+    "kb_flood_insurance_limit"
+   ],
+   "kb_item": "kb_flood_insurance_limit"
+  },
+  {
+   "text": "Ask your lawyer to obtain and review the LIM report and other property documents from the council.",
+   "source_ids": [
+    "kb_lim_next_step"
+   ],
+   "kb_item": "kb_lim_next_step"
+  }
+ ],
+ "not_found_notes": [
+  {
+   "field": "year_built",
+   "text": "Year built: the council's property category for this address has no build decade.",
+   "reason": "property_category_has_no_build_decade"
+  },
+  {
+   "field": "cladding",
+   "text": "Cladding: no free public source has this; check the listing or ask the agent.",
+   "reason": "no_free_source"
+  },
+  {
+   "field": "last_sale",
+   "text": "Last sale: we have no licensed source for sale prices; see the Homes.co.nz and OneRoof links.",
+   "reason": "no_licensed_source"
+  },
+  {
+   "field": "annual_rates",
+   "text": "Annual rates: the council lists this property as non-rateable.",
+   "reason": "non_rateable_property"
+  },
+  {
+   "field": "floor_area_m2",
+   "text": "Floor area: not shown on the council property page.",
+   "reason": "not_on_council_page"
+  }
+ ],
+ "warnings": [
+  "year_built_unavailable",
+  "cladding_unavailable",
+  "kb_includes_draft"
+ ],
+ "dropped": 0
+}

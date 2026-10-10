@@ -38,7 +38,7 @@
       "env": {},
       "secrets": {"GEMINI_API_KEY": "GEMINI_API_KEY:latest"},
       "url_env": {"RULES_API_URL": "rules-api"},
-      "flags": []
+      "flags": ["--max-instances=2"]
     },
     {
       "name": "web",
@@ -48,7 +48,7 @@
       "public": true,
       "env": {},
       "secrets": {},
-      "url_env": {"RULES_API_URL": "rules-api", "PROPERTY_API_URL": "property-api"},
+      "url_env": {"RULES_API_URL": "rules-api", "PROPERTY_API_URL": "property-api", "REPORT_API_URL": "report-api"},
       "flags": []
     },
     {
