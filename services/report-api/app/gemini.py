@@ -13,7 +13,8 @@ from b_common.report_schemas import Sentence
 log = logging.getLogger("report-api.gemini")
 
 DEFAULT_MODEL = "gemini-3.5-flash-lite"  # same default as jobs/rates-refresh; override with GEMINI_MODEL
-TEMPERATURE = 0.2
+TEMPERATURE = 0.0  # the drafts are finished sentences; the model only copies and smooths them
+SEED = 20261010    # fixed seed: same prompt, same answer as far as the API allows
 
 
 class ModelUnavailable(Exception):
@@ -52,6 +53,7 @@ def gemini_generate(prompt: str, timeout_s: float) -> str:
                 response_mime_type="application/json",
                 response_schema=SummaryOut,
                 temperature=TEMPERATURE,
+                seed=SEED,
                 automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
             ),
         )

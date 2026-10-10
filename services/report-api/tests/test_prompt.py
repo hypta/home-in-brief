@@ -1,7 +1,11 @@
-import pytest
-from conftest import CASES, evidence
+import importlib.util
 
-from app import prompt
+import pytest
+from b_common.report_schemas import Sentence
+from conftest import CASES, REPO, evidence
+
+from app import gemini, prompt
+from app import validator as V
 
 
 def build(case):
@@ -45,4 +49,60 @@ def test_landslide_topic_only_when_high():
 
 def test_user_year_relation():
     assert any("same decade" in t["say"] for t in build("case5")[1])
-    assert any("1975, not the year you gave" in t["say"] for t in build("edge4")[1])
+    assert any("the year you gave differs" in t["say"] and "1975" in t["say"] for t in build("edge4")[1])
+
+
+@pytest.mark.parametrize("case", CASES)
+def test_every_draft_passes_the_validator_as_written(case):
+    """Gemini copies the drafts, so each draft must already be a valid sentence (with room to spare)."""
+    req, data, ev = evidence(case)
+    for t in prompt.topics(req, ev, data.items):
+        s = Sentence(text=t["say"], source_ids=t["cite"])
+        assert V.check_sentence(s, ev) == [], t
+        assert prompt.words(t["say"]) <= V.MAX_WORDS - 1, t
+
+
+@pytest.mark.parametrize("case", CASES)
+def test_user_fact_topics_are_prefixed_and_detected(case):
+    req, data, ev = evidence(case)
+    for t in prompt.topics(req, ev, data.items):
+        s = Sentence(text=t["say"], source_ids=t["cite"])
+        assert t["user"] == V.relies_on_user_input(s, ev), t
+        assert t["user"] == t["say"].startswith(V.PREFIX), t
+
+
+def _eval_module():
+    spec = importlib.util.spec_from_file_location("eval_report_api", REPO / "scripts" / "eval_report_api.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+@pytest.mark.parametrize("case", CASES)
+def test_drafts_cover_every_rubric_must_mention(case):
+    """RUBRIC 8 must / must-not checks hold on the drafts alone (plus the code-written no-loan sentence)."""
+    from app import assemble
+
+    ev_mod = _eval_module()
+    req, data, ev = evidence(case)
+    summary = [{"text": t["say"], "source_ids": t["cite"]} for t in prompt.topics(req, ev, data.items)]
+    fixed = assemble.no_loan_sentence(req)
+    if fixed:
+        summary.append({"text": fixed.text, "source_ids": []})
+    checks = [c for c in ev_mod.rubric(case, {"summary": summary, "next_steps": []}, data.items)
+              if c["kind"] in ("S", "not")]
+    assert [c["check"] for c in checks if not c["ok"]] == []
+
+
+def test_known_wording_fixes():
+    tops = {c: " ".join(t["say"] for t in build(c)[1]) for c in ("case1", "case4", "case5")}
+    assert "exempt from Reserve Bank LVR limits" in tops["case1"]
+    assert "borrowing over 80% of the price" in tops["case1"]
+    assert "debt over 6 times income" in tops["case4"]
+    assert "year built could not be checked" in tops["case4"]
+    assert "no existing debts were entered, so the DTI assumes none" in tops["case5"]
+    assert "zero" not in tops["case5"]
+
+
+def test_low_temperature_and_seed():
+    assert gemini.TEMPERATURE == 0.0 and isinstance(gemini.SEED, int)
