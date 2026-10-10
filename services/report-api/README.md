@@ -83,30 +83,30 @@ These codes are deliberately not in CODES.md (web's tests require page text for 
 
 **Limits of the semantic guard.** It is lexical. It cannot tell whether a rewrite that keeps every listed word
 still means the same thing (a changed relation between kept words can pass), and it does not detect added
-content beyond extra "says", causes and publishers. For CJK follow-up sentences it checks only Chinese
-equivalents of the qualifiers, at least one negation when the facts have one, English LVR/DTI/First Home Loan
-and the publishers (no order or added-cause check). Mock mode still returns the golden summaries.
+content beyond extra "says", causes and publishers. Follow-up answers are English only, so the validator's
+Chinese-equivalent branches are not used there. Mock mode still returns the golden summaries.
 
 ## Follow-up (`app/followup.py`, `app/followup_prompt.py`)
 
-Request: the three documents plus `question` (1-1000 characters) and `history` (at most 6 entries of
+The whole system is English only (2026-10-10 decision). A question may be in any language and is answered, in
+English. Request: the three documents plus `question` (1-1000 characters) and `history` (at most 6 entries of
 `{role: "user"|"assistant", text}`, text at most 2000 characters; web sends the last 3 turns). No server state.
 Query `refusal_mode`: `exempt` (default) or `strict`.
 
 Response 200: `{language, answer: [{text, source_ids}], out_of_scope, user_supplied, links, dropped, warnings}`.
+`language` is always `"en"`; the field is kept only for compatibility with the existing contract (A reads it).
 `warnings` is `[]` except `rules_rerun_unavailable` (mock mode answered from the input RulesOutput).
 1 or more passing sentences gives 200 (at most 3); 0 gives 502 `validation_failed`.
 
 Steps (INTERFACE_DRAFT 5 and 6.1):
 
-1. Gemini call 1 (classify): language, out of scope, a stated year built or cladding, suggested links. The
-   language is corrected by script (a question with Han characters is never `en`).
+1. Gemini call 1 (classify): out of scope, a stated year built or cladding, suggested links. The question is
+   understood in whatever language it is written in; there is no language detection.
 2. `user_supplied`, checked by code: `year_built` is an integer 1800..this year or a decade such as `1990s`
    that appears in the question as written; `cladding` is one of `monolithic`, `weatherboard`, `brick`,
    `concrete`, `other` and a matching word must appear in the question. A question with a conditional or
    negation word (`if`, `not`, `如果`, `假如`, `不是`, ...) gives no value. Logged as `user_supplied_ignored`.
-3. Out of scope: the answer is one fixed English refusal chosen by code, translated by a Gemini call that
-   sees only that sentence (English is kept if the translation has digits, URLs or is empty). `links` are
+3. Out of scope: the answer is one fixed English refusal chosen by code (never translated). `links` are
    the suggested PropertyContext link ids; if Gemini suggests none, code picks at most 2 by question type
    (valuation or sale: `homes`, `oneroof`, `council_valuation`; flooding: `council_flood_viewer`,
    `council_geomaps`; other hazards: `council_geomaps`, `council_flood_viewer`; anything else: `council_geomaps`),
@@ -114,10 +114,9 @@ Steps (INTERFACE_DRAFT 5 and 6.1):
    the validator; `strict`: it goes through the validator, is dropped, and the response is 502.
 4. Merge: values only add to `user_inputs.chat_supplied`. A field PropertyContext has with status `found`
    wins: the value is not used and is still returned in `user_supplied`. Code writes the first answer
-   sentence comparing both values and cites the field's `source_id`, e.g. `你提供的建造年份是 1985 年；市議會資料記錄為
-   1990 年代（1990–1999）。以下說明以市議會資料為準。` / "You gave the year built as 1985; the council records the 1990s
+   sentence comparing both values and cites the field's `source_id`, e.g. "You gave the year built as 1985; the council records the 1990s
    (1990–1999), and this answer uses the council's record." A user year inside the council decade is not a
-   conflict: `你提供的 1998 年落在市議會資料記錄的 1990 年代（1990–1999）內。` Cladding is handled the same way when
+   conflict: "The year you gave, 1998, falls within the council's recorded decade, the 1990s (1990–1999)." Cladding is handled the same way when
    the property has a value. **Program-sentence rule:** this sentence runs through the same checks as any
    answer sentence, except that the user's year is an allowed number for the cited field in this sentence
    only. Gemini is told the comparison is already stated and never to write the user's value.
@@ -131,25 +130,19 @@ Steps (INTERFACE_DRAFT 5 and 6.1):
    one falls back to its facts' English drafts (model order kept, at most 3). `question` and `history`
    (including assistant turns) are quoted as untrusted data and never enter the evidence. The one exception: a
    used `year_built` is an allowed number for the `kb_items_from_user_input` items only.
-6. Every sentence goes through `validator.validate`, with these language-dependent additions: for CJK text
-   (Chinese/Japanese/Korean language or script) the 25-word limit is replaced by 60 units (CJK characters
-   plus Latin words and numbers), Chinese verdict and approximation words (安全, 建議, 應該, 必須, 可能, 大約, ...)
-   and English verdict words glued to CJK text are dropped, `兩` and `百分之` count as number words, and `一` is
-   masked before the validator's numeral check (it is part of ordinary words). Domains follow the validator:
-   only the host of a source the sentence cites passes ("Settled.govt.nz says ..." citing a Settled KB item);
-   for CJK text the same check runs again with ASCII boundaries, so a domain glued to CJK characters is caught.
-   Digits next to CJK characters get a space (`1997年` -> `1997 年`) so the number is read whole. One retry
-   when nothing passes and time allows.
-7. Sentences citing a `kb_items_from_user_input` item get a prefix from code: `依你提供的資訊，` (zh-Hant),
-   `根据你提供的信息，` (zh-Hans), "Based on what you told us, " (English); other languages are translated by
-   Gemini, falling back to English.
+6. Every sentence goes through `validator.validate` with the English 25-word limit (`MAX_WORDS`), plus one rule:
+   a sentence containing any Chinese, Japanese or Korean character (or CJK punctuation) is blocked
+   (`non_english`) and takes the same path as any other blocked sentence (draft fallback). Domains follow the
+   validator: only the host of a source the sentence cites passes ("Settled.govt.nz says ..." citing a Settled KB
+   item). One retry when nothing passes and time allows.
+7. Sentences citing a `kb_items_from_user_input` item get the prefix "Based on what you told us, " from code.
 
 Time: one budget, `REQUEST_DEADLINE_S`; each Gemini call gets at most `GEMINI_TIMEOUT_S` and what is left;
 the rules re-run at most 5 s.
 
 Mock (`REPORT_MOCK=true`, no Gemini call, for front-end work without a key): code classifies the question.
 Out-of-scope keywords (school, zone, commute, crime, neighbour, traffic, 學區, 通勤, 治安, ...; not when the
-question names a hazard) give the refusal (Chinese text for Chinese questions) and the link fallback. A year
+question names a hazard) give the English refusal and the link fallback (the Chinese keywords are only used to understand the question). A year
 or cladding goes through the same checks, merge and rules re-run; if rules-api is unavailable the input
 RulesOutput is used and `warnings` has `rules_rerun_unavailable`. The answer is the comparison sentence (if
 any) plus the `claim_en` of each item the user's value selected, verbatim, validated and prefixed. Any other

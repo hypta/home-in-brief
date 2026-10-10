@@ -1,10 +1,13 @@
-"""POST /v1/followup: answer one question in the asker's language, validated like the summary (INTERFACE_DRAFT 5, 6.1).
+"""POST /v1/followup: answer one question in English, validated like the summary (INTERFACE_DRAFT 5, 6.1).
 
-Flow: classify (Gemini: language, out-of-scope, stated year/cladding) -> code checks user_supplied ->
+The whole system is English only (2026-10-10). A question in any language is understood; the answer is always
+English, and a sentence with CJK script is blocked. `language` in the response is always "en" (kept for the contract).
+
+Flow: classify (Gemini: out-of-scope, stated year/cladding) -> code checks user_supplied ->
 optional rules-api re-run with the merged chat_supplied -> fact list (prompt.followup_facts, rebuilt from the
 re-run RulesOutput) -> answer (Gemini rewrites facts, values as placeholders) -> validator.check_rewrite with the
-language checks -> blocked sentences fall back to their facts' drafts -> code-added prefix. Out of scope: a fixed
-refusal chosen by code, translated by Gemini.
+English-only check -> blocked sentences fall back to their facts' drafts -> code-added prefix. Out of scope: a
+fixed English refusal chosen by code.
 
 question and history are untrusted: they never enter the evidence. The one exception (P-V3) is a validated
 year_built that was used for the re-run; it is allowed only in sentences citing kb_items_from_user_input.
@@ -31,17 +34,17 @@ from . import followup_prompt as fp
 from . import prompt as facts_prompt
 from .facts import RewriteSentence
 from .service import ReportError, _env_float, mock_enabled
-from .validator import (MAX_WORDS, NUMBER_WORD, TOO_LONG, BANNED_WORD, URL_OR_HTML, Allowed, Evidence,
-                        build_evidence, check_rewrite, strip_prefix, to_decimal, validate)
+from .validator import (MAX_WORDS, Allowed, Evidence, build_evidence, check_rewrite, strip_prefix, to_decimal,
+                        validate)
 
 log = logging.getLogger("report-api.followup")
 MAX_ANSWER = 3
 
 REFUSAL_EN = ("This question is outside what this property report covers; the original sources linked below "
               "may help you look it up.")
-PREFIXES = {"zh-hant": "依你提供的資訊，", "zh-tw": "依你提供的資訊，", "zh-hk": "依你提供的資訊，", "zh": "依你提供的資訊，",
-            "zh-hans": "根据你提供的信息，", "zh-cn": "根据你提供的信息，", "en": "Based on what you told us, "}
-PREFIX_EN = PREFIXES["en"]
+PREFIX_EN = "Based on what you told us, "
+LANGUAGE = "en"  # response field kept for the contract; always English
+NON_ENGLISH = "non_english"
 
 
 # ---- request / response -------------------------------------------------------------------------
@@ -67,7 +70,6 @@ class FollowupResponse(BaseModel):
 
 # ---- Gemini (own wrapper: gemini.gemini_generate is fixed to the summary schema) ---------------
 class ClassifyOut(BaseModel):
-    language: str = "en"
     out_of_scope: bool = False
     year_built: Optional[str] = None
     cladding: Optional[Literal["monolithic", "weatherboard", "brick", "concrete", "other"]] = None
@@ -78,10 +80,6 @@ class ClassifyOut(BaseModel):
 class AnswerOut(BaseModel):
     answer: list[RewriteSentence]
     links: list[str] = Field(default_factory=list)
-
-
-class TranslateOut(BaseModel):
-    text: str
 
 
 # (prompt, response schema, timeout_s) -> raw JSON text. Replaced in tests.
@@ -140,30 +138,6 @@ def _call(generate: JsonGenerator, prompt: str, schema: type, timeout: float):
         raise ReportError(503, "model_unavailable", "The language model did not answer.")
     except gemini.ModelOutputInvalid:
         raise ReportError(502, "model_output_invalid", "The language model's answer did not match the schema.")
-
-
-# ---- language -----------------------------------------------------------------------------------
-_HAN_RE = re.compile(r"[㐀-鿿]")
-_KANA_RE = re.compile(r"[぀-ヿ]")
-_HANGUL_RE = re.compile(r"[가-힯]")
-
-
-def normalize_language(claimed: str, question: str) -> str:
-    """Gemini's code, corrected by script: a question with Han characters is never "en"."""
-    lang = (claimed or "").strip() or "en"
-    if _HANGUL_RE.search(question):
-        return lang if lang.lower().startswith("ko") else "ko"
-    if _KANA_RE.search(question):
-        return lang if lang.lower().startswith("ja") else "ja"
-    if _HAN_RE.search(question):
-        return lang if lang.lower().startswith(("zh", "ja")) else "zh-Hant"
-    if lang.lower().startswith(("zh", "ja", "ko")):
-        return "en"  # no CJK script in the question
-    return lang
-
-
-def is_cjk(language: str) -> bool:
-    return language.lower().startswith(("zh", "ja", "ko"))
 
 
 # ---- user_supplied (5.3) ------------------------------------------------------------------------
@@ -231,107 +205,39 @@ def call_rules(property_context: dict, user_inputs: dict, timeout: float) -> dic
     return out
 
 
-# ---- validation (validator.validate plus language-dependent rules) ------------------------------
-_CJK_NUM_SPACE = [(re.compile(r"(\d)(?=[　-〿぀-ヿ㐀-鿿가-힯])"), r"\1 "),
-                  (re.compile(r"(?<=[぀-ヿ㐀-鿿가-힯])(?=[$\d])"), " ")]
-_ZH_BANNED = re.compile(r"安全|危險|無風險|沒有風險|没有风险|低風險|高風險|风险低|风险高|風險低|風險高|建議|建议|推薦|推荐|應該|应该|應當|"
-                        r"必須|必须|務必|务必|一定要|將會|将会|一定會|可能|大約|大约|大概|左右|將近|将近|幾乎|几乎|保證|保证|划算|"
-                        r"值得|便宜|別買|不要買|該買|可以買|擔心|担心|放心|沒有災害|沒有淹水|不會淹水")
-_ZH_NUMBER = re.compile(r"[兩两]|百分之")
-# English verdict words glued to CJK text, where \b in the validator does not fire ("很safe").
-_EN_GLUED = re.compile(r"(?<![A-Za-z])(?:safe|unsafe|risk-free|no risk|recommend\w*|should|must|guarantee\w*|"
-                       r"will|likely|unlikely)(?![A-Za-z])", re.I)
-
-
-def tidy(text: str) -> str:
-    """Space between digits and CJK characters, so "1997年" reads as the number 1997 (no change in meaning)."""
-    for rx, rep in _CJK_NUM_SPACE:
-        text = rx.sub(rep, text)
-    return text.strip()
-
-
-def cjk_units(text: str) -> int:
-    return len(_HAN_RE.findall(text)) + len(_KANA_RE.findall(text)) + len(_HANGUL_RE.findall(text)) + \
-        len(re.findall(r"[A-Za-z0-9$][A-Za-z0-9$.,%'’-]*", text))
+# ---- validation (validator.validate plus the English-only rule) ---------------------------------
+_CJK_RE = re.compile(r"[\u3000-\u303f\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af\uff00-\uffef]")
 
 
 def check_answer(s: Sentence, ev: Evidence) -> list[str]:
-    """validator.check_sentence rules, plus: CJK length in characters, Chinese verdict and number words.
-    The CJK rules apply when the sentence contains CJK script (an English KB claim in a Chinese answer is
-    checked as English).
-
-    For CJK text the validator's word limit (whitespace split) is replaced by CJK_MAX_UNITS, and "一" is
-    masked before the validator's numeral check, because it is part of ordinary words (一些, 之一, 一樣).
-    Domains follow the validator's rule (only the host of a cited source passes); for CJK text the same rule
-    is applied again with ASCII boundaries, because \b does not separate a domain glued to CJK characters.
-    """
-    cjk = bool(_HAN_RE.search(s.text) or _KANA_RE.search(s.text) or _HANGUL_RE.search(s.text))
-    if not cjk:
-        v = validate([s], ev, MAX_WORDS)
-        return v.rejected[0][1] if v.rejected else []
-    # "某" masks 一; a space between ASCII and CJK keeps the validator's \b checks from cutting a glued domain
-    # ("Settled.govt.nz的指引" read as the domain "settled.govt")
-    probe_text = re.sub(r"(?<=[A-Za-z0-9])(?=[　-〿぀-ヿ㐀-鿿가-힯＀-￯])|(?<=[　-〿぀-ヿ㐀-鿿가-힯＀-￯])(?=[A-Za-z0-9])",
-                        " ", s.text.replace("一", "某"))
-    probe = Sentence(text=probe_text, source_ids=s.source_ids)
-    v = validate([probe], ev, max_words=None)
+    """validator.check_sentence rules (25-word limit), plus: any CJK script blocks the sentence."""
+    v = validate([s], ev, MAX_WORDS)
     fails = list(v.rejected[0][1]) if v.rejected else []
-    if cjk_units(s.text) > fp.CJK_MAX_UNITS:
-        fails.append(TOO_LONG)
-    if _ZH_BANNED.search(s.text) or _EN_GLUED.search(s.text):
-        fails.append(BANNED_WORD)
-    if _ZH_NUMBER.search(s.text):
-        fails.append(NUMBER_WORD)
-    cited_hosts = {h for i in s.source_ids for h in ev.cited_hosts.get(i, ())}
-    if URL_OR_HTML not in fails and (re.search(r"https?|www\.", s.text, re.I) or any(
-            m.group(0).lower() not in cited_hosts for m in _CJK_DOMAIN_RE.finditer(s.text))):
-        fails.append(URL_OR_HTML)
-    return list(dict.fromkeys(fails))
-
-
-def prefix_for(language: str, translate: Callable[[str], Optional[str]]) -> str:
-    lang = language.lower()
-    if lang in PREFIXES:
-        return PREFIXES[lang]
-    if lang.startswith("zh"):
-        return PREFIXES["zh-hans"] if ("hans" in lang or lang.endswith(("cn", "sg"))) else PREFIXES["zh-hant"]
-    if lang.startswith("en"):
-        return PREFIX_EN
-    t = translate(PREFIX_EN.strip().rstrip(","))
-    return (t.rstrip(" ,，、") + ", ") if t else PREFIX_EN
+    if _CJK_RE.search(s.text):
+        fails.append(NON_ENGLISH)
+    return fails
 
 
 _PROPER_START = re.compile(r"^(?:\S*\.\S|[A-Z]\S*[A-Z]|Auckland\b|Kāinga\b|Kainga\b|Settled\b)")
 
 
-def add_prefix(s: Sentence, prefix: str) -> Sentence:
-    """Code-added prefix. English: lower-case the first letter unless it starts a name ("Settled.govt.nz", "LINZ")."""
+def add_prefix(s: Sentence) -> Sentence:
+    """Code-added prefix; lower-case the first letter unless it starts a name ("Settled.govt.nz", "LINZ")."""
     body = strip_prefix(s.text).strip()
-    if prefix == PREFIX_EN:
-        if body and not _PROPER_START.match(body):
-            body = body[:1].lower() + body[1:]
-        return Sentence(text=PREFIX_EN + body, source_ids=s.source_ids)
-    return Sentence(text=prefix + body, source_ids=s.source_ids)
-
-
-_TO_HANS = str.maketrans("議會資記錄說為內準與牆這裡採數據", "议会资记录说为内准与墙这里采数据")
-
-
-def _zh(text: str, language: str) -> str:
-    lang = language.lower()
-    return text.translate(_TO_HANS) if ("hans" in lang or lang.endswith(("cn", "sg"))) else text
+    if body and not _PROPER_START.match(body):
+        body = body[:1].lower() + body[1:]
+    return Sentence(text=PREFIX_EN + body, source_ids=s.source_ids)
 
 
 # ---- user value vs. property value (5.3; user decision 10/10: show both) -------------------------
-def comparison_sentence(key: str, value: Any, f: FieldView, language: str) -> Optional[Sentence]:
+def comparison_sentence(key: str, value: Any, f: FieldView) -> Optional[Sentence]:
     """A code-written sentence comparing the user's value with the property field (status found).
 
     It names both values and cites the field's source_id. It is a program sentence: the user's value is
     allowed in it (and only in it); the validator still checks it (see check_comparison).
     """
-    zh = language.lower().startswith("zh")
     council = (f.source_id or "").startswith("ac_")
-    src_zh, src_en = ("市議會資料", "the council") if council else ("公開紀錄", "public records")
+    src_en = "the council" if council else "public records"
     if key == "year_built":
         dr = (f.model_extra or {}).get("decade_range")
         decade = dr[0] if (isinstance(dr, list) and len(dr) == 2 and all(isinstance(x, int) for x in dr)
@@ -340,35 +246,28 @@ def comparison_sentence(key: str, value: Any, f: FieldView, language: str) -> Op
         u_int = value if isinstance(value, int) else None
         if decade is not None:
             same = (u_int is not None and decade <= u_int <= decade + 9) or (u_dec and int(u_dec.group(1)) == decade)
-            c_zh, c_en = f"{decade} 年代（{decade}–{decade + 9}）", f"the {decade}s ({decade}–{decade + 9})"
+            c_en = f"the {decade}s ({decade}–{decade + 9})"
         else:
             cv = to_decimal(f.value)
             if cv is None:
                 return None
             same = u_int is not None and Decimal(u_int) == cv
-            c_zh, c_en = f"{_n(cv)} 年", f"{_n(cv)}"
-        u_zh = f"{u_dec.group(1)} 年代" if u_dec else f"{u_int} 年"
+            c_en = f"{_n(cv)}"
         u_en = f"the {u_dec.group(1)}s" if u_dec else f"{u_int}"
         if same:
-            zh_t = (f"你提供的 {u_zh}落在{src_zh}記錄的 {c_zh}內。" if decade is not None and u_int is not None
-                    else f"你提供的 {u_zh}和{src_zh}記錄的 {c_zh}一致。")
             en_t = (f"The year you gave, {u_en}, falls within {src_en}'s recorded decade, {c_en}."
                     if decade is not None and u_int is not None
                     else f"The year you gave, {u_en}, matches {src_en}'s record, {c_en}.")
         else:
-            zh_t = f"你提供的建造年份是 {u_zh}；{src_zh}記錄為 {c_zh}。以下說明以{src_zh}為準。"
             en_t = f"You gave the year built as {u_en}; {src_en} records {c_en}, and this answer uses {src_en}'s record."
     else:
         cv = str(f.value)
         same = cv.strip().lower() == str(value).lower()
         if same:
-            zh_t = f"你提供的外牆 {value} 和{src_zh}記錄的 {cv} 一致。"
             en_t = f"The cladding you gave, {value}, matches {src_en}'s record, {cv}."
         else:
-            zh_t = f"你提供的外牆是 {value}；{src_zh}記錄為 {cv}。以下說明以{src_zh}為準。"
             en_t = f"You gave the cladding as {value}; {src_en} records {cv}, and this answer uses {src_en}'s record."
-    text = _zh(zh_t, language) if zh else en_t
-    return Sentence(text=text.replace("  ", " "), source_ids=[f.source_id])
+    return Sentence(text=en_t.replace("  ", " "), source_ids=[f.source_id])
 
 
 def check_comparison(s: Sentence, value: Any, ev: Evidence) -> list[str]:
@@ -408,9 +307,7 @@ def fallback_links(question: str, link_ids: list[str]) -> list[str]:
 # ---- REPORT_MOCK=true: no Gemini call ---------------------------------------------------------------
 _MOCK_OOS = re.compile(r"school|\bzon(?:e|es|ing)\b|commute|commuting|crime|neighbou?r|traffic|investment return|"
                        r"學區|學校|校區|通勤|治安|犯罪|鄰居|交通|学区|学校|通勤|治安", re.I)
-REFUSAL_ZH = "這個問題超出本報告涵蓋的範圍；下方的原始連結或許能幫你查詢。"
-MOCK_ANSWER = {"en": "This is a mock answer; a real answer cites the public sources listed in this report.",
-               "zh": "這是模擬回答；正式回答會引用本報告列出的公開來源。"}
+MOCK_ANSWER = "This is a mock answer; a real answer cites the public sources listed in this report."
 
 
 def mock_classify(question: str) -> ClassifyOut:
@@ -422,11 +319,11 @@ def mock_classify(question: str) -> ClassifyOut:
     cladding = next((k for k in ("monolithic", "weatherboard", "brick", "concrete")
                      if re.search(_CLADDING_WORDS[k], question, re.I)), None)
     oos = bool(_MOCK_OOS.search(question)) and not (_FLOOD_Q.search(question) or _HAZARD_Q.search(question))
-    return ClassifyOut(language=normalize_language("en", question), out_of_scope=oos, year_built=year,
+    return ClassifyOut(out_of_scope=oos, year_built=year,
                        cladding=cladding)
 
 
-def mock_answer(ev: Evidence, kb_items: dict[str, dict], used: dict, language: str) -> tuple[list[Sentence], int]:
+def mock_answer(ev: Evidence, kb_items: dict[str, dict], used: dict) -> tuple[list[Sentence], int]:
     """claim_en of the items the user's value selected, verbatim; else one fixed mock sentence."""
     passed, dropped = [], 0
     if used:
@@ -441,15 +338,10 @@ def mock_answer(ev: Evidence, kb_items: dict[str, dict], used: dict, language: s
                 passed.append(s)
     if not passed:
         sid = next((i for i in sorted(ev.known_ids) if not i.startswith("kb_")), None)
-        text = _zh(MOCK_ANSWER["zh"], language) if language.lower().startswith("zh") else MOCK_ANSWER["en"]
-        s = Sentence(text=text, source_ids=[sid] if sid else [])
+        s = Sentence(text=MOCK_ANSWER, source_ids=[sid] if sid else [])
         if not check_answer(s, ev):
             passed.append(s)
     return passed, dropped
-
-
-_CJK_DOMAIN_RE = re.compile(r"(?<![A-Za-z0-9-])(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,}(?![A-Za-z0-9-])")
-_PLAIN_RE = re.compile(r"\d|https?://|www\.|<|\n")
 
 
 # ---- main flow ----------------------------------------------------------------------------------
@@ -464,17 +356,6 @@ def answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
     link_ids = [link.id for link in req.links()]
     warnings: list[str] = []
 
-    def translate(sentence: str) -> Optional[str]:
-        if mock:
-            return None
-        try:
-            t = _call(generate, fp.translate_prompt(sentence, language), TranslateOut,
-                      clock.budget(0.5)).text.strip()
-        except ReportError as e:
-            log.info("translation failed (%s); using English", e.code)
-            return None
-        return t if t and not _PLAIN_RE.search(t) and len(t) <= 400 else None
-
     # 1. classify
     if mock:
         c = mock_classify(req.question)
@@ -482,26 +363,19 @@ def answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
         c = _call(generate, fp.classify_prompt(req.question, history, [{"id": link.id, "label": link.label}
                                                                         for link in req.links()]),
                   ClassifyOut, clock.budget(0.4))
-    language = normalize_language(c.language, req.question)
     supplied = extract_user_supplied(req.question, c)
     links = [i for i in dict.fromkeys(c.links) if i in link_ids][:3]
 
     # 2. out of scope: the fixed refusal chosen by code
     if c.out_of_scope:
-        if language.lower().startswith("en"):
-            text = REFUSAL_EN
-        elif mock and language.lower().startswith("zh"):
-            text = _zh(REFUSAL_ZH, language)
-        else:
-            text = translate(REFUSAL_EN) or REFUSAL_EN
-        refusal = Sentence(text=text, source_ids=[])
+        refusal = Sentence(text=REFUSAL_EN, source_ids=[])
         links = links or fallback_links(req.question, link_ids)
         if refusal_mode == "strict":
             data = _kb(req, clock)
             ev = build_evidence(req, data.items, data.sources.keys(), source_urls=data.sources.urls)
             if check_answer(refusal, ev):
                 raise ReportError(502, "validation_failed", "No answer sentence passed validation.")
-        return FollowupResponse(language=language, answer=[refusal], out_of_scope=True, user_supplied=supplied,
+        return FollowupResponse(language=LANGUAGE, answer=[refusal], out_of_scope=True, user_supplied=supplied,
                                 links=links, dropped=0, warnings=warnings)
 
     # 3. merge user_supplied; property values with status "found" win; re-run rules when something new is used
@@ -549,7 +423,7 @@ def answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
     # Program sentences comparing the user's value with the property value (both values, cited).
     fixed = []
     for key, value, f in compared:
-        s = comparison_sentence(key, value, f, language)
+        s = comparison_sentence(key, value, f)
         fails = check_comparison(s, value, ev) if s else ["no_council_value"]
         if fails:
             log.warning("comparison sentence dropped: %s", ",".join(fails))
@@ -563,13 +437,12 @@ def answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
     last: Optional[ReportError] = None
     limit = max(0, MAX_ANSWER - len(fixed))
     if mock:
-        passed, dropped = mock_answer(ev, data.items, used, language)
+        passed, dropped = mock_answer(ev, data.items, used)
         if fixed and not used:
             passed = []  # the comparison is the answer; no filler sentence
         passed = passed[:limit]
         if any(set(s.source_ids) & ev.user_kb for s in passed):
-            prefix = prefix_for(language, translate)
-            passed = [add_prefix(s, prefix) if set(s.source_ids) & ev.user_kb else s for s in passed]
+            passed = [add_prefix(s) if set(s.source_ids) & ev.user_kb else s for s in passed]
     else:
         fs = facts_prompt.followup_facts(eff, ev, data.items, used)
         debug["facts"] = [{"id": f.id, "text": f.text, "draft": f.draft(), "user": f.user,
@@ -577,10 +450,9 @@ def answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
         debug["attempts"] = []
 
         def final(s: Sentence) -> list[str]:
-            return check_answer(Sentence(text=tidy(s.text), source_ids=s.source_ids), ev)
+            return check_answer(s, ev)
 
-        base = fp.answer_prompt(eff, ev, data.items, titles, req.question, history, language, notes,
-                                is_cjk(language), fs)
+        base = fp.answer_prompt(eff, ev, data.items, titles, req.question, history, notes, fs)
         prompt = base
         best: Optional[list] = None
         for attempt in range(2):
@@ -614,23 +486,16 @@ def answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
         dropped = sum(r.sentence is None for r in best or [])
         debug["composed"] = [{"text": it.sentence.text, "fact_ids": it.fact_ids, "kind": it.kind} for it in items]
         debug["rewrite"] = rewrite.stats(items, best or [])
-        prefix = None
         for it in items:
             s = it.sentence
-            if it.kind == rewrite.REWRITE:
-                s = Sentence(text=tidy(s.text), source_ids=s.source_ids)
             if it.user or set(s.source_ids) & ev.user_kb:
-                if it.kind == rewrite.REWRITE:
-                    prefix = prefix or prefix_for(language, translate)
-                    s = add_prefix(s, prefix)
-                else:
-                    s = add_prefix(s, PREFIX_EN)  # drafts are English
+                s = add_prefix(s)
             passed.append(s)
     if not passed and not fixed:
         raise last or ReportError(502, "validation_failed", "No answer sentence passed validation.")
 
     links = [i for i in dict.fromkeys(out_links + links) if i in link_ids][:3]
-    return FollowupResponse(language=language, answer=fixed + passed, out_of_scope=False, user_supplied=supplied,
+    return FollowupResponse(language=LANGUAGE, answer=fixed + passed, out_of_scope=False, user_supplied=supplied,
                             links=links, dropped=dropped, warnings=warnings)
 
 

@@ -20,14 +20,13 @@ from app.validator import build_evidence
 client = TestClient(app, raise_server_exceptions=False)
 
 
-def fake(classify, answers=(), translate="這個問題超出本報告的範圍，下方的原始連結或許有幫助。"):
+def fake(classify, answers=()):
     """classify: dict; answers: list of answer payloads (one per answer call; last one repeats)."""
-    calls = {"classify": [], "answer": [], "translate": []}
+    calls = {"classify": [], "answer": []}
 
     def gen(prompt, schema, timeout_s):
         assert timeout_s > 0
-        for task, marker in (("classify", fp.TASK_CLASSIFY), ("answer", fp.TASK_ANSWER),
-                             ("translate", fp.TASK_TRANSLATE)):
+        for task, marker in (("classify", fp.TASK_CLASSIFY), ("answer", fp.TASK_ANSWER)):
             if prompt.startswith(marker):
                 calls[task].append(prompt)
                 break
@@ -35,8 +34,6 @@ def fake(classify, answers=(), translate="這個問題超出本報告的範圍�
             raise AssertionError("unknown task")
         if task == "classify":
             out = classify
-        elif task == "translate":
-            out = {"text": translate}
         else:
             out = answers[min(len(calls["answer"]), len(answers)) - 1]
         if isinstance(out, Exception):
@@ -47,8 +44,8 @@ def fake(classify, answers=(), translate="這個問題超出本報告的範圍�
     return gen
 
 
-def cls(language="en", **kw):
-    return {"language": language, "out_of_scope": False, "year_built": None, "cladding": None,
+def cls(**kw):
+    return {"out_of_scope": False, "year_built": None, "cladding": None,
             "hypothetical": False, "links": [], **kw}
 
 
@@ -99,14 +96,12 @@ FLOOD_EN_OUT = {"text": "The council's Flood Plains layer covers 51.2% of this p
                         "overland flow path crosses it.",
                 "source_ids": ["ac_flood_plains", "ac_flood_prone", "ac_overland_flow"]}
 FLOOD_ZH = ("市議會的 Flood Plains 圖層涵蓋這塊地的{{F1.flood_plain_pct}}，Flood Prone Areas 涵蓋 "
-            "{{F1.flood_prone_area_pct}}，也有 overland flow path 穿過。", ["F1"])
-FLOOD_ZH_OUT = "市議會的 Flood Plains 圖層涵蓋這塊地的 51.2%，Flood Prone Areas 涵蓋 50.8%，也有 overland flow path 穿過。"
-# case1 F5: the title fact
-TITLE_ZH = ("LINZ 記錄的產權是 {{F5.title_type}}；Settled.govt.nz 指出你擁有土地，以及一般而言其上的建物。", ["F5"])
-TITLE_ZH_OUT = "LINZ 記錄的產權是 Freehold；Settled.govt.nz 指出你擁有土地，以及一般而言其上的建物。"
+            "{{F1.flood_prone_area_pct}}，也有 overland flow path 穿過。", ["F1"])  # a CJK answer: must be blocked
 # case5 F3: the title fact
-UNIT_ZH = ("LINZ 記錄的產權是 {{F3.title_type}}；Settled.govt.nz 指出業主會自動成為 body corporate 的成員。", ["F3"])
-UNIT_ZH_OUT = "LINZ 記錄的產權是 Unit Title；Settled.govt.nz 指出業主會自動成為 body corporate 的成員。"
+UNIT_EN = ("LINZ records the title as {{F3.title_type}}; Settled.govt.nz says owners automatically become members "
+           "of the body corporate.", ["F3"])
+UNIT_EN_OUT = ("LINZ records the title as Unit Title; Settled.govt.nz says owners automatically become members of "
+               "the body corporate.")
 INSURANCE_EN = "Settled.govt.nz says an insurer may limit flood-damage cover if a house is in an area that flooded before."
 
 
@@ -129,25 +124,39 @@ def test_general_question_in_english(monkeypatch, rules_calls):
     assert not rules_calls
 
 
-def test_chinese_question_gets_chinese_answer_with_english_terms(monkeypatch, rules_calls):
-    long_zh = "市議會的資料顯示" * 10  # over 60 CJK characters
-    gen = fake(cls("zh-Hant"), [ans(FLOOD_ZH, TITLE_ZH, (long_zh, ["F6"]))])
+def test_chinese_question_gets_english_answer(monkeypatch, rules_calls):
+    gen = fake(cls(), [ans(FLOOD_EN, (INSURANCE_EN, [fid("case1", "insurer may limit")]))])
     monkeypatch.setattr(followup, "gemini_json", gen)
-    r = post("case1", "淹水圖層和產權要注意什麼？")
+    r = post("case1", "淹水圖層和保險要注意什麼？")
     assert r.status_code == 200, r.text
     out = r.json()
-    assert out["language"] == "zh-Hant"
-    texts = [s["text"] for s in out["answer"]]
-    # the 80-character sentence is dropped and its fact (F6, non-residential use) falls back to the English draft
-    assert texts == [FLOOD_ZH_OUT, TITLE_ZH_OUT, "The council valuation describes the improvements as RESERVE LAND and "
-                     "the land use as Recreational - vacant; the year built could not be checked."]
-    assert out["dropped"] == 1
-    assert 'language "zh-Hant"' in gen.calls["answer"][0]
+    assert out["language"] == "en" and out["out_of_scope"] is False
+    assert [s["text"] for s in out["answer"]] == [FLOOD_EN_OUT["text"], INSURANCE_EN]
+    assert not any(_has_cjk(s["text"]) for s in out["answer"])
+    prompt = gen.calls["answer"][0]
+    assert "Write in English only" in prompt and "language \"" not in prompt
+    assert "淹水圖層和保險要注意什麼？" in prompt  # the question is passed as quoted data
 
 
-def test_language_is_corrected_by_script(monkeypatch, rules_calls):
-    monkeypatch.setattr(followup, "gemini_json", fake(cls("en"), [ans(TITLE_ZH)]))
-    assert post("case1", "產權是什麼？").json()["language"] == "zh-Hant"
+def _has_cjk(text):
+    return bool(followup._CJK_RE.search(text))
+
+
+def test_answer_with_cjk_is_blocked_and_falls_back_to_the_draft(monkeypatch, rules_calls):
+    gen = fake(cls(), [ans(FLOOD_ZH)])
+    monkeypatch.setattr(followup, "gemini_json", gen)
+    out = post("case1", "淹水圖層是什麼？").json()
+    assert len(gen.calls["answer"]) == 2 and out["dropped"] == 1  # one retry, then the facts' drafts
+    assert out["answer"] and not any(_has_cjk(s["text"]) for s in out["answer"])
+    assert out["answer"][0]["text"].startswith("Council maps show Flood Plains over 51.2%")
+
+
+@pytest.mark.parametrize("text", ["市議會資料顯示這塊地有 Flood Plains。", "The layer is 淹水 related.",
+                                  "Flood Plains 圖層，涵蓋這塊地。", "これは洪水です。", "침수 지역입니다."])
+def test_check_answer_blocks_any_cjk_script(text):
+    b = body("case1")
+    ev = build_evidence(followup.ReportRequest(**b), {}, [])
+    assert followup.NON_ENGLISH in followup.check_answer(followup.Sentence(text=text, source_ids=["ac_flood_plains"]), ev)
 
 
 def _rules_with_leaky(req_body):
@@ -157,7 +166,7 @@ def _rules_with_leaky(req_body):
     return ro
 
 
-def test_supplied_year_reruns_rules_and_gets_prefix(monkeypatch):
+def test_chinese_question_with_year_1997_is_extracted_and_answered_in_english(monkeypatch):
     b = body("case1")
     seen = []
 
@@ -169,8 +178,9 @@ def test_supplied_year_reruns_rules_and_gets_prefix(monkeypatch):
     monkeypatch.setattr(followup, "call_rules", rules)
     kw = {"rules_output": _rules_with_leaky(b), "used": {"year_built": 1997}}
     year, era = fid("case1", "The year built you gave", **kw), fid("case1", "leaky buildings", **kw)
-    gen = fake(cls("zh-Hant", year_built="1997"),
-               [ans(("{{%s.user_year}}年落在 Settled.govt.nz 漏水屋指引討論的年代。" % year, [year, era]), FLOOD_ZH)])
+    gen = fake(cls(year_built="1997"),
+               [ans(("Settled.govt.nz discusses homes built in {{%s.user_year}} in its leaky-building guidance."
+                     % year, [year, era]), FLOOD_EN)])
     monkeypatch.setattr(followup, "gemini_json", gen)
     r = post("case1", "這間是 1997 年蓋的，要注意什麼？")
     assert r.status_code == 200, r.text
@@ -179,9 +189,11 @@ def test_supplied_year_reruns_rules_and_gets_prefix(monkeypatch):
     assert seen and seen[0]["chat_supplied"] == {"year_built": 1997}
     assert seen[0]["price_override"] == b["user_inputs"]["price_override"]
     first, second = out["answer"]
-    assert first == {"text": "依你提供的資訊，1997 年落在 Settled.govt.nz 漏水屋指引討論的年代。",
-                     "source_ids": ["kb_leaky_build_era"]}
-    assert second["text"] == FLOOD_ZH_OUT  # no prefix
+    assert out["language"] == "en"
+    assert first == {"text": "Based on what you told us, Settled.govt.nz discusses homes built in 1997 in its "
+                             "leaky-building guidance.", "source_ids": ["kb_leaky_build_era"]}
+    assert second["text"] == FLOOD_EN_OUT["text"]  # no prefix
+    assert not any(_has_cjk(s["text"]) for s in out["answer"])
     assert "The year built you gave is {{%s.user_year}}" % year in gen.calls["answer"][0]
 
 
@@ -216,15 +228,16 @@ def test_user_year_is_not_evidence_for_other_sources(monkeypatch):
 
 
 def test_conflict_with_property_year_lists_both_values(monkeypatch, rules_calls):
-    gen = fake(cls("zh-Hant", year_built="1985"), [ans(UNIT_ZH)])
+    gen = fake(cls(year_built="1985"), [ans(UNIT_EN)])
     monkeypatch.setattr(followup, "gemini_json", gen)
-    r = post("case5", "這間是 1985 年蓋的")
+    r = post("case5", "這間是 1985 年蓋的")  # Chinese question, English answer
     assert r.status_code == 200, r.text
     out = r.json()
     assert out["user_supplied"] == {"year_built": 1985}  # still returned for chat_supplied
-    assert out["answer"][0] == {"text": "你提供的建造年份是 1985 年；市議會資料記錄為 1990 年代（1990–1999）。以下說明以市議會資料為準。",
+    assert out["answer"][0] == {"text": "You gave the year built as 1985; the council records the 1990s (1990–1999), "
+                                          "and this answer uses the council's record.",
                                 "source_ids": ["ac_property_page"]}
-    assert out["answer"][1]["text"] == UNIT_ZH_OUT  # no prefix: the council figure is used
+    assert out["answer"][1]["text"] == UNIT_EN_OUT  # no prefix: the council figure is used
     assert "already states" in gen.calls["answer"][0]
     assert not rules_calls
 
@@ -237,17 +250,19 @@ def test_conflict_english(monkeypatch, rules_calls):
     assert out["dropped"] == 1
 
 
-@pytest.mark.parametrize("question,lang,text", [
-    ("這間是 1998 年蓋的", "zh-Hant", "你提供的 1998 年落在市議會資料記錄的 1990 年代（1990–1999）內。"),
-    ("这间是 1998 年盖的", "zh-Hans", "你提供的 1998 年落在市议会资料记录的 1990 年代（1990–1999）内。"),
-    ("It was built in 1998.", "en", "The year you gave, 1998, falls within the council's recorded decade, "
+@pytest.mark.parametrize("question,text", [
+    ("這間是 1998 年蓋的", "The year you gave, 1998, falls within the council's recorded decade, "
+                          "the 1990s (1990–1999)."),
+    ("这间是 1998 年盖的", "The year you gave, 1998, falls within the council's recorded decade, "
+                          "the 1990s (1990–1999)."),
+    ("It was built in 1998.", "The year you gave, 1998, falls within the council's recorded decade, "
                                     "the 1990s (1990–1999)."),
 ])
-def test_user_year_inside_council_decade_is_not_a_conflict(monkeypatch, rules_calls, question, lang, text):
-    monkeypatch.setattr(followup, "gemini_json", fake(cls(lang, year_built="1998"), [ans(UNIT_ZH)]))
+def test_user_year_inside_council_decade_is_not_a_conflict(monkeypatch, rules_calls, question, text):
+    monkeypatch.setattr(followup, "gemini_json", fake(cls(year_built="1998"), [ans(UNIT_EN)]))
     out = post("case5", question).json()
     assert out["answer"][0] == {"text": text, "source_ids": ["ac_property_page"]}
-    assert "不同" not in text and "differ" not in text
+    assert "differ" not in text
     assert out["user_supplied"] == {"year_built": 1998}
 
 
@@ -267,10 +282,11 @@ def test_cladding_conflict_lists_both_values(monkeypatch, rules_calls):
     b = body("case1")
     b["property_context"]["property"]["cladding"] = {"value": "Weatherboard", "status": "found",
                                                      "source_id": "ac_property_page"}
-    monkeypatch.setattr(followup, "gemini_json", fake(cls("zh-Hant", cladding="monolithic"), [ans(FLOOD_EN)]))
+    monkeypatch.setattr(followup, "gemini_json", fake(cls(cladding="monolithic"), [ans(FLOOD_EN)]))
     r = client.post("/v1/followup", json=b | {"question": "外牆是 monolithic", "history": []})
     out = r.json()
-    assert out["answer"][0] == {"text": "你提供的外牆是 monolithic；市議會資料記錄為 Weatherboard。以下說明以市議會資料為準。",
+    assert out["answer"][0] == {"text": "You gave the cladding as monolithic; the council records Weatherboard, and this "
+                                "answer uses the council's record.",
                                 "source_ids": ["ac_property_page"]}
     assert out["user_supplied"] == {"cladding": "monolithic"} and not rules_calls
 
@@ -279,7 +295,7 @@ def test_cladding_conflict_lists_both_values(monkeypatch, rules_calls):
                                       "It is not from 1997"])
 def test_year_not_verbatim_or_conditional_is_not_extracted(monkeypatch, rules_calls, question):
     year = "1998" if question == "這間是 1997 年蓋的" else "1997"  # model returns a year not in the question
-    monkeypatch.setattr(followup, "gemini_json", fake(cls("zh-Hant", year_built=year), [ans(TITLE_ZH)]))
+    monkeypatch.setattr(followup, "gemini_json", fake(cls(year_built=year), [ans(FLOOD_EN)]))
     r = post("case1", question)
     assert r.status_code == 200, r.text
     assert r.json()["user_supplied"] == {}
@@ -293,26 +309,23 @@ def test_year_out_of_range_and_bad_cladding_dropped(monkeypatch, rules_calls):
 
 
 def test_out_of_scope_exempt(monkeypatch, rules_calls):
-    gen = fake({**cls("zh-Hant"), "out_of_scope": True, "links": ["homes", "https://evil.example"]})
+    gen = fake({**cls(), "out_of_scope": True, "links": ["homes", "https://evil.example"]})
     monkeypatch.setattr(followup, "gemini_json", gen)
     r = post("case1", "附近學區好嗎？")
     assert r.status_code == 200, r.text
     out = r.json()
-    assert out["out_of_scope"] is True and out["dropped"] == 0
-    assert out["answer"] == [{"text": "這個問題超出本報告的範圍，下方的原始連結或許有幫助。", "source_ids": []}]
+    assert out["out_of_scope"] is True and out["dropped"] == 0 and out["language"] == "en"
+    assert out["answer"] == [{"text": followup.REFUSAL_EN, "source_ids": []}]  # fixed English, never translated
     assert out["links"] == ["homes"]
     ids = {link["id"] for link in body("case1")["property_context"]["links"]}
     assert set(out["links"]) <= ids
-    assert not gen.calls["answer"]
-    t = gen.calls["translate"][0]
-    assert "學區" not in t and followup.REFUSAL_EN in t  # translation sees only the fixed sentence
+    assert not gen.calls["answer"] and len(gen.calls) == 2
 
 
-def test_out_of_scope_bad_translation_falls_back_to_english(monkeypatch, rules_calls):
-    monkeypatch.setattr(followup, "gemini_json", fake({**cls("ja"), "out_of_scope": True},
-                                                      translate="https://evil.example 1 2 3"))
+def test_out_of_scope_japanese_question_gets_the_english_refusal(monkeypatch, rules_calls):
+    monkeypatch.setattr(followup, "gemini_json", fake({**cls(), "out_of_scope": True}))
     out = post("case1", "この地域の学校はどうですか？").json()
-    assert out["answer"][0]["text"] == followup.REFUSAL_EN
+    assert out["answer"][0]["text"] == followup.REFUSAL_EN and out["language"] == "en"
     assert out["links"] == ["council_geomaps"]  # fallback, never the whole list
 
 
@@ -457,8 +470,8 @@ def test_call_rules_http(monkeypatch):
 def test_domain_of_a_cited_source_passes(monkeypatch, rules_calls):
     ins = fid("case1", "insurer may limit")
     ok = [(INSURANCE_EN, [ins]),
-          ("Settled.govt.nz 指出，如果房屋位於曾經淹水的地區，保險公司或許會限制淹水損害的保障。", [ins]),
-          ("依據settled.govt.nz的說明，如果房屋在曾淹水的地區，保險公司或許會限制淹水保障。", [ins])]
+          ("According to settled.govt.nz, an insurer may limit flood-damage cover if a house is in an area that "
+           "flooded before.", [ins])]
     monkeypatch.setattr(followup, "gemini_json", fake(cls(), [ans(*ok)]))
     out = post("case1", "Insurance?").json()
     assert [s["text"] for s in out["answer"]] == [t for t, _ in ok] and out["dropped"] == 0
@@ -467,8 +480,7 @@ def test_domain_of_a_cited_source_passes(monkeypatch, rules_calls):
 def test_domain_without_its_source_cited_is_blocked(monkeypatch, rules_calls):
     ins = fid("case1", "insurer may limit")
     bad = [("Settled.govt.nz says the Flood Plains layer covers {{F1.flood_plain_pct}} of this parcel.", ["F1"]),
-           ("Settled.govt.nz 指出市議會的 Flood Plains 圖層涵蓋這塊地的 {{F1.flood_plain_pct}}。", ["F1"]),
-           ("詳見evil.example，市議會的 Flood Plains 圖層涵蓋 {{F1.flood_plain_pct}}。", ["F1"]),
+           ("See evil.example, the Flood Plains layer covers {{F1.flood_plain_pct}}.", ["F1"]),
            ("Example.govt.nz says an insurer may limit flood-damage cover in areas that flooded before.", [ins])]
     monkeypatch.setattr(followup, "gemini_json", fake(cls(), [ans(FLOOD_EN, *bad)]))
     out = post("case1", "Insurance?").json()
@@ -476,7 +488,7 @@ def test_domain_without_its_source_cited_is_blocked(monkeypatch, rules_calls):
     assert [s["text"] for s in out["answer"]] == [
         FLOOD_EN_OUT["text"], "Settled.govt.nz states that an insurer may limit flood-damage cover if a house is in "
                               "an area that has previously flooded."]
-    assert out["dropped"] == 4
+    assert out["dropped"] == 3
 
 
 # ---- REPORT_MOCK=true -----------------------------------------------------------------------------
@@ -506,9 +518,9 @@ def test_mock_supplied_values_rerun_rules_and_quote_claims(monkeypatch, mock_mod
     assert r.status_code == 200, r.text
     out = r.json()
     assert seen == [{"year_built": 1998, "cladding": "monolithic"}]
-    assert out["language"] == "zh-Hant" and out["user_supplied"] == {"year_built": 1998, "cladding": "monolithic"}
+    assert out["language"] == "en" and out["user_supplied"] == {"year_built": 1998, "cladding": "monolithic"}
     assert [s["source_ids"] for s in out["answer"]] == [["kb_leaky_build_era"], ["kb_monolithic_cladding"]]
-    assert all(s["text"].startswith("依你提供的資訊，Settled.govt.nz") for s in out["answer"])
+    assert all(s["text"].startswith("Based on what you told us, Settled.govt.nz") for s in out["answer"])
     assert out["warnings"] == [] and out["dropped"] == 0
 
 
@@ -520,31 +532,30 @@ def test_mock_rules_unavailable_falls_back_with_warning(monkeypatch, mock_mode):
     out = post("case1", "It was built in 1998.").json()
     assert out["warnings"] == ["rules_rerun_unavailable"]
     assert out["user_supplied"] == {"year_built": 1998}
-    assert out["answer"] == [{"text": followup.MOCK_ANSWER["en"], "source_ids": ["ac_coastal"]}]
+    assert out["answer"] == [{"text": followup.MOCK_ANSWER, "source_ids": ["ac_coastal"]}]
 
 
 def test_mock_case5_year_inside_decade_and_known_cladding(mock_mode, rules_calls):
     out = post("case5", "這間是 1998 年蓋的，外牆是 monolithic，要注意什麼？").json()
     texts = [s["text"] for s in out["answer"]]
-    assert texts[0] == "你提供的 1998 年落在市議會資料記錄的 1990 年代（1990–1999）內。"
-    assert texts[1].startswith("依你提供的資訊，Settled.govt.nz") and out["answer"][1]["source_ids"] == ["kb_monolithic_cladding"]
+    assert texts[0] == "The year you gave, 1998, falls within the council's recorded decade, the 1990s (1990–1999)."
+    assert texts[1].startswith("Based on what you told us, Settled.govt.nz") and out["answer"][1]["source_ids"] == ["kb_monolithic_cladding"]
 
 
-@pytest.mark.parametrize("question,lang", [("Is this in a good school zone?", "en"), ("附近學區好嗎？", "zh-Hant"),
-                                           ("How long is the commute?", "en"), ("這裡通勤方便嗎？", "zh-Hant"),
-                                           ("What about crime here?", "en")])
-def test_mock_out_of_scope(mock_mode, rules_calls, question, lang):
+@pytest.mark.parametrize("question", ["Is this in a good school zone?", "附近學區好嗎？", "How long is the commute?",
+                                      "這裡通勤方便嗎？", "What about crime here?"])
+def test_mock_out_of_scope(mock_mode, rules_calls, question):
     out = post("case1", question).json()
-    assert out["out_of_scope"] is True and out["language"] == lang
-    assert out["answer"][0]["text"] == (followup.REFUSAL_EN if lang == "en" else followup.REFUSAL_ZH)
+    assert out["out_of_scope"] is True and out["language"] == "en"
+    assert out["answer"][0]["text"] == followup.REFUSAL_EN  # English even for a Chinese question
     assert out["links"] == ["council_geomaps"]
 
 
-def test_mock_other_question_gets_fixed_sentence(mock_mode, rules_calls):
-    for q, text in (("What does the flood layer mean?", followup.MOCK_ANSWER["en"]),
-                    ("淹水圖層是什麼意思？", followup.MOCK_ANSWER["zh"])):
+def test_mock_other_question_gets_fixed_english_sentence(mock_mode, rules_calls):
+    for q in ("What does the flood layer mean?", "淹水圖層是什麼意思？"):
         out = post("case1", q).json()
-        assert out["out_of_scope"] is False and out["answer"][0]["text"] == text
+        assert out["out_of_scope"] is False and out["answer"][0]["text"] == followup.MOCK_ANSWER
+        assert out["language"] == "en"
         assert out["answer"][0]["source_ids"]  # passes the validator with a real source id
 
 
