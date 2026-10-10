@@ -155,3 +155,15 @@ def test_empty_registry_id_is_never_a_citation():
     req.property_context['sources'].append({'id': ''})
     ev = V.build_evidence(req, data.items, data.sources.keys())
     assert V.check_sentence(Sentence(text='The title is Freehold.', source_ids=['']), ev)
+
+
+def test_domain_must_belong_to_the_cited_source_not_to_a_request_field():
+    req, data, _ = evidence('case1')
+    req.rules_output['extra'] = {'url': 'https://evil.example.com/x'}
+    ev = V.build_evidence(req, data.items, data.sources.keys())
+    s = Sentence(text='Evil.example.com says the title is Freehold.', source_ids=['linz_titles'])
+    assert V.URL_OR_HTML in V.check_sentence(s, ev)
+    s = Sentence(text='Settled.govt.nz says an auction sale is unconditional.', source_ids=['src_settled_leaky'])
+    assert V.URL_OR_HTML not in V.check_sentence(s, ev)
+    s = Sentence(text='Unittitles.govt.nz says an auction sale is unconditional.', source_ids=['src_settled_leaky'])
+    assert V.URL_OR_HTML in V.check_sentence(s, ev)

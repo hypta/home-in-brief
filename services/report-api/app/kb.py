@@ -13,6 +13,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
+from collections.abc import KeysView
 from typing import Optional
 
 import requests
@@ -31,10 +32,29 @@ class KbUnavailable(Exception):
     pass
 
 
+class SourceTitles(dict):
+    """rules-api source id -> title; `.keys()` also carries `.urls` (id -> url) so build_evidence can read them."""
+
+    urls: dict[str, str]
+
+    def __init__(self, titles: Optional[dict[str, str]] = None, urls: Optional[dict[str, str]] = None):
+        super().__init__(titles or {})
+        self.urls = dict(urls or {})
+
+    def keys(self):  # type: ignore[override]
+        ks = _Keys(self)
+        ks.urls = self.urls
+        return ks
+
+
+class _Keys(KeysView):
+    urls: dict[str, str] = {}
+
+
 @dataclass
 class KbData:
     items: dict[str, dict] = field(default_factory=dict)  # id -> KB item (claim_en, next_step_en, source_id, topic)
-    sources: dict[str, str] = field(default_factory=dict)  # rules-api source id -> title
+    sources: dict[str, str] = field(default_factory=SourceTitles)  # rules-api source id -> title (.urls: id -> url)
 
 
 def _kb_dir() -> Path:
@@ -46,7 +66,7 @@ def _load_local(ids: list[str]) -> KbData:
     if not d.is_dir():
         raise KbUnavailable(f"kb directory not found: {d}")
     items: dict[str, dict] = {}
-    sources: dict[str, str] = {}
+    sources = SourceTitles()
     for p in sorted(d.glob("*.json")):
         data = json.loads(p.read_text(encoding="utf-8"))
         rows = data if isinstance(data, list) else data.get("sources", []) if p.name == "sources.json" else [data]
@@ -55,6 +75,8 @@ def _load_local(ids: list[str]) -> KbData:
                 continue
             if p.name == "sources.json":
                 sources[row["id"]] = row.get("title") or row["id"]
+                if row.get("url"):
+                    sources.urls[row["id"]] = row["url"]
             else:
                 items[row["id"]] = row
     wanted = set(ids)
@@ -98,9 +120,12 @@ def _cached(key: str, fetch):
 def _load_remote(ids: list[str], timeout: float) -> KbData:
     base = os.environ.get("RULES_API_URL", "http://localhost:8080").rstrip("/")
     timeout = max(0.5, min(5.0, timeout))
-    sources = _cached(f"sources:{base}", lambda: {
-        s["id"]: s.get("title") or s["id"]
-        for s in _get_json(base, "/v1/sources", None, timeout) if isinstance(s, dict) and "id" in s})
+    def _fetch_sources() -> SourceTitles:
+        rows = [s for s in _get_json(base, "/v1/sources", None, timeout) if isinstance(s, dict) and "id" in s]
+        return SourceTitles({s["id"]: s.get("title") or s["id"] for s in rows},
+                            {s["id"]: s["url"] for s in rows if s.get("url")})
+
+    sources = _cached(f"sources:{base}", _fetch_sources)
     items: dict[str, dict] = {}
     missing = []
     for i in ids:

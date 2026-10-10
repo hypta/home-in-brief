@@ -9,6 +9,7 @@ import re
 from dataclasses import dataclass, field
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any, Iterable, Optional
+from urllib.parse import urlparse
 
 from b_common.report_schemas import ReportRequest, Sentence
 
@@ -48,10 +49,17 @@ _NUMBER_WORD_RE = re.compile(
     r"eighty|ninety|hundred|thousand|million|billion|percent|per cent)\b", re.I)
 _URL_RE = re.compile(r"https?://|www\.|<\s*/?\s*[a-z!]|\]\(|\b[a-z0-9-]+(?:\.[a-z0-9-]+)+/\S", re.I)
 _DOMAIN_RE = re.compile(r"\b(?:[a-z0-9-]+\.)+[a-z]{2,}\b", re.I)
-# These are publisher names in the established report vocabulary, not navigation links.
-_PUBLISHER_RE = re.compile(
-    r"\b(?:Settled\.govt\.nz|unittitles\.govt\.nz)(?:'s)?"
-    r"(?=\s+(?:says|discusses|also|guide|guidance|in its))", re.I)
+
+
+def host_of(url: Any) -> Optional[str]:
+    """Lower-case host of a URL with a leading www. removed; None if there is no host."""
+    if not isinstance(url, str) or not url.strip():
+        return None
+    host = urlparse(url.strip() if "//" in url else "//" + url.strip()).hostname
+    if not host:
+        return None
+    host = host.lower()
+    return host[4:] if host.startswith("www.") else host
 _JARGON_RE = re.compile(r"\b[a-z]+_[a-z0-9_]+\b|\brules assessment\b|\bstandard loan scenario\b|"
                         r"\brules-api\b|\bRulesOutput\b|\bPropertyContext\b", re.I)
 # Verdicts, advice, predictions and approximations (RUBRIC 7). Words in QUOTABLE are allowed when
@@ -88,6 +96,8 @@ class Evidence:
     landslide_high: bool = False
     chat_year: bool = False
     unavailable_hazards: set[str] = field(default_factory=set)
+    # id (source id or selected kb_ id) -> host of the page it cites. A sentence may name only these hosts.
+    cited_hosts: dict[str, set[str]] = field(default_factory=dict)
 
 
 # ---- number helpers -----------------------------------------------------------------------------
@@ -133,9 +143,22 @@ def _money_or_area(name: str) -> int:
     return P_PCT if name.endswith("_pct") else P_MONEY
 
 
-def build_evidence(req: ReportRequest, kb_items: dict[str, dict], rules_sources: Iterable[str]) -> Evidence:
-    """Everything a summary sentence may cite or quote, for one request."""
+def build_evidence(req: ReportRequest, kb_items: dict[str, dict], rules_sources: Iterable[str],
+                   source_urls: Optional[dict[str, str]] = None) -> Evidence:
+    """Everything a summary sentence may cite or quote, for one request.
+
+    source_urls maps rules-api source ids to URLs; when omitted, a `urls` attribute on rules_sources
+    (as kb.py provides) is used."""
     ev = Evidence()
+    urls: dict[str, str] = dict(source_urls or getattr(rules_sources, "urls", None) or {})
+    for s in req.sources():
+        if (s.model_extra or {}).get("url"):
+            urls[s.id] = s.model_extra["url"]
+    hosts: dict[str, set[str]] = {}
+    for sid, u in urls.items():
+        h = host_of(u)
+        if h:
+            hosts.setdefault(sid, set()).add(h)
     ev.chat_year = "year_built" in req.chat_supplied()
     ev.unavailable_hazards = {h.source_id for h in req.hazards()
                               if h.source_id and h.status in ("not_found", "unavailable")}
@@ -144,6 +167,11 @@ def build_evidence(req: ReportRequest, kb_items: dict[str, dict], rules_sources:
     ev.kb_claims = {i: kb_items[i].get("claim_en") or "" for i in selected}
     ev.kb_topics = {i: kb_items[i].get("topic") or "" for i in selected}
     ev.user_kb = set(req.kb_items_from_user_input())
+    for i in selected:
+        h = host_of(kb_items[i].get("source_url")) or host_of(urls.get(kb_items[i].get("source_id") or ""))
+        if h:
+            hosts.setdefault(i, set()).add(h)
+    ev.cited_hosts = hosts
     ev.known_ids = {s.id for s in req.sources()} | set(rules_sources) | ev.selected_kb
 
     allowed: dict[str, list[Allowed]] = {}
@@ -294,7 +322,10 @@ def check_sentence(s: Sentence, ev: Evidence, max_words: Optional[int] = MAX_WOR
         if m and not (word in QUOTABLE and re.search(rf"\b{word}\b", claims)):
             fails.append(BANNED_WORD)
             break
-    if _URL_RE.search(text) or "@" in text or _DOMAIN_RE.search(_PUBLISHER_RE.sub("publisher", text)):
+    # Only the bare domain of a page this sentence cites may appear (a publisher name, "Settled.govt.nz says").
+    cited_hosts = {h for i in ids for h in ev.cited_hosts.get(i, ())}
+    if (_URL_RE.search(text) or "@" in text
+            or any(m.group(0).lower() not in cited_hosts for m in _DOMAIN_RE.finditer(text))):
         fails.append(URL_OR_HTML)
     if _JARGON_RE.search(text):
         fails.append(INTERNAL_JARGON)

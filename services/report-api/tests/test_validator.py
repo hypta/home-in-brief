@@ -170,3 +170,36 @@ def test_prefix_is_added_once():
     again = V.with_prefix(Sentence(text="Based on what you told us, the cladding is monolithic.", source_ids=[]))
     assert again.text == s.text
     assert V.with_prefix(Sentence(text="LINZ lists it.", source_ids=[])).text == "Based on what you told us, LINZ lists it."
+
+
+# ---- domain rule: only the host of a page the sentence itself cites may appear (bare, not a link) ----
+def _dom(case, text, ids):
+    _, _, ev = evidence(case)
+    return V.check_sentence(Sentence(text=text, source_ids=ids), ev)
+
+
+@pytest.mark.parametrize("text,ids", [
+    ("Settled.govt.nz says an auction sale is unconditional.", ["src_settled_auction"]),
+    ("settled.govt.nz says an auction sale is unconditional.", ["src_settled_auction"]),
+    ("The cladding is monolithic, which Settled.govt.nz discusses.", ["kb_monolithic_cladding"]),
+])
+def test_cited_source_domain_is_allowed(text, ids):
+    assert V.URL_OR_HTML not in _dom("case5", text, ids)
+
+
+@pytest.mark.parametrize("text,ids", [
+    ("Settled.govt.nz says an auction sale is unconditional.", ["linz_titles"]),  # settled not cited
+    ("unittitles.govt.nz says an auction sale is unconditional.", ["src_settled_auction"]),  # no hard-coded exception
+    ("Settled.govt.nz says see https://www.settled.govt.nz/buying-a-home/ for details.", ["src_settled_auction"]),
+    ("Settled.govt.nz says see settled.govt.nz/buying-a-home for details.", ["src_settled_auction"]),
+    ("Settled.govt.nz says see www.settled.govt.nz for details.", ["src_settled_auction"]),
+    ("Settled.govt.nz and example.com say so.", ["src_settled_auction"]),
+    ("Settled.govt.nz says ask help@settled.govt.nz about it.", ["src_settled_auction"]),
+])
+def test_other_domains_urls_and_emails_are_blocked(text, ids):
+    assert V.URL_OR_HTML in _dom("case5", text, ids)
+
+
+def test_host_of_normalises():
+    assert V.host_of("https://www.Settled.govt.nz/a/b") == "settled.govt.nz"
+    assert V.host_of("") is None and V.host_of(None) is None
