@@ -126,6 +126,22 @@ def test_council_refused_reason_merges_into_one_neutral_note():
     n = notes_[0]
     assert n.field == "year_built,floor_area_m2,building_site_coverage_m2,local_board"
     assert n.text == ("Year built, floor area, building site coverage and local board: council property records "
-                      "could not be read from our server; you can enter the year built and cladding in the form "
+                      "could not be read from our server. You can enter the year built and cladding in the form "
                       "if you know them.")
     assert "no data" not in n.text.lower() and "not found" not in n.text.lower()
+
+
+def _refused_note(chat):
+    b = body("case1")
+    for name in ("year_built", "floor_area_m2", "building_site_coverage_m2", "local_board"):
+        b["property_context"]["property"][name].update(value=None, status="unavailable", reason=REFUSED)
+    b["user_inputs"]["chat_supplied"] = chat
+    return next(n for n in assemble.not_found_notes(ReportRequest.model_validate(b)) if n.reason == REFUSED).text
+
+
+def test_council_refused_hint_only_asks_for_what_the_user_has_not_entered():
+    assert _refused_note({}).endswith("You can enter the year built and cladding in the form if you know them.")
+    assert _refused_note({"year_built": 1998}).endswith("You can enter cladding in the form if you know it.")
+    assert _refused_note({"cladding": "brick"}).endswith("You can enter the year built in the form if you know it.")
+    both = _refused_note({"year_built": "1970s", "cladding": "brick"})
+    assert both.endswith("read from our server.") and "form" not in both

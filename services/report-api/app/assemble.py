@@ -77,8 +77,7 @@ REASON_TEXT = {
     "service_timeout": "the data service did not respond in time, so this could not be checked.",
     # property-api reason when it skips the council property page on a cloud host (COUNCIL_PAGE=off). Neutral:
     # the data exists, we just could not read it from here.
-    "council_site_refuses_this_server": "council property records could not be read from our server; you can "
-                                        "enter the year built and cladding in the form if you know them.",
+    "council_site_refuses_this_server": "council property records could not be read from our server.",
 }
 STATUS_TEXT = {
     "not_found": "not found in the public records we checked.",
@@ -108,6 +107,16 @@ def _field_text(field: str, reason: Optional[str], status: str) -> str:
             or STATUS_TEXT.get(status) or STATUS_TEXT["unavailable"])
 
 
+COUNCIL_REFUSED = "council_site_refuses_this_server"
+
+
+def _council_hint(req: ReportRequest) -> str:
+    """Form hint for the fields the user has not already entered; empty when they entered both."""
+    given = req.chat_supplied()
+    todo = [lab for key, lab in (("year_built", "the year built"), ("cladding", "cladding")) if key not in given]
+    return f" You can enter {' and '.join(todo)} in the form if you know {'them' if len(todo) > 1 else 'it'}." if todo else ""
+
+
 def not_found_notes(req: ReportRequest) -> list[NotFoundNote]:
     """One note per (template, reason): property fields and primary hazard layers whose status is
     not_found or unavailable. Fields sharing the same wording and reason are merged into one note;
@@ -122,6 +131,8 @@ def not_found_notes(req: ReportRequest) -> list[NotFoundNote]:
     for name, f in req.property_fields().items():
         if f.status in MISSING:
             text = _field_text(name, f.reason, f.status)
+            if f.reason == COUNCIL_REFUSED:
+                text += _council_hint(req)
             put(("field", text, f.reason or f.status), name, _label(name), f.reason or f.status)
     for h in req.hazards():
         if h.priority == "primary" and h.status in MISSING:

@@ -206,18 +206,22 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--runs", type=int, default=3)
     ap.add_argument("--url", help="call a running report-api instead of the service function")
-    ap.add_argument("--cases", nargs="*", default=sorted(CHECKS))
+    ap.add_argument("--cases", nargs="*", help="case names (default: every json in the inputs directory that has CHECKS)")
+    ap.add_argument("--inputs", default=str(FIXTURES), help="directory of <case>.json inputs; a name like case1_filled "
+                    "uses the checks of case1")
     ap.add_argument("--out", default=str(ROOT / "out" / "golden" / "eval"))
     ap.add_argument("--followup", action="store_true", help="real follow-up questions for case1 and case5")
     args = ap.parse_args()
     if args.followup:
         return followup_eval(Path(args.out))
 
+    inputs = Path(args.inputs)
+    cases = args.cases or sorted(p.stem for p in inputs.glob("*.json") if p.stem.split("_")[0] in CHECKS)
     out_dir = Path(args.out) / datetime.now().strftime("%Y%m%d-%H%M%S")
     out_dir.mkdir(parents=True, exist_ok=True)
     results = []
-    for case in args.cases:
-        d = json.loads((FIXTURES / f"{case}.json").read_text(encoding="utf-8"))
+    for case in cases:
+        d = json.loads((inputs / f"{case}.json").read_text(encoding="utf-8"))
         body = {k: d[k] for k in ("property_context", "user_inputs", "rules_output")}
         req = ReportRequest.model_validate(body)
         data = kb.load(req.selected_kb_ids())
@@ -231,7 +235,7 @@ def main() -> int:
                 row["passed"] = sum(s["text"] not in fixed for s in rep["summary"])
                 row["dropped"] = rep["dropped"]
                 row["hard_violations"] = hard_checks(req, rep, data.items, ev)
-                row["rubric"] = rubric(case, rep, data.items)
+                row["rubric"] = rubric(case.split("_")[0], rep, data.items)
             else:
                 row["error"] = rep.get("error", {}).get("code")
             if dbg:
