@@ -11,10 +11,17 @@ assertions. Assertions that cannot be automated are listed as manual.
   .venv/bin/python scripts/eval_report_api.py --url http://localhost:8090
 
 Results go to out/golden/eval/<timestamp>/ (results.json, summary.md); out/ is not in git.
+
+Rewrite metrics (direct mode, from the service debug record): per run, how many summary sentences are Gemini
+rewrites that passed, how many are fact drafts (a blocked rewrite's fallback, or a must fact no sentence used),
+and the text similarity (difflib ratio) of each rewrite to the drafts of the facts it uses.
+
+  .venv/bin/python scripts/eval_report_api.py --followup     # real follow-up questions for case1 and case5
 """
 from __future__ import annotations
 
 import argparse
+import difflib
 import json
 import os
 import re
@@ -201,7 +208,10 @@ def main() -> int:
     ap.add_argument("--url", help="call a running report-api instead of the service function")
     ap.add_argument("--cases", nargs="*", default=sorted(CHECKS))
     ap.add_argument("--out", default=str(ROOT / "out" / "golden" / "eval"))
+    ap.add_argument("--followup", action="store_true", help="real follow-up questions for case1 and case5")
     args = ap.parse_args()
+    if args.followup:
+        return followup_eval(Path(args.out))
 
     out_dir = Path(args.out) / datetime.now().strftime("%Y%m%d-%H%M%S")
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -227,12 +237,30 @@ def main() -> int:
             if dbg:
                 row["drop_reasons"] = [f for a in dbg["attempts"] for s in a["sentences"] for f in s["fails"]]
                 row["attempts"] = len(dbg["attempts"])
+                row["rewrite"] = rewrite_metrics(dbg)
             results.append(row)
             print(_line(row), flush=True)
     (out_dir / "results.json").write_text(json.dumps(results, indent=2, ensure_ascii=False) + "\n")
     (out_dir / "summary.md").write_text(_markdown(results, args))
     print(f"\nwritten: {out_dir}/results.json, {out_dir}/summary.md")
     return 0
+
+
+def rewrite_metrics(dbg: dict) -> dict:
+    """Rewritten vs draft sentences in the final summary, and similarity of each rewrite to its facts' drafts."""
+    drafts = {f["id"]: f["draft"] for f in dbg.get("facts", [])}
+    comp = dbg.get("composed", [])
+    sims, copies = [], 0
+    for c in comp:
+        if c["kind"] != "rewrite":
+            continue
+        ref = " ".join(drafts.get(i, "") for i in c["fact_ids"])
+        sims.append(round(difflib.SequenceMatcher(None, c["text"], ref).ratio(), 3))
+        copies += c["text"] == ref
+    st = dbg.get("rewrite", {})
+    return {"rewritten": st.get("rewritten", 0), "fallback_drafts": st.get("fallback_drafts", 0),
+            "must_added": st.get("must_added", 0), "blocked": st.get("blocked", 0),
+            "model_sentences": st.get("model_sentences", 0), "similarity": sims, "identical_to_draft": copies}
 
 
 def _rates(row: dict) -> tuple[int, int, int, int]:
@@ -246,8 +274,10 @@ def _line(row: dict) -> str:
     if row["status"] != 200:
         return f"{row['case']:6} run {row['run']}: HTTP {row['status']} {row.get('error')} ({row['seconds']}s)"
     mh, mn, oh, on = _rates(row)
+    rw = row.get("rewrite") or {}
     return (f"{row['case']:6} run {row['run']}: passed {row['passed']} dropped {row['dropped']} "
             f"hard {len(row['hard_violations'])} must {mh}/{mn} other {oh}/{on} "
+            f"rewritten {rw.get('rewritten', '-')} drafts {rw.get('fallback_drafts', 0) + rw.get('must_added', 0)} "
             f"reasons {sorted(set(row.get('drop_reasons', [])))} ({row['seconds']}s)")
 
 
@@ -255,16 +285,22 @@ def _markdown(results: list[dict], args) -> str:
     lines = [f"# report-api eval {datetime.now().isoformat(timespec='seconds')}", "",
              f"Mode: {'http ' + args.url if args.url else 'direct'}; runs per case: {args.runs}; "
              f"REPORT_MOCK={os.environ.get('REPORT_MOCK', '')}; GEMINI_MODEL={os.environ.get('GEMINI_MODEL', '(default)')}",
-             "", "| case | run | status | passed | dropped | hard | must mention | must not / next | drop reasons |",
-             "|---|---|---|---|---|---|---|---|---|"]
+             ""] + _totals(results) + [
+             "", "| case | run | status | passed | dropped | hard | must mention | must not / next | rewritten | drafts "
+             "(fallback+must) | mean similarity | drop reasons |",
+             "|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for row in results:
         if row["status"] != 200:
             lines.append(f"| {row['case']} | {row['run']} | {row['status']} {row.get('error')} | | | | | | "
                          f"{', '.join(sorted(set(row.get('drop_reasons', []))))} |")
             continue
         mh, mn, oh, on = _rates(row)
+        rw = row.get("rewrite") or {}
+        sims = rw.get("similarity") or []
         lines.append(f"| {row['case']} | {row['run']} | 200 | {row['passed']} | {row['dropped']} | "
-                     f"{len(row['hard_violations'])} | {mh}/{mn} | {oh}/{on} | "
+                     f"{len(row['hard_violations'])} | {mh}/{mn} | {oh}/{on} | {rw.get('rewritten', '')} | "
+                     f"{rw.get('fallback_drafts', 0)}+{rw.get('must_added', 0)} | "
+                     f"{(sum(sims) / len(sims)) if sims else 0:.2f} | "
                      f"{', '.join(sorted(set(row.get('drop_reasons', []))))} |")
     lines += ["", "## Failed checks and summaries", ""]
     for row in results:
@@ -274,8 +310,10 @@ def _markdown(results: list[dict], args) -> str:
                 lines.append(f"- FAIL {x['check']}")
         for v in row.get("hard_violations", []):
             lines.append(f"- HARD {v}")
-        for s in (row.get("report") or {}).get("summary", []):
-            lines.append(f"  - S: {s['text']} `{', '.join(s['source_ids'])}`")
+        kinds = [c["kind"] for c in (row.get("debug") or {}).get("composed", [])]
+        for n, s in enumerate((row.get("report") or {}).get("summary", [])):
+            kind = kinds[n] if n < len(kinds) else "fixed"
+            lines.append(f"  - S [{kind}]: {s['text']} `{', '.join(s['source_ids'])}`")
         for a in (row.get("debug") or {}).get("attempts", []):
             for s in a["sentences"]:
                 if s["fails"]:
@@ -285,6 +323,76 @@ def _markdown(results: list[dict], args) -> str:
         lines.append("")
     lines += ["## Manual checks (not automated)", ""] + [f"- {m}" for m in MANUAL] + [""]
     return "\n".join(lines)
+
+
+FOLLOWUP_QUESTIONS = [
+    ("en_general", "What do the hazard maps and the title type mean for this property?"),
+    ("zh_year_cladding", "這間是 1997 年蓋的，外牆是 monolithic，要注意什麼？"),
+    ("out_of_scope", "Is this house in a good school zone?"),
+]
+
+
+def followup_eval(out: Path) -> int:
+    """Case1 and case5, three questions each, through followup.answer_followup (real Gemini; the rules-api
+    re-run goes to RULES_API_URL). Writes out/golden/eval/followup_rewrite_<ts>.json."""
+    from app import followup
+
+    rows = []
+    for case in ("case1", "case5"):
+        d = json.loads((FIXTURES / f"{case}.json").read_text(encoding="utf-8"))
+        base = {k: d[k] for k in ("property_context", "user_inputs", "rules_output")}
+        for qid, q in FOLLOWUP_QUESTIONS:
+            dbg: dict = {}
+            t0 = time.monotonic()
+            try:
+                resp = followup.answer_followup(followup.FollowupRequest.model_validate(base | {"question": q}),
+                                                debug=dbg).model_dump()
+                status = 200
+            except ReportError as e:
+                resp, status = {"error": {"code": e.code, "message": e.message}}, e.status
+            row = {"case": case, "question_id": qid, "question": q, "status": status,
+                   "seconds": round(time.monotonic() - t0, 2), "response": resp,
+                   "rewrite": dbg.get("rewrite"), "composed": dbg.get("composed"), "attempts": dbg.get("attempts")}
+            if dbg.get("composed"):
+                drafts = {f["id"]: f["draft"] for f in dbg.get("facts", [])}
+                row["similarity"] = [round(difflib.SequenceMatcher(
+                    None, c["text"], " ".join(drafts.get(i, "") for i in c["fact_ids"])).ratio(), 3)
+                    for c in dbg["composed"] if c["kind"] == "rewrite"]
+            rows.append(row)
+            texts = [a["text"] for a in resp.get("answer", [])]
+            print(f"{case} {qid}: HTTP {status} rewrite {dbg.get('rewrite')} {texts}", flush=True)
+    out.mkdir(parents=True, exist_ok=True)
+    path = out / f"followup_rewrite_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    path.write_text(json.dumps(rows, indent=2, ensure_ascii=False) + "\n")
+    print(f"written: {path}")
+    return 0
+
+
+def _totals(results: list[dict]) -> list[str]:
+    ok = [r for r in results if r["status"] == 200]
+    must_hit = sum(_rates(r)[0] for r in ok)
+    must_n = sum(_rates(r)[1] for r in ok)
+    other_hit = sum(_rates(r)[2] for r in ok)
+    other_n = sum(_rates(r)[3] for r in ok)
+    hard = sum(len(r["hard_violations"]) for r in ok)
+    rw = [r.get("rewrite") or {} for r in ok]
+    rewritten = sum(x.get("rewritten", 0) for x in rw)
+    drafts = sum(x.get("fallback_drafts", 0) + x.get("must_added", 0) for x in rw)
+    blocked = sum(x.get("blocked", 0) for x in rw)
+    model = sum(x.get("model_sentences", 0) for x in rw)
+    sims = [v for x in rw for v in x.get("similarity", [])]
+    copies = sum(x.get("identical_to_draft", 0) for x in rw)
+    pct = lambda a, b: f"{100 * a / b:.1f}%" if b else "n/a"  # noqa: E731
+    return ["## Totals", "",
+            f"- runs: {len(results)} ({len(ok)} HTTP 200)",
+            f"- must mention: {must_hit}/{must_n} ({pct(must_hit, must_n)}); must not / next steps: "
+            f"{other_hit}/{other_n} ({pct(other_hit, other_n)})",
+            f"- hard violations: {hard}",
+            f"- summary model sentences: {rewritten + drafts}; Gemini rewrites kept: {rewritten} "
+            f"({pct(rewritten, rewritten + drafts)}); drafts: {drafts} ({pct(drafts, rewritten + drafts)})",
+            f"- Gemini sentences returned: {model}; blocked: {blocked} ({pct(blocked, model)})",
+            f"- rewrite similarity to drafts: mean {(sum(sims) / len(sims)) if sims else 0:.3f}, "
+            f"min {min(sims) if sims else 0:.3f}, max {max(sims) if sims else 0:.3f}; identical to draft: {copies}"]
 
 
 if __name__ == "__main__":

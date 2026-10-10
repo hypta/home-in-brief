@@ -25,11 +25,11 @@ Response 200:
 | `schema_version` | `"0.1"` |
 | `generated_at` | ISO 8601, NZ time |
 | `model` | `GEMINI_MODEL` in use, or `mock` |
-| `summary` | `[{text, source_ids}]`. Gemini writes 3-5 sentences from a topic briefing built by code; only sentences that pass the validator are returned (at most 5). With no loan (`price_missing`, `deposit_exceeds_price`, `cash_purchase_no_loan`) code appends one fixed sentence with `source_ids: []`. Sentences that use chat-supplied facts get the prefix "Based on what you told us, " from code |
+| `summary` | `[{text, source_ids}]`. Gemini rewrites a fact list built by code into 3-5 sentences (see "Summary: fact list and rewrite"); rewrites that fail the checks are replaced by the facts' draft sentences, and every must-mention fact is always present (at most 5). With no loan (`price_missing`, `deposit_exceeds_price`, `cash_purchase_no_loan`) code appends one fixed sentence with `source_ids: []`. Sentences that use chat-supplied facts get the prefix "Based on what you told us, " from code |
 | `next_steps` | `[{text, source_ids, kb_item}]`: `next_step_en` of selected KB items, verbatim. Items cited in the summary first, then a fixed program order (flood insurance whenever a primary flood layer intersects, other intersecting-hazard items, build era/cladding, RBNZ LVR/DTI, LIM, title, First Home Loan, the rest). Identical texts are merged (`kb_item` = first, `source_ids` = all). At most 6. No lending items when there is no loan |
 | `not_found_notes` | `[{field, text, reason}]`: property fields and primary hazard layers with status `not_found` or `unavailable`. Fields that share the same wording and reason are merged into one note; `field` is then a comma-separated list (for example `cv,year_built,...`, `hazards.flood_plain,hazards.flood_prone_area`). Hazard notes end with "This does not mean there is no hazard." |
 | `warnings` | `rules_output.warnings` without panel-level and internal codes (`lem_base_unverified:*`, `bank_skipped:*`, `kb_hash_mismatch:*`, `kb_verification_incomplete:*`, `hazard_status_*`, `hazard_priority_unknown:*`), plus `kb_includes_draft` when `rules_output.kb_includes_draft` is true. report-api adds no codes of its own; meanings are in CODES.md |
-| `dropped` | Number of model sentences removed by the validator |
+| `dropped` | Number of Gemini sentences blocked by the checks (their facts fall back to drafts) |
 
 ## Errors
 
@@ -40,7 +40,7 @@ Same shape as rules-api: `{"error": {"code", "message", "fields": [{"field", "me
 | `validation_error` | 422 | Body missing a key, or a key is not a JSON object |
 | `model_unavailable` | 503 | Gemini timed out, hit quota, returned an error, or `GEMINI_API_KEY` is not set |
 | `model_output_invalid` | 502 | Gemini's answer did not match the response schema (after the retry) |
-| `validation_failed` | 502 | No summary sentence passed the validator (after the retry) |
+| `validation_failed` | 502 | Report: no sentence at all could be shown (cannot happen while the drafts pass); follow-up: see below |
 | `kb_unavailable` | 503 | KB items or sources could not be read from rules-api |
 | `rules_unavailable` | 503 | Follow-up only: the rules-api re-run with a supplied year or cladding failed |
 | `deadline_exceeded` | 504 | Follow-up only: `REQUEST_DEADLINE_S` ran out between calls |
@@ -51,6 +51,41 @@ For `/v1/followup`, `validation_error` also covers a missing `question`, a bad `
 `refusal_mode`, and `validation_failed` means no answer sentence passed.
 
 These codes are deliberately not in CODES.md (web's tests require page text for every code listed there).
+
+## Summary: fact list and rewrite (`app/prompt.py`, `app/facts.py`, `app/validator.py`, `app/rewrite.py`)
+
+1. **Fact list** (`prompt.fact_list`): code turns the three documents into facts `F1, F2, ...` in RUBRIC 1 order.
+   Each fact has `text` (the draft sentence, values as placeholders such as `{{F1.flood_plain_pct}}`),
+   `source_ids`, `slots` (name, value, kind, source, optional label / before / after context, strict),
+   `topic`, `priority`, `user` (relies on chat-supplied facts) and `must` (a RUBRIC 8 must-mention; at most 5).
+   Optional facts add lending and user-input meaning without any calculated value (household type used for the
+   First Home Loan cap, a self-entered rate) and topics beyond the 5-sentence cap.
+2. **Rewrite**: Gemini returns `{"summary": [{"text", "fact_ids"}]}`, 3-5 sentences, and may merge facts. It never
+   sees a value: digits, years, amounts, title names and the council's land-use words are written only as
+   placeholders. Code fills them in (`51.2%`, `$95,000`, `1990s`, `Freehold`).
+3. **Checks** (`validator.check_rewrite`): fact ids must exist; `source_ids` come from the facts, never from
+   Gemini; a placeholder must belong to a fact the sentence names; no digit outside a placeholder; no strict
+   string value (title names, council land-use words) outside a placeholder unless the fact text itself says it;
+   a placeholder must sit next to its words (its label is the nearest label; LVR threshold after "over", DTI
+   multiple before "times"); user facts are not merged with other facts. Semantic guard (simple): the fact's
+   qualifiers (`may`, `can`, `could not`, `only`, `limited`, `at least`, `generally`, `exempt`, `unknown`,
+   `on individual properties`, `differs`, `same decade`, `assumes`, `within`, `above`, `if`) and keep phrases
+   (e.g. "because your income", "it is exempt", "your loan") must be kept in the fact's order; terms (LVR, DTI,
+   First Home Loan, body corporate, leaky) and publishers (Auckland Council, Settled.govt.nz, Reserve Bank,
+   Kāinga Ora, LINZ, ...) kept; the number of not/no/never words unchanged; no added "says"/"states", causal
+   link or publisher. Then the filled sentence runs through `check_sentence` as before (banned words, 25 words,
+   URLs, numbers against the cited sources).
+4. **Fallback** (`rewrite.compose`): a blocked sentence is replaced by the drafts of its facts (one sentence each,
+   unless a passing rewrite already covers the fact); a must fact no sentence used is added as its draft; over 5,
+   optional sentences go first. Code adds "Based on what you told us, " to sentences with a user fact.
+   One retry when no rewrite passes. The debug record (eval only) counts rewrites, fallback drafts and added
+   must facts; the response contract is unchanged.
+
+**Limits of the semantic guard.** It is lexical. It cannot tell whether a rewrite that keeps every listed word
+still means the same thing (a changed relation between kept words can pass), and it does not detect added
+content beyond extra "says", causes and publishers. For CJK follow-up sentences it checks only Chinese
+equivalents of the qualifiers, at least one negation when the facts have one, English LVR/DTI/First Home Loan
+and the publishers (no order or added-cause check). Mock mode still returns the golden summaries.
 
 ## Follow-up (`app/followup.py`, `app/followup_prompt.py`)
 
@@ -88,9 +123,14 @@ Steps (INTERFACE_DRAFT 5 and 6.1):
    only. Gemini is told the comparison is already stated and never to write the user's value.
    When a used value is new, report-api calls `POST {RULES_API_URL}/v1/rules` (ID token for `https://`) and
    uses the new RulesOutput; its `kb_items_from_user_input` are the items that depend on the user's value.
-5. Gemini call 2 (answer) from a case-data prompt; `question` and `history` (including assistant turns) are
-   quoted as untrusted data and never enter the evidence. The one exception: a used `year_built` is an allowed
-   number for the `kb_items_from_user_input` items only.
+5. Gemini call 2 (answer) from the fact list (`prompt.followup_facts`: the summary facts with the same ids,
+   plus each selected KB claim, found property values, fields and hazard layers that could not be checked, and
+   the value the user just gave, cited only to the KB items it selected). After a rules re-run the list is
+   rebuilt from the new RulesOutput. Gemini returns `{"answer": [{"text", "fact_ids"}], "links"}` with values as
+   placeholders; each sentence goes through `validator.check_rewrite` (step 6 is its final check) and a blocked
+   one falls back to its facts' English drafts (model order kept, at most 3). `question` and `history`
+   (including assistant turns) are quoted as untrusted data and never enter the evidence. The one exception: a
+   used `year_built` is an allowed number for the `kb_items_from_user_input` items only.
 6. Every sentence goes through `validator.validate`, with these language-dependent additions: for CJK text
    (Chinese/Japanese/Korean language or script) the 25-word limit is replaced by 60 units (CJK characters
    plus Latin words and numbers), Chinese verdict and approximation words (安全, 建議, 應該, 必須, 可能, 大約, ...)
