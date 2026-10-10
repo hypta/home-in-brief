@@ -39,7 +39,7 @@ def test_team_spec_example():
     out = run(ctx, deposit=120000, household_income=150000, existing_debts=30000,
               household_type="multiple")
     assert out.price_used.basis == "cv" and out.price_used.valuation_date == "2024-05-01"
-    assert out.rates_snapshot_date == "2026-09-27"  # oldest per-bank captured_at
+    assert out.rates_snapshot_date == min(b.captured_at for b in SNAP.banks)[:10]  # oldest per-bank captured_at
     assert out.loan_amount == 880000
     assert out.lvr_pct == 88.0
     assert out.dti == 6.07
@@ -191,7 +191,7 @@ def test_api_fhl_eligible_key(client, tmp_path):
 
 
 def test_snapshot_date_is_oldest_bank():
-    assert calc.snapshot_date(SNAP) == "2026-09-27"
+    assert calc.snapshot_date(SNAP) == min(b.captured_at for b in SNAP.banks)[:10]
     assert all(b.captured_at for b in SNAP.banks)
 
 

@@ -1,6 +1,6 @@
 import json
 import math
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -210,10 +210,11 @@ def test_user_rate_without_snapshot():
 
 def test_stale_snapshot_warning():
     assert "rates_snapshot_stale" not in run().warnings  # 7 days old
-    late = datetime(2026, 11, 1, tzinfo=timezone.utc)
+    taken = datetime.fromisoformat(min(b.captured_at for b in SNAP.banks))
+    late = taken + timedelta(days=calc.STALE_DAYS + 1)
     out = calc.compute(PropertyContext(), UserInputs(), SNAP, now=late)
     assert "rates_snapshot_stale" in out.warnings
-    early = datetime(2026, 10, 20, tzinfo=timezone.utc)
+    early = taken + timedelta(days=calc.STALE_DAYS - 1)
     assert "rates_snapshot_stale" not in calc.compute(PropertyContext(), UserInputs(), SNAP, now=early).warnings
 
 
