@@ -1,0 +1,197 @@
+"""The parts of a report built by code: not_found_notes, next_steps, warnings and fixed sentences."""
+from __future__ import annotations
+
+from typing import Optional
+
+from b_common.report_schemas import NextStep, NotFoundNote, ReportRequest, Sentence
+
+MAX_NEXT_STEPS = 6
+MISSING = ("not_found", "unavailable")
+PRIMARY_FLOOD_LAYERS = ("flood_plain", "flood_prone_area", "coastal_inundation")
+HAZARD_DISCLAIMER = "This does not mean there is no hazard."
+
+# ---- fixed sentences (no source id; exempt from provenance checks) ------------------------------
+NO_LOAN_SENTENCES = {
+    "price_missing": "No price was entered and the council valuation could not be used, "
+                     "so no loan scenario could be calculated.",
+    "deposit_exceeds_price": "Your deposit is larger than the price used, so no loan or repayment scenario "
+                             "applies; check both amounts.",
+    "cash_purchase_no_loan": "Your deposit equals the price, so no loan or repayment scenario applies.",
+}
+MOCK_SENTENCE = "This is a sample summary from the report service's mock mode; no model was called."
+
+
+def no_loan_sentence(req: ReportRequest) -> Optional[Sentence]:
+    warnings = req.warnings()
+    for code, text in NO_LOAN_SENTENCES.items():
+        if code in warnings:
+            return Sentence(text=text, source_ids=[])
+    return None
+
+
+# ---- warnings -------------------------------------------------------------------------------------
+_DROP_PREFIXES = ("lem_base_unverified:", "bank_skipped:", "kb_hash_mismatch:", "kb_verification_incomplete:",
+                  "hazard_status_missing:", "hazard_status_unknown:", "hazard_priority_unknown:")
+
+
+def reader_warnings(req: ReportRequest) -> list[str]:
+    """rules_output.warnings without the panel-level and internal codes (CODES.md "not user-facing")."""
+    out = [w for w in req.warnings() if not w.startswith(_DROP_PREFIXES)]
+    if req.rules_output.get("kb_includes_draft") is True and "kb_includes_draft" not in out:
+        out.append("kb_includes_draft")
+    return list(dict.fromkeys(out))
+
+
+# ---- not_found_notes ------------------------------------------------------------------------------
+FIELD_LABELS = {
+    "cv": "Council valuation (CV)", "title_type": "Title type", "year_built": "Year built",
+    "cladding": "Cladding", "last_sale": "Last sale", "annual_rates": "Annual rates",
+    "land_value": "Land value", "improvements_value": "Improvements value", "rateability": "Rateability",
+    "improvement_description": "Improvement description", "land_use": "Land use", "land_area_m2": "Land area",
+    "floor_area_m2": "Floor area", "building_site_coverage_m2": "Building site coverage",
+    "legal_description": "Legal description", "record_of_title": "Record of title",
+    "valuation_number": "Valuation number", "local_board": "Local board",
+}
+LAYER_LABELS = {
+    "flood_plain": "Flood plains", "flood_prone_area": "Flood prone areas",
+    "overland_flow_path": "Overland flow paths", "coastal_inundation": "Coastal inundation",
+    "landslide_shallow": "Shallow landslide susceptibility", "landslide_large_scale": "Large-scale landslide susceptibility",
+    "liquefaction": "Liquefaction", "tsunami_evacuation_zone": "Tsunami evacuation zone",
+    "coastal_erosion": "Coastal erosion",
+}
+# (field, reason) -> text after "<Label>: ". Field-specific wording first, then by reason.
+FIELD_REASON_TEXT = {
+    ("year_built", "property_category_has_no_build_decade"):
+        "the council's property category for this address has no build decade.",
+    ("cladding", "no_free_source"): "no free public source has this; check the listing or ask the agent.",
+    ("last_sale", "no_licensed_source"):
+        "we have no licensed source for sale prices; see the Homes.co.nz and OneRoof links.",
+    ("annual_rates", "non_rateable_property"): "the council lists this property as non-rateable.",
+    ("floor_area_m2", "not_on_council_page"): "not shown on the council property page.",
+    # Neutral on purpose: the same reason also comes with Leasehold and unresolved titles.
+    ("land_area_m2", "council_shows_0_for_cross_lease_or_unit_title"):
+        "the council entry does not provide a usable land area for this property.",
+}
+REASON_TEXT = {
+    "no_unique_council_property_match": "the council records could not be matched to a single property at this address.",
+    "service_timeout": "the data service did not respond in time, so this could not be checked.",
+}
+STATUS_TEXT = {
+    "not_found": "not found in the public records we checked.",
+    "unavailable": "could not be retrieved this time.",
+}
+HAZARD_REASON_TEXT = {
+    "service_timeout": "the council map service did not respond in time, so {it} could not be checked.",
+}
+HAZARD_STATUS_TEXT = {
+    "unavailable": "could not be checked this time.",
+    "not_found": "no result was returned for this parcel, so {it} could not be checked.",
+}
+
+
+def _label(field: str) -> str:
+    return FIELD_LABELS.get(field) or field.removesuffix("_m2").replace("_", " ").capitalize()
+
+
+def _join(labels: list[str]) -> str:
+    if len(labels) <= 1:
+        return "".join(labels)
+    return ", ".join(labels[:-1]) + " and " + labels[-1]
+
+
+def _field_text(field: str, reason: Optional[str], status: str) -> str:
+    return (FIELD_REASON_TEXT.get((field, reason or "")) or REASON_TEXT.get(reason or "")
+            or STATUS_TEXT.get(status) or STATUS_TEXT["unavailable"])
+
+
+def not_found_notes(req: ReportRequest) -> list[NotFoundNote]:
+    """One note per (template, reason): property fields and primary hazard layers whose status is
+    not_found or unavailable. Fields sharing the same wording and reason are merged into one note;
+    `field` then lists the fields, comma-separated."""
+    groups: dict[tuple, dict] = {}
+
+    def put(key: tuple, field: str, label: str, reason: str) -> None:
+        g = groups.setdefault(key, {"fields": [], "labels": [], "reason": reason})
+        g["fields"].append(field)
+        g["labels"].append(label)
+
+    for name, f in req.property_fields().items():
+        if f.status in MISSING:
+            text = _field_text(name, f.reason, f.status)
+            put(("field", text, f.reason or f.status), name, _label(name), f.reason or f.status)
+    for h in req.hazards():
+        if h.priority == "primary" and h.status in MISSING:
+            tmpl = HAZARD_REASON_TEXT.get(h.reason or "") or HAZARD_STATUS_TEXT.get(h.status) or HAZARD_STATUS_TEXT["unavailable"]
+            label = LAYER_LABELS.get(h.layer) or h.layer.replace("_", " ").capitalize()
+            put(("hazard", tmpl, h.reason or h.status), f"hazards.{h.layer}", label, h.reason or h.status)
+
+    notes = []
+    for (kind, text, _), g in groups.items():
+        labels = g["labels"]
+        if kind == "hazard":
+            many = len(labels) > 1
+            body = text.format(it="these layers" if many else "this layer", It="These layers" if many else "This layer")
+            label = _join([labels[0]] + [lab[:1].lower() + lab[1:] for lab in labels[1:]])
+            out = f"{label} {'layers' if many else 'layer'}: {body} {HAZARD_DISCLAIMER}"
+        else:
+            label = _join([labels[0]] + [lab if lab[1:2].isupper() or "(" in lab else lab[:1].lower() + lab[1:]
+                                         for lab in labels[1:]])
+            out = f"{label}: {text}"
+        notes.append(NotFoundNote(field=",".join(g["fields"]), text=out, reason=g["reason"]))
+    return notes
+
+
+# ---- next_steps -----------------------------------------------------------------------------------
+def _intersecting(req: ReportRequest) -> set[str]:
+    return {h.layer for h in req.hazards() if h.priority == "primary" and h.status == "intersects"}
+
+
+def _rank(item_id: str, item: dict, req: ReportRequest, layers: set[str]) -> int:
+    """Program ordering after the items cited in the summary (RUBRIC 4)."""
+    topic = item.get("topic")
+    if item_id == "kb_flood_insurance_limit" and layers & set(PRIMARY_FLOOD_LAYERS):
+        return 1
+    if topic == "hazard" and item_id not in ("kb_flood_insurance_limit", "kb_lim_next_step", "kb_landslide_map_context"):
+        return 2  # selected because a primary layer intersects (overland flow, coastal inundation)
+    if topic in ("build_era", "cladding"):
+        return 3
+    if item_id in ("kb_rbnz_lvr", "kb_rbnz_dti"):
+        return 4
+    if item_id == "kb_lim_next_step":
+        return 5
+    if topic == "title_type" or item_id == "kb_unit_title_body_corporate_insurance":
+        return 6
+    if topic == "lending":
+        return 7
+    if item_id == "kb_auction_unconditional":
+        return 9
+    return 8
+
+
+def next_steps(req: ReportRequest, kb_items: dict[str, dict], summary: list[Sentence],
+               no_loan: bool) -> list[NextStep]:
+    """next_step_en of selected KB items, verbatim; items cited in the summary first, then program
+    order; identical texts merged (kb_item = first, source_ids = all); at most MAX_NEXT_STEPS."""
+    selected = [i for i in req.selected_kb_ids() if i in kb_items and kb_items[i].get("next_step_en")]
+    if no_loan:
+        selected = [i for i in selected if kb_items[i].get("topic") != "lending"]
+    cited = list(dict.fromkeys(i for s in summary for i in s.source_ids if i in selected))
+    layers = _intersecting(req)
+    rest = sorted((i for i in selected if i not in cited),
+                  key=lambda i: (_rank(i, kb_items[i], req, layers), selected.index(i)))
+    order = cited + rest
+
+    merged: dict[str, NextStep] = {}
+    for i in order:
+        text = kb_items[i]["next_step_en"]
+        if text in merged:
+            merged[text].source_ids.append(i)
+        else:
+            merged[text] = NextStep(text=text, source_ids=[i], kb_item=i)
+    steps = list(merged.values())
+
+    if layers & set(PRIMARY_FLOOD_LAYERS):
+        idx = next((n for n, s in enumerate(steps) if "kb_flood_insurance_limit" in s.source_ids), None)
+        if idx is not None and idx >= MAX_NEXT_STEPS:
+            steps.insert(MAX_NEXT_STEPS - 1, steps.pop(idx))
+    return steps[:MAX_NEXT_STEPS]
