@@ -90,29 +90,37 @@ These codes are deliberately not in CODES.md (web's tests require page text for 
 
 **Limits of the semantic guard.** It is lexical. It cannot tell whether a rewrite that keeps every listed word
 still means the same thing (a changed relation between kept words can pass), and it does not detect added
-content beyond extra "says", causes and publishers. Follow-up answers are English only, so the validator's
-Chinese-equivalent branches are not used there. Mock mode still returns the golden summaries.
+content beyond extra "says", causes and publishers. For Chinese, Japanese and Korean follow-up sentences it checks
+only CJK equivalents of the qualifiers (Chinese, Japanese and Korean lists in `QUALIFIERS`), at least one negation
+when the facts have one, English LVR/DTI/First Home Loan, the publishers, and the slot context words ("over",
+"at least", "times") anywhere in the sentence; there is no order, keep-phrase, added-cause or added-"says" check.
+Mock mode still returns the golden summaries.
 
 ## Follow-up (`app/followup.py`, `app/followup_prompt.py`)
 
-The validated answer is English only (2026-10-10 decision). A question may be in any language and is answered, in
-English; an answer from a Google Search (step 3) is the one exception and follows the language of the question.
+**Language (2026-10-11 decision, replacing the 2026-10-10 English-only decision for follow-ups).** A follow-up is
+answered in the language of the question (Chinese question, Chinese answer; Japanese question, Japanese answer),
+with English terms kept as written (`followup_prompt.KEEP_ENGLISH`: LVR, DTI, LIM, First Home Loan, Cross Lease,
+Unit Title, Freehold, Leasehold, NHC, LINZ, Settled.govt.nz, ...; plus layer names and values code fills in). The
+report (`/v1/report`) stays English. An answer from a Google Search (step 3) also follows the question's language.
 Request: the three documents plus `question` (1-1000 characters) and `history` (at most 6 entries of
 `{role: "user"|"assistant", text}`, text at most 2000 characters; web sends the last 3 turns). No server state.
 Query `refusal_mode`: `exempt` (default) or `strict`.
 
 Response 200: `{language, answer: [{text, source_ids}], out_of_scope, user_supplied, links, dropped, warnings}`,
 plus `web` when an out-of-scope question was answered from a Google Search (step 3; `answer` is then `[]`).
-`language` describes `answer` and is always `"en"`; the field is kept only for compatibility with the existing
-contract (A reads it).
+`language` is the detected language of the question (BCP 47: `en`, `zh-Hant`, `zh-Hans`, `ja`, `ko`, ...). A
+sentence whose translation failed its checks (step 7) is in English even when `language` is not.
 `warnings` is `[]` except `rules_rerun_unavailable` (mock mode answered from the input RulesOutput).
 1 or more passing sentences gives 200 (at most 3); 0 gives 502 `validation_failed`.
 
 Steps (INTERFACE_DRAFT 5 and 6.1):
 
-1. Gemini call 1 (classify): out of scope, whether public web pages can answer it (`searchable`), a stated year built
-   or cladding, suggested links. The question is understood in whatever language it is written in; there is no
-   language detection.
+1. Gemini call 1 (classify): the question's language, out of scope, whether public web pages can answer it
+   (`searchable`), a stated year built or cladding, suggested links. The language is corrected by script
+   (`followup.normalize_language`): Hangul gives `ko`, kana `ja`, Han `zh-Hant` or `zh-Hans` (a bare `zh` is decided
+   by common simplified/traditional characters; `ja` is kept for Han-only Japanese); a question without CJK script
+   is never zh/ja/ko; an invalid code gives `en`.
 2. `user_supplied`, checked by code: `year_built` is an integer 1800..this year or a decade such as `1990s`
    that appears in the question as written; `cladding` is one of `monolithic`, `weatherboard`, `brick`,
    `concrete`, `other` and a matching word must appear in the question. A question with a conditional or
@@ -129,7 +137,9 @@ Steps (INTERFACE_DRAFT 5 and 6.1):
    below is returned instead. Only the route searches: `answer_followup` called directly (the eval script) does
    not, because an eval run stores what it gets.
 
-   Otherwise the answer is one fixed English refusal chosen by code (never translated). `links` are
+   Otherwise the answer is one fixed refusal chosen by code: English, Chinese written by code (`REFUSAL_ZH`,
+   zh-Hans by character mapping), or for other languages a restricted translation of the English (step 7; English
+   when it fails). `links` are
    the suggested PropertyContext link ids; if Gemini suggests none, code picks at most 2 by question type
    (valuation or sale: `homes`, `oneroof`, `council_valuation`; flooding: `council_flood_viewer`,
    `council_geomaps`; other hazards: `council_geomaps`, `council_flood_viewer`; anything else: `council_geomaps`),
@@ -138,8 +148,11 @@ Steps (INTERFACE_DRAFT 5 and 6.1):
 4. Merge: values only add to `user_inputs.chat_supplied`. A field PropertyContext has with status `found`
    wins: the value is not used and is still returned in `user_supplied`. Code writes the first answer
    sentence comparing both values and cites the field's `source_id`, e.g. "You gave the year built as 1985; the council records the 1990s
-   (1990–1999), and this answer uses the council's record." A user year inside the council decade is not a
-   conflict: "The year you gave, 1998, falls within the council's recorded decade, the 1990s (1990–1999)." Cladding is handled the same way when
+   (1990–1999), and this answer uses the council's record." / `你提供的建造年份是 1985 年；市議會資料記錄為 1990 年代
+   （1990–1999）。以下說明以市議會資料為準。` A user year inside the council decade is not a
+   conflict: "The year you gave, 1998, falls within the council's recorded decade, the 1990s (1990–1999)." /
+   `你提供的 1998 年落在市議會資料記錄的 1990 年代（1990–1999）內。` Chinese is written by code; other languages
+   translate the English (step 7). Cladding is handled the same way when
    the property has a value. **Program-sentence rule:** this sentence runs through the same checks as any
    answer sentence, except that the user's year is an allowed number for the cited field in this sentence
    only. Gemini is told the comparison is already stated and never to write the user's value.
@@ -149,24 +162,55 @@ Steps (INTERFACE_DRAFT 5 and 6.1):
    plus each selected KB claim, found property values, fields and hazard layers that could not be checked, and
    the value the user just gave, cited only to the KB items it selected). After a rules re-run the list is
    rebuilt from the new RulesOutput. Gemini returns `{"answer": [{"text", "fact_ids"}], "links"}` with values as
-   placeholders; each sentence goes through `validator.check_rewrite` (step 6 is its final check) and a blocked
-   one falls back to its facts' English drafts (model order kept, at most 3). `question` and `history`
+   placeholders, written in the question's language; each sentence goes through `validator.check_rewrite` (step 6
+   is its final check) and a blocked one falls back to its facts' English drafts (model order kept, at most 3),
+   which step 7 translates. `question` and `history`
    (including assistant turns) are quoted as untrusted data and never enter the evidence. The one exception: a
    used `year_built` is an allowed number for the `kb_items_from_user_input` items only.
-6. Every sentence goes through `validator.validate` with the English 25-word limit (`MAX_WORDS`), plus one rule:
-   a sentence containing any Chinese, Japanese or Korean character (or CJK punctuation) is blocked
-   (`non_english`) and takes the same path as any other blocked sentence (draft fallback). Domains follow the
-   validator: only the host of a source the sentence cites passes ("Settled.govt.nz says ..." citing a Settled KB
-   item). One retry when nothing passes and time allows.
-7. Sentences citing a `kb_items_from_user_input` item get the prefix "Based on what you told us, " from code.
-8. **Program facts** (`prompt._program_topics`, `followup.program_sentences`): a property field no public source
+6. Every sentence goes through `followup.check_answer`: `validator.check_sentence` plus language rules.
+   - The sentence must be in the detected language (`language_mismatch`): English has no CJK script; Chinese has
+     Han and no kana/Hangul; Japanese has kana; Korean has Hangul. Other Latin-script languages are not told
+     apart from English.
+   - English: 25 words (`MAX_WORDS`); other Latin-script languages 35. Chinese/Japanese/Korean: 60/90/80 units
+     (`CJK_MAX_UNITS_BY_LANG`: CJK characters plus Latin words and numbers) instead of the word limit.
+   - CJK: verdict, advice and approximation words per language are `banned_word` (Chinese 安全, 建議, 應該, 必須,
+     可能, 大約, 左右, 幾乎, 值得, ...; "may" must be 或許; Japanese 安全, おすすめ, べき, 必ず, 多分, ...; Korean 안전,
+     추천, 해야, 반드시, 아마, ...), as are English verdict words glued to CJK text ("很safe"); 兩, 零, 百分之, ゼロ are
+     `number_word`; `一` is masked before the numeral check (一般, 之一); ASCII next to CJK gets a space so the
+     validator's `\b` checks see whole words, and a domain glued to CJK characters is caught again with ASCII
+     boundaries; digits next to CJK characters get a space (`1997年` -> `1997 年`) and a filled-in decade reads
+     `1990 年代` / `1990 년대`.
+   - CJK: English words other than the kept terms, publisher and layer names, title names, the cladding table and
+     this request's filled-in values are `mixed_language` ("leaky 建築" is blocked; "Flood Plains 圖層" passes).
+   Domains follow the validator: only the host of a source the sentence cites passes. One retry when nothing passes
+   and time allows.
+7. **English program sentences in a non-English answer** (fact drafts after a blocked rewrite, program facts,
+   comparison sentences for languages other than Chinese, the refusal): one restricted Gemini call
+   (`followup_prompt.translate_prompt`) that sees only those sentences and the language code, never the question
+   or history (prompt injection cannot steer it). Each result is used only when `followup.check_translation`
+   passes: its numbers are exactly the English sentence's numbers; no URL, `@` or domain the English does not
+   have; at most 1.5 times as long; the kept English terms and the values the fact shows (title name, cladding,
+   land-use words) are copied as written; for CJK, a negation is kept when the English has one; and the step 6
+   rules pass in the target language with the sentence's own allowances (a program fact's or comparison's user
+   year). A rejected translation is sent once more with the numbers, terms and values to copy; a second failure
+   leaves that whole sentence in English (never a mixed sentence). Why translation and not more hand-written
+   Chinese: the drafts are the open set of every fact wording (summary facts, KB claims, program facts), so
+   hand-written copies would drift from the English the validator and tests pin; Chinese is written by code only
+   for the closed set of the comparison sentence, the refusal and the prefix.
+8. Sentences citing a `kb_items_from_user_input` item (and program facts stating what the user entered) get a
+   prefix from code in the language the sentence ended up in: `依你提供的資訊，` (zh-Hant), `根据你提供的信息，`
+   (zh-Hans), "Based on what you told us, " (English, and any English fallback sentence); other languages translate
+   the English phrase in the same call (checked: no digits, URL or domain, at most 40 characters, right script),
+   falling back to the English prefix.
+9. **Program facts** (`prompt._program_topics`, `followup.program_sentences`): a property field no public source
    gives us (cladding: no free source; last sale: no licensed source) has no `source_id` to cite, and a year or
    cladding the user entered earlier is not a property value. For these the fact list has program facts: "No free
    public source records the cladding, so it could not be confirmed; you can enter it in the form if you know it.",
    "... the cladding you gave is monolithic, which Settled.govt.nz discusses in its guidance on leaky buildings;
    public data could not confirm it." (cites `kb_monolithic_cladding`), "... the cladding you gave is brick; ..."
    (no source), "... the year built you gave is 1998, ...". Gemini only picks them by id; the answer shows the
-   draft, never a rewrite. A safety net adds the program fact of a field the question names (cladding, year built,
+   draft (translated in step 7 for other languages), never a rewrite. A cladding or year given in this very
+   question is stated by the user_said fact instead (no "you can enter it in the form" sentence). A safety net adds the program fact of a field the question names (cladding, year built,
    last sale) when Gemini picks none. Checks: `prompt.check_program` = `check_sentence` with the user's year
    allowed under the cited ids, and a sentence with no source exempt from the source-id rule only (as the
    `not_found_notes` and no-loan sentences are). Fields the council page could not be read for (floor area,
@@ -178,11 +222,20 @@ the rules re-run at most 5 s.
 
 Mock (`REPORT_MOCK=true`, no Gemini call, for front-end work without a key): code classifies the question.
 Out-of-scope keywords (school, zone, commute, crime, neighbour, traffic, 學區, 通勤, 治安, ...; not when the
-question names a hazard) give the English refusal and the link fallback (the Chinese keywords are only used to understand the question). A year
+question names a hazard) give the refusal (Chinese for a Chinese question, else English) and the link fallback.
+Mock mode never translates: other languages get English sentences. A year
 or cladding goes through the same checks, merge and rules re-run; if rules-api is unavailable the input
 RulesOutput is used and `warnings` has `rules_rerun_unavailable`. The answer is the comparison sentence (if
-any) plus the `claim_en` of each item the user's value selected, verbatim, validated and prefixed. Any other
-question gets one fixed mock sentence citing a PropertyContext source.
+any; Chinese for a Chinese question) plus the `claim_en` of each item the user's value selected, verbatim (English,
+with the English prefix), validated and prefixed. Any other question gets one fixed mock sentence (Chinese for a
+Chinese question) citing a PropertyContext source.
+
+**Limits of the language checks.** Meaning in a non-English sentence is checked only lexically (step 6 and the
+CJK branch of the semantic guard above); keep phrases, order, added causes and added "says" are not checked for
+CJK, and for Latin-script languages other than English the English guard runs as is, so most rewrites with
+qualifiers or negations are blocked and answered with translated drafts. A translation is checked for numbers,
+URLs, length, kept terms and values, one negation and the validator rules, not for meaning; dropped qualifiers
+("may", "only") in a translation are not detected. zh-Hant vs zh-Hans is not checked in model text.
 
 ```
 curl -s 'localhost:8090/v1/followup?refusal_mode=exempt' -H 'content-type: application/json' \
@@ -191,6 +244,9 @@ curl -s 'localhost:8090/v1/followup?refusal_mode=exempt' -H 'content-type: appli
 ```
 
 ## Validator (`app/validator.py`)
+
+PropertyContext `sources[].accessed_at` may be `null` (property-api sets a date only for a source it read); report-api
+never reads it, and a null leaves sources, evidence, facts and both routes unchanged (`tests/test_followup_multilang.py`).
 
 A summary sentence is dropped when any rule fails (rule code in parentheses, logged server-side):
 

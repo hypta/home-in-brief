@@ -98,6 +98,8 @@ class Evidence:
     unavailable_hazards: set[str] = field(default_factory=set)
     # id (source id or selected kb_ id) -> host of the page it cites. A sentence may name only these hosts.
     cited_hosts: dict[str, set[str]] = field(default_factory=dict)
+    # follow-up only: English names and values a Chinese/Japanese/Korean answer may contain (followup.latin_terms)
+    latin_terms: set[str] = field(default_factory=set)
 
 
 # ---- number helpers -----------------------------------------------------------------------------
@@ -408,15 +410,25 @@ ADDED_ATTRIBUTION = "added_attribution"
 ADDED_CAUSE = "added_cause"
 
 # Semantic guard (simple): a phrase of this list in a fact's text must also be in the rewrite. CJK rewrites
-# (follow-up answers) may use any of the listed equivalents instead. Negations are counted separately.
+# (follow-up answers in Chinese, Japanese or Korean) may use any of the listed equivalents instead. Negations are
+# counted separately.
 QUALIFIERS: dict[str, tuple[str, ...]] = {
-    "may": ("或許", "或许", "可"), "can": ("可", "能"), "could not": ("無法", "无法", "未能", "不能"),
-    "only": ("只", "僅", "仅"), "limited": ("限",), "limits": ("限",), "at least": ("至少",),
-    "generally": ("一般", "通常"), "exempt": ("不受", "豁免", "不適用", "不适用"), "unknown": ("未知", "不明", "無法得知"),
-    "on individual properties": ("個別", "个别", "單一", "单一"), "differs": ("不同", "不一致"),
-    "same decade": ("同一個年代", "同一年代", "相同年代", "同一个年代"), "assumes": ("假設", "假设", "視為", "视为"),
-    "within": ("以內", "之內", "以内", "之内", "未超過", "未超过"), "above": ("超過", "超过", "高於", "高于"),
-    "if": ("如果", "若", "假如", "一旦"),  # a condition dropped turns "can ... if blocked" into a general claim
+    "may": ("或許", "或许", "可", "かもしれ", "ことがあ", "場合があ", "수 있", "있을 수"),
+    "can": ("可", "能", "でき", "得る", "수 있"),
+    "could not": ("無法", "无法", "未能", "不能", "できなかった", "できません", "できず", "できない", "수 없", "못했"),
+    "only": ("只", "僅", "仅", "のみ", "だけ", "에만", "뿐", "만 "),
+    "limited": ("限", "制限", "제한", "한도"), "limits": ("限", "制限", "제한", "한도"),
+    "at least": ("至少", "少なくとも", "以上", "최소", "적어도", "이상"),
+    "generally": ("一般", "通常", "일반적", "보통"),
+    "exempt": ("不受", "豁免", "不適用", "不适用", "対象外", "免除", "適用されない", "면제", "적용되지 않"),
+    "unknown": ("未知", "不明", "無法得知", "わから", "分から", "알 수 없", "불명"),
+    "on individual properties": ("個別", "个别", "單一", "单一", "個々", "개별"),
+    "differs": ("不同", "不一致", "異な", "違", "다르", "다릅", "차이"),
+    "same decade": ("同一個年代", "同一年代", "相同年代", "同一个年代", "同じ年代", "같은 연대"),
+    "assumes": ("假設", "假设", "視為", "视为", "仮定", "想定", "みなし", "가정"),
+    "within": ("以內", "之內", "以内", "之内", "未超過", "未超过", "範囲内", "이내", "이하"),
+    "above": ("超過", "超过", "高於", "高于", "超え", "上回", "초과", "넘"),
+    "if": ("如果", "若", "假如", "一旦", "場合", "もし", "なら", "경우", "만약", "면"),  # a dropped condition widens the claim
 }
 # Terms a fact uses that a rewrite must keep as written (dropping "LVR" from "exempt from Reserve Bank LVR limits"
 # widens the claim). CJK rewrites keep them in English too.
@@ -424,13 +436,15 @@ TERMS = ("LVR", "DTI", "First Home Loan", "body corporate", "leaky")
 TERMS_CJK = ("LVR", "DTI", "First Home Loan")  # kept in English in Chinese answers too
 # Attribution: a publisher a fact names must be named in the rewrite too (CJK equivalents allowed).
 PUBLISHERS: dict[str, tuple[str, ...]] = {
-    "Auckland Council": ("Auckland Council", "council", "市議會", "市议会", "奧克蘭", "奥克兰"),
+    "Auckland Council": ("Auckland Council", "council", "市議會", "市议会", "奧克蘭", "奥克兰", "市議会", "オークランド",
+                         "오클랜드", "시의회"),
     "Settled.govt.nz": ("Settled.govt.nz",),
-    "Reserve Bank": ("Reserve Bank", "RBNZ", "儲備銀行", "储备银行"),
+    "Reserve Bank": ("Reserve Bank", "RBNZ", "儲備銀行", "储备银行", "準備銀行", "준비은행"),
     "Kāinga Ora": ("Kāinga Ora", "Kainga Ora"),
     "LINZ": ("LINZ",),
     "unittitles.govt.nz": ("unittitles.govt.nz",),
-    "Natural Hazards Commission": ("Natural Hazards Commission", "NHC", "自然災害委員會", "自然灾害委员会"),
+    "Natural Hazards Commission": ("Natural Hazards Commission", "NHC", "自然災害委員會", "自然灾害委员会",
+                                   "自然災害委員会", "자연재해위원회"),
 }
 _NEG_RE = re.compile(r"\b(?:not|no|never|neither|nor|without|cannot)\b|n't\b", re.I)
 # A rewrite may not add a "says" (a gap in our data is not something the council "states") or a causal link
@@ -441,7 +455,12 @@ _SAY_RE = re.compile(r"\b(?:says?|said|states?|stated|stating|notes?|noted|notin
 _CAUSE_RE = re.compile(r"\b(?:because|so|therefore|thus|hence|since|making|makes|means?|meaning|as a result|due to|"
                        r"leads? to|results? in|(?<=, )as(?=\s+(?:no|there|its?|the|your|they|this|these|those)\b))\b",
                        re.I)
-_CJK_NEG_RE = re.compile(r"[不沒没未無无非否]")
+# Negation markers: Chinese, Japanese (ない, ません, ず, なかった), Korean (않, 없, 못, 아니)
+_CJK_NEG_RE = re.compile(r"[不沒没未無无非否]|ない|ません|なかった|ず[、。に]|않|없|못|아니")
+# Slot context (before/after regexes are English): in a CJK rewrite the same relation may be written with one of
+# these words anywhere in the sentence (Japanese and Korean put "over" after the number).
+_CJK_CONTEXT = {"over": r"超過|超过|高於|高于|以上|超え|上回|초과|넘", "at least": r"至少|以上|少なくとも|최소|이상",
+                "times": r"倍|배"}
 _CJK_RE = re.compile(r"[぀-ヿ㐀-鿿가-힯]")
 
 
@@ -473,6 +492,11 @@ def terms_in(text: str) -> list[str]:
 def publishers_in(text: str) -> list[str]:
     return [p for p, alts in PUBLISHERS.items() if _phrase_re(alts[0]).search(text)
             or (p == "Auckland Council" and re.search(r"\bcouncil\b", text, re.I))]
+
+
+def _cjk_context(english: str, text: str) -> bool:
+    """True when `text` has a CJK word for the relation an English before/after regex names."""
+    return any(k in english and re.search(rx, text) for k, rx in _CJK_CONTEXT.items())
 
 
 def negations(text: str) -> int:
@@ -534,9 +558,9 @@ def check_rewrite(s: Any, facts: Any, ev: Evidence, max_words: Optional[int] = M
         if sl is None:
             continue
         before, after = PLACEHOLDER_RE.sub("X", text[:m.start()]), text[m.end():]
-        if sl.before and not re.search(rf"(?:{sl.before})\s*$", before, re.I):
+        if sl.before and not re.search(rf"(?:{sl.before})\s*$", before, re.I) and not (cjk and _cjk_context(sl.before, rest)):
             fails.append(SLOT_CONTEXT)
-        if sl.after and not re.match(rf"\s*(?:{sl.after})", after, re.I):
+        if sl.after and not re.match(rf"\s*(?:{sl.after})", after, re.I) and not (cjk and _cjk_context(sl.after, rest)):
             fails.append(SLOT_CONTEXT)
         if sl.label:
             hits = [(h.start(), h.end(), o.label.lower()) for o in labelled

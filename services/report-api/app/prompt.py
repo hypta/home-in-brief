@@ -704,12 +704,13 @@ def _program_topics(req: ReportRequest, ev: Evidence, kb_items: dict[str, dict],
                 say = (f"The cladding you gave is {v}; no free public source records the cladding, so public data "
                        "could not confirm it.")
             out.append(t.set(say, user_kb["cladding"]))
-        elif not f.source_id and name in NO_SOURCE_TEXT:
+        elif not f.source_id and name in NO_SOURCE_TEXT and name not in used:  # a value just given: user_said
             out.append(t.set(NO_SOURCE_TEXT[name], []))
     return out
 
 
-def check_program(s: Sentence, ev: Evidence, slots: Optional[dict[str, Slot]] = None) -> list[str]:
+def check_program(s: Sentence, ev: Evidence, slots: Optional[dict[str, Slot]] = None,
+                  max_words: Optional[int] = MAX_WORDS) -> list[str]:
     """validator.check_sentence for a program fact: a year the user entered is allowed under the ids the sentence
     cites (as for the follow-up comparison sentence), and a sentence with no source to cite is exempt from the
     source-id rule (like the not_found_notes and no-loan sentences)."""
@@ -717,5 +718,5 @@ def check_program(s: Sentence, ev: Evidence, slots: Optional[dict[str, Slot]] = 
     years = [to_decimal(sl.value) for sl in (slots or {}).values() if sl.kind in ("year", "decade")]
     for sid in s.source_ids:
         allowed.setdefault(sid, []).extend(Allowed(y) for y in years if y is not None)
-    fails = check_sentence(s, replace(ev, allowed=allowed))
+    fails = check_sentence(s, replace(ev, allowed=allowed), max_words)
     return [f for f in fails if not (f == NO_SOURCE_IDS and not s.source_ids)]
