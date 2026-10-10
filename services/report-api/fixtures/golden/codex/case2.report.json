@@ -1,0 +1,186 @@
+{
+  "schema_version": "0.1",
+  "generated_at": "2026-10-05T12:00:00+13:00",
+  "model": "golden-codex",
+  "summary": [
+    {
+      "text": "The council layers record flood plain and coastal inundation intersections, with coastal inundation covering 0.5% of the parcel, while tsunami evacuation zones and coastal erosion mapping also intersect it.",
+      "source_ids": [
+        "ac_flood_plains",
+        "ac_coastal",
+        "ac_tsunami",
+        "ac_coastal_erosion"
+      ]
+    },
+    {
+      "text": "The council maps shallow landslide classes of High and Very Low, large-scale classes of Low and Very Low, and liquefaction vulnerability of Very Low here; its landslide ratings do not measure risk for an individual property.",
+      "source_ids": [
+        "ac_landslide",
+        "ac_liquefaction",
+        "kb_landslide_map_context"
+      ]
+    },
+    {
+      "text": "Your standard loan scenario falls within high loan-to-value ratio (LVR) and high debt-to-income ratio (DTI) lending, for which the Reserve Bank limits the share of new bank lending.",
+      "source_ids": [
+        "kb_rbnz_lvr",
+        "kb_rbnz_dti"
+      ]
+    },
+    {
+      "text": "The rules assessment marks the First Home Loan scenario as eligible, subject to lender assessment; the Reserve Bank exempts First Home Loans from its LVR and DTI restrictions.",
+      "source_ids": [
+        "kainga_ora_fhl",
+        "kb_fhl_lvr_not_restricted",
+        "kb_fhl_dti_not_restricted"
+      ]
+    },
+    {
+      "text": "The title type remains unresolved because multiple title types were returned, and the council valuation and build era could not be checked because there was no unique council property match.",
+      "source_ids": [
+        "linz_titles",
+        "ac_valuation",
+        "ac_property_page"
+      ]
+    }
+  ],
+  "next_steps": [
+    {
+      "text": "Check the council property file for geotechnical reports, or ask a geotechnical engineer for site-specific advice.",
+      "source_ids": [
+        "kb_landslide_map_context"
+      ],
+      "kb_item": "kb_landslide_map_context"
+    },
+    {
+      "text": "Ask your lender how it applies the low-deposit lending limit and what extra costs apply.",
+      "source_ids": [
+        "kb_rbnz_lvr"
+      ],
+      "kb_item": "kb_rbnz_lvr"
+    },
+    {
+      "text": "Ask your lender how it calculates your debt-to-income ratio.",
+      "source_ids": [
+        "kb_rbnz_dti"
+      ],
+      "kb_item": "kb_rbnz_dti"
+    },
+    {
+      "text": "Ask your lender which lending criteria it applies to First Home Loan applications.",
+      "source_ids": [
+        "kb_fhl_lvr_not_restricted",
+        "kb_fhl_dti_not_restricted"
+      ],
+      "kb_item": "kb_fhl_lvr_not_restricted"
+    },
+    {
+      "text": "Ask the council or your insurer what the coastal inundation mapping means for this property.",
+      "source_ids": [
+        "kb_coastal_inundation_meaning"
+      ],
+      "kb_item": "kb_coastal_inundation_meaning"
+    },
+    {
+      "text": "Ask your lawyer to obtain and review the LIM report and other property documents from the council.",
+      "source_ids": [
+        "kb_lim_next_step"
+      ],
+      "kb_item": "kb_lim_next_step"
+    }
+  ],
+  "not_found_notes": [
+    {
+      "field": "cv",
+      "text": "Council valuation: could not be checked because no unique council property match was found.",
+      "reason": "no_unique_council_property_match"
+    },
+    {
+      "field": "year_built",
+      "text": "Year built: could not be checked because no unique council property match was found.",
+      "reason": "no_unique_council_property_match"
+    },
+    {
+      "field": "cladding",
+      "text": "Cladding: no free public source has this; check the listing or ask the agent.",
+      "reason": "no_free_source"
+    },
+    {
+      "field": "last_sale",
+      "text": "Last sale: we have no licensed source for sale prices; see the Homes.co.nz and OneRoof links.",
+      "reason": "no_licensed_source"
+    },
+    {
+      "field": "annual_rates",
+      "text": "Annual rates: could not be checked because no unique council property match was found.",
+      "reason": "no_unique_council_property_match"
+    },
+    {
+      "field": "land_value",
+      "text": "Land value: could not be checked because no unique council property match was found.",
+      "reason": "no_unique_council_property_match"
+    },
+    {
+      "field": "improvements_value",
+      "text": "Improvements value: could not be checked because no unique council property match was found.",
+      "reason": "no_unique_council_property_match"
+    },
+    {
+      "field": "rateability",
+      "text": "Rateability: could not be checked because no unique council property match was found.",
+      "reason": "no_unique_council_property_match"
+    },
+    {
+      "field": "improvement_description",
+      "text": "Improvement description: could not be checked because no unique council property match was found.",
+      "reason": "no_unique_council_property_match"
+    },
+    {
+      "field": "land_use",
+      "text": "Land use: could not be checked because no unique council property match was found.",
+      "reason": "no_unique_council_property_match"
+    },
+    {
+      "field": "land_area_m2",
+      "text": "Land area: could not be checked because no unique council property match was found.",
+      "reason": "no_unique_council_property_match"
+    },
+    {
+      "field": "floor_area_m2",
+      "text": "Floor area: could not be checked because no unique council property match was found.",
+      "reason": "no_unique_council_property_match"
+    },
+    {
+      "field": "building_site_coverage_m2",
+      "text": "Building site coverage: could not be checked because no unique council property match was found.",
+      "reason": "no_unique_council_property_match"
+    },
+    {
+      "field": "legal_description",
+      "text": "Legal description: could not be checked because no unique council property match was found.",
+      "reason": "no_unique_council_property_match"
+    },
+    {
+      "field": "record_of_title",
+      "text": "Record of title: could not be checked because no unique council property match was found.",
+      "reason": "no_unique_council_property_match"
+    },
+    {
+      "field": "valuation_number",
+      "text": "Valuation number: could not be checked because no unique council property match was found.",
+      "reason": "no_unique_council_property_match"
+    },
+    {
+      "field": "local_board",
+      "text": "Local board: could not be checked because no unique council property match was found.",
+      "reason": "no_unique_council_property_match"
+    }
+  ],
+  "warnings": [
+    "cv_unavailable",
+    "title_type_unresolved",
+    "year_built_unavailable",
+    "cladding_unavailable"
+  ],
+  "dropped": 0
+}

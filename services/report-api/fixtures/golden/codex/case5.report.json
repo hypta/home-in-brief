@@ -1,0 +1,103 @@
+{
+  "schema_version": "0.1",
+  "generated_at": "2026-10-05T12:00:00+13:00",
+  "model": "golden-codex",
+  "summary": [
+    {
+      "text": "The council maps shallow landslide susceptibility as Very Low, large-scale susceptibility as Low, and liquefaction vulnerability as Unlikely here; its landslide ratings do not measure risk for an individual property.",
+      "source_ids": [
+        "ac_landslide",
+        "ac_liquefaction",
+        "kb_landslide_map_context"
+      ]
+    },
+    {
+      "text": "The debt-to-income ratio (DTI) assessment assumes no existing debts because that input was not provided.",
+      "source_ids": [
+        "rbnz_dti"
+      ]
+    },
+    {
+      "text": "The property record identifies a Unit Title; Settled.govt.nz says ownership automatically includes body corporate membership, and the government unit titles guide says owners pay levies for operation and maintenance.",
+      "source_ids": [
+        "linz_titles",
+        "kb_title_unit_title",
+        "kb_unit_title_levies"
+      ]
+    },
+    {
+      "text": "Based on what you told us, your supplied build year differs from the property record, so the recorded 1990 build-decade value takes precedence and places the property in the era discussed by Settled.govt.nz in its leaky-buildings guidance.",
+      "source_ids": [
+        "ac_property_page",
+        "kb_leaky_build_era"
+      ]
+    },
+    {
+      "text": "Based on what you told us, the cladding is monolithic, which Settled.govt.nz discusses in its leaky-buildings guidance; the public property data could not verify the cladding.",
+      "source_ids": [
+        "kb_monolithic_cladding"
+      ]
+    }
+  ],
+  "next_steps": [
+    {
+      "text": "Check the council property file for geotechnical reports, or ask a geotechnical engineer for site-specific advice.",
+      "source_ids": [
+        "kb_landslide_map_context"
+      ],
+      "kb_item": "kb_landslide_map_context"
+    },
+    {
+      "text": "Request the body corporate rules, meeting minutes, maintenance plan and levy details.",
+      "source_ids": [
+        "kb_title_unit_title"
+      ],
+      "kb_item": "kb_title_unit_title"
+    },
+    {
+      "text": "Ask your lawyer for the body corporate's current levy amounts, budget and long-term maintenance plan.",
+      "source_ids": [
+        "kb_unit_title_levies"
+      ],
+      "kb_item": "kb_unit_title_levies"
+    },
+    {
+      "text": "Ask for the building's age and cladding details and consider a pre-purchase building inspection.",
+      "source_ids": [
+        "kb_leaky_build_era"
+      ],
+      "kb_item": "kb_leaky_build_era"
+    },
+    {
+      "text": "Ask whether the cladding is monolithic and consider a pre-purchase building inspection.",
+      "source_ids": [
+        "kb_monolithic_cladding"
+      ],
+      "kb_item": "kb_monolithic_cladding"
+    },
+    {
+      "text": "Ask for the body corporate insurance policy and check whether you need separate cover for your unit and contents.",
+      "source_ids": [
+        "kb_unit_title_body_corporate_insurance"
+      ],
+      "kb_item": "kb_unit_title_body_corporate_insurance"
+    }
+  ],
+  "not_found_notes": [
+    {
+      "field": "cladding",
+      "text": "Cladding: no free public source has this; check the listing or ask the agent.",
+      "reason": "no_free_source"
+    },
+    {
+      "field": "last_sale",
+      "text": "Last sale: we have no licensed source for sale prices; see the Homes.co.nz and OneRoof links.",
+      "reason": "no_licensed_source"
+    }
+  ],
+  "warnings": [
+    "cladding_unavailable",
+    "existing_debts_assumed_zero"
+  ],
+  "dropped": 0
+}

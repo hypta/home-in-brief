@@ -1,0 +1,122 @@
+{
+  "schema_version": "0.1",
+  "generated_at": "2026-10-05T12:00:00+13:00",
+  "model": "golden-codex",
+  "summary": [
+    {
+      "text": "The council flood plain layer covers 51.2% of this parcel, its flood-prone area layer covers 50.8%, and a mapped overland flow path crosses it.",
+      "source_ids": [
+        "ac_flood_plains",
+        "ac_flood_prone",
+        "ac_overland_flow"
+      ]
+    },
+    {
+      "text": "The council maps shallow and large-scale landslide susceptibility as Very Low and liquefaction classes as Possible and Very Low here; its landslide ratings do not measure risk for an individual property.",
+      "source_ids": [
+        "ac_landslide",
+        "ac_liquefaction",
+        "kb_landslide_map_context"
+      ]
+    },
+    {
+      "text": "Your standard loan scenario falls within high loan-to-value ratio (LVR) lending, for which the Reserve Bank limits the share of new bank lending.",
+      "source_ids": [
+        "kb_rbnz_lvr"
+      ]
+    },
+    {
+      "text": "The rules assessment marks the First Home Loan scenario as eligible, subject to lender assessment; the Reserve Bank exempts First Home Loans from its LVR and debt-to-income ratio (DTI) restrictions.",
+      "source_ids": [
+        "kainga_ora_fhl",
+        "kb_fhl_lvr_not_restricted",
+        "kb_fhl_dti_not_restricted"
+      ]
+    },
+    {
+      "text": "The council describes this property as reserve land with recreational vacant land use, while the title is Freehold; Settled.govt.nz says freehold ownership includes the land and generally anything built on it.",
+      "source_ids": [
+        "ac_valuation",
+        "linz_titles",
+        "kb_title_freehold"
+      ]
+    }
+  ],
+  "next_steps": [
+    {
+      "text": "Check the council property file for geotechnical reports, or ask a geotechnical engineer for site-specific advice.",
+      "source_ids": [
+        "kb_landslide_map_context"
+      ],
+      "kb_item": "kb_landslide_map_context"
+    },
+    {
+      "text": "Ask your lender how it applies the low-deposit lending limit and what extra costs apply.",
+      "source_ids": [
+        "kb_rbnz_lvr"
+      ],
+      "kb_item": "kb_rbnz_lvr"
+    },
+    {
+      "text": "Ask your lender which lending criteria it applies to First Home Loan applications.",
+      "source_ids": [
+        "kb_fhl_lvr_not_restricted",
+        "kb_fhl_dti_not_restricted"
+      ],
+      "kb_item": "kb_fhl_lvr_not_restricted"
+    },
+    {
+      "text": "Ask your lawyer to check the record of title for registered interests.",
+      "source_ids": [
+        "kb_title_freehold"
+      ],
+      "kb_item": "kb_title_freehold"
+    },
+    {
+      "text": "Ask the council or a drainage engineer whether the mapped overland flow path crosses this property and what the mapping means for it.",
+      "source_ids": [
+        "kb_overland_flow_path"
+      ],
+      "kb_item": "kb_overland_flow_path"
+    },
+    {
+      "text": "Ask your lawyer to obtain and review the LIM report and other property documents from the council.",
+      "source_ids": [
+        "kb_lim_next_step"
+      ],
+      "kb_item": "kb_lim_next_step"
+    }
+  ],
+  "not_found_notes": [
+    {
+      "field": "year_built",
+      "text": "Year built: the council's property category for this address has no build decade.",
+      "reason": "property_category_has_no_build_decade"
+    },
+    {
+      "field": "cladding",
+      "text": "Cladding: no free public source has this; check the listing or ask the agent.",
+      "reason": "no_free_source"
+    },
+    {
+      "field": "last_sale",
+      "text": "Last sale: we have no licensed source for sale prices; see the Homes.co.nz and OneRoof links.",
+      "reason": "no_licensed_source"
+    },
+    {
+      "field": "annual_rates",
+      "text": "Annual rates: the council lists this property as non-rateable.",
+      "reason": "non_rateable_property"
+    },
+    {
+      "field": "floor_area_m2",
+      "text": "Floor area: not shown on the council property page.",
+      "reason": "not_on_council_page"
+    }
+  ],
+  "warnings": [
+    "year_built_unavailable",
+    "cladding_unavailable"
+  ],
+  "dropped": 0
+}

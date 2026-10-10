@@ -1,0 +1,156 @@
+{
+  "schema_version": "0.1",
+  "generated_at": "2026-10-05T12:00:00+13:00",
+  "model": "golden-claude",
+  "summary": [
+    {
+      "text": "A mapped overland flow path crosses this parcel; Auckland Council says these are routes where water naturally flows across the ground, and water can build up and enter homes if a path is blocked.",
+      "source_ids": [
+        "ac_overland_flow",
+        "kb_overland_flow_path"
+      ]
+    },
+    {
+      "text": "The council's shallow landslide susceptibility layer gives this area a High rating, and Auckland Council says these regional ratings are not a measure of landslide risk on individual properties and do not predict if or when a landslide might happen.",
+      "source_ids": [
+        "ac_landslide",
+        "kb_landslide_map_context"
+      ]
+    },
+    {
+      "text": "Your deposit is larger than the price you entered, so no loan or repayment scenario applies; please check both amounts.",
+      "source_ids": [
+        "bank_rates_snapshot"
+      ]
+    },
+    {
+      "text": "LINZ records the title as Cross Lease; Settled.govt.nz says that in a cross lease you own a share of the freehold title in common with the other cross leaseholders, and that the title includes a flats plan showing the building footprint you may occupy, although older titles may not supply one.",
+      "source_ids": [
+        "linz_titles",
+        "kb_title_cross_lease",
+        "kb_title_cross_lease_flats_plan"
+      ]
+    },
+    {
+      "text": "The council's property category dates the building to the 1960s, and no free public source has the cladding.",
+      "source_ids": [
+        "ac_property_page"
+      ]
+    }
+  ],
+  "next_steps": [
+    {
+      "text": "Ask the council or a drainage engineer whether the mapped overland flow path crosses this property and what the mapping means for it.",
+      "source_ids": [
+        "kb_overland_flow_path"
+      ],
+      "kb_item": "kb_overland_flow_path"
+    },
+    {
+      "text": "Ask insurers about past claims and flood exclusions before making an offer.",
+      "source_ids": [
+        "kb_flood_insurance_limit"
+      ],
+      "kb_item": "kb_flood_insurance_limit"
+    },
+    {
+      "text": "Ask your lawyer to obtain and review the LIM report and other property documents from the council.",
+      "source_ids": [
+        "kb_lim_next_step"
+      ],
+      "kb_item": "kb_lim_next_step"
+    },
+    {
+      "text": "Check the council property file for geotechnical reports, or ask a geotechnical engineer for site-specific advice.",
+      "source_ids": [
+        "kb_landslide_map_context"
+      ],
+      "kb_item": "kb_landslide_map_context"
+    },
+    {
+      "text": "Ask your lawyer to check the flats plan against the actual buildings and the lease terms.",
+      "source_ids": [
+        "kb_title_cross_lease"
+      ],
+      "kb_item": "kb_title_cross_lease"
+    },
+    {
+      "text": "Ask your lawyer to compare the flats plan on the title with the property.",
+      "source_ids": [
+        "kb_title_cross_lease_flats_plan"
+      ],
+      "kb_item": "kb_title_cross_lease_flats_plan"
+    },
+    {
+      "text": "Ask your lender what insurance evidence it requires and get insurance quotes early.",
+      "source_ids": [
+        "kb_insurance_condition"
+      ],
+      "kb_item": "kb_insurance_condition"
+    },
+    {
+      "text": "Check your private insurance policy for cover above the Natural Hazards Commission cap.",
+      "source_ids": [
+        "kb_nhc_building_cap"
+      ],
+      "kb_item": "kb_nhc_building_cap"
+    },
+    {
+      "text": "Ask your insurer and the Natural Hazards Commission which parts of the land are covered.",
+      "source_ids": [
+        "kb_nhc_land_cover_limits"
+      ],
+      "kb_item": "kb_nhc_land_cover_limits"
+    },
+    {
+      "text": "Ask your insurer about its own excess in addition to the Natural Hazards Commission excess.",
+      "source_ids": [
+        "kb_nhc_building_excess"
+      ],
+      "kb_item": "kb_nhc_building_excess"
+    },
+    {
+      "text": "Ask your insurer how the Natural Hazards Insurance levy appears in the quoted premium.",
+      "source_ids": [
+        "kb_nhc_levy"
+      ],
+      "kb_item": "kb_nhc_levy"
+    },
+    {
+      "text": "Ask a registered valuer about a current market valuation.",
+      "source_ids": [
+        "kb_cv_not_market"
+      ],
+      "kb_item": "kb_cv_not_market"
+    },
+    {
+      "text": "Ask your lender and lawyer what finance and insurance arrangements to confirm for an auction.",
+      "source_ids": [
+        "kb_auction_unconditional"
+      ],
+      "kb_item": "kb_auction_unconditional"
+    }
+  ],
+  "not_found_notes": [
+    {
+      "field": "cladding",
+      "text": "Cladding: no free public source has this; check the listing or ask the agent.",
+      "reason": "no_free_source"
+    },
+    {
+      "field": "last_sale",
+      "text": "Last sale: we have no licensed source for sale prices; see the Homes.co.nz and OneRoof links.",
+      "reason": "no_licensed_source"
+    },
+    {
+      "field": "land_area_m2",
+      "text": "Land area: the council shows no land area for cross lease and unit title properties.",
+      "reason": "council_shows_0_for_cross_lease_or_unit_title"
+    }
+  ],
+  "warnings": [
+    "cladding_unavailable",
+    "deposit_exceeds_price"
+  ],
+  "dropped": 0
+}

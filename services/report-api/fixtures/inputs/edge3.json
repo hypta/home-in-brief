@@ -1,0 +1,843 @@
+{
+  "case_id": "edge3",
+  "address_label": "1/15 Lyttelton Avenue, Forrest Hill, Auckland",
+  "property_context": {
+    "property": {
+      "cv": {
+        "value": 1450000.0,
+        "valuation_date": "2024-05-01",
+        "status": "found",
+        "reason": null,
+        "source_id": "ac_valuation"
+      },
+      "title_type": {
+        "value": "Cross Lease",
+        "status": "found",
+        "reason": null,
+        "source_id": "linz_titles",
+        "linz_types": [
+          "Cross lease"
+        ]
+      },
+      "year_built": {
+        "value": 1960,
+        "status": "found",
+        "reason": null,
+        "source_id": "ac_property_page",
+        "decade_range": [
+          1960,
+          1969
+        ],
+        "property_category": "RH196B"
+      },
+      "cladding": {
+        "value": null,
+        "status": "unavailable",
+        "reason": "no_free_source",
+        "source_id": null
+      },
+      "last_sale": {
+        "status": "unavailable",
+        "reason": "no_licensed_source",
+        "source_id": null,
+        "price": null,
+        "date": null
+      },
+      "annual_rates": {
+        "status": "found",
+        "reason": null,
+        "source_id": "ac_valuation",
+        "value": 6033.68,
+        "rating_year": "2026/2027"
+      },
+      "land_value": {
+        "status": "found",
+        "reason": null,
+        "source_id": "ac_valuation",
+        "value": 900000.0
+      },
+      "improvements_value": {
+        "status": "found",
+        "reason": null,
+        "source_id": "ac_valuation",
+        "value": 550000.0
+      },
+      "rateability": {
+        "status": "found",
+        "reason": null,
+        "source_id": "ac_valuation",
+        "value": "Fully Rateable"
+      },
+      "improvement_description": {
+        "status": "found",
+        "reason": null,
+        "source_id": "ac_valuation",
+        "value": "DWG FLAT OI"
+      },
+      "land_use": {
+        "status": "found",
+        "reason": null,
+        "source_id": "ac_valuation",
+        "value": "Multi-unit"
+      },
+      "land_area_m2": {
+        "status": "not_found",
+        "reason": "council_shows_0_for_cross_lease_or_unit_title",
+        "source_id": "ac_valuation",
+        "value": null
+      },
+      "floor_area_m2": {
+        "status": "found",
+        "reason": null,
+        "source_id": "ac_property_page",
+        "value": 189.0
+      },
+      "building_site_coverage_m2": {
+        "status": "found",
+        "reason": null,
+        "source_id": "ac_property_page",
+        "value": 123.0
+      },
+      "legal_description": {
+        "status": "found",
+        "reason": null,
+        "source_id": "ac_valuation",
+        "value": "Flat 1 DP 175842, 1/2 SH Lot 28 DP 47933"
+      },
+      "record_of_title": {
+        "status": "found",
+        "reason": null,
+        "source_id": "ac_valuation",
+        "value": "NA108B/48"
+      },
+      "valuation_number": {
+        "status": "found",
+        "reason": null,
+        "source_id": "ac_valuation",
+        "value": "32433-00000000700-A"
+      },
+      "local_board": {
+        "status": "found",
+        "reason": null,
+        "source_id": "ac_property_page",
+        "value": "Devonport-Takapuna"
+      }
+    },
+    "hazards": [
+      {
+        "layer": "flood_plain",
+        "priority": "primary",
+        "status": "none",
+        "reason": null,
+        "geometry": "polygon",
+        "overlap_pct": null,
+        "crosses_parcel": null,
+        "classes": [],
+        "susceptibility": null,
+        "data_date": "2026-10-03",
+        "source_id": "ac_flood_plains"
+      },
+      {
+        "layer": "flood_prone_area",
+        "priority": "primary",
+        "status": "none",
+        "reason": null,
+        "geometry": "polygon",
+        "overlap_pct": null,
+        "crosses_parcel": null,
+        "classes": [],
+        "susceptibility": null,
+        "data_date": "2026-10-03",
+        "source_id": "ac_flood_prone"
+      },
+      {
+        "layer": "overland_flow_path",
+        "priority": "primary",
+        "status": "intersects",
+        "reason": null,
+        "geometry": "line",
+        "overlap_pct": null,
+        "crosses_parcel": true,
+        "classes": [],
+        "susceptibility": null,
+        "data_date": "2026-03-24",
+        "source_id": "ac_overland_flow"
+      },
+      {
+        "layer": "coastal_inundation",
+        "priority": "primary",
+        "status": "none",
+        "reason": null,
+        "geometry": "polygon",
+        "overlap_pct": null,
+        "crosses_parcel": null,
+        "classes": [],
+        "susceptibility": null,
+        "data_date": "2025-05-30",
+        "source_id": "ac_coastal"
+      },
+      {
+        "layer": "landslide_shallow",
+        "priority": "secondary",
+        "status": "intersects",
+        "reason": "region_wide_layer_class_is_the_finding",
+        "geometry": "polygon",
+        "overlap_pct": null,
+        "crosses_parcel": null,
+        "classes": [
+          "High",
+          "Very Low"
+        ],
+        "susceptibility": "High",
+        "data_date": "2025-09-16",
+        "source_id": "ac_landslide"
+      },
+      {
+        "layer": "landslide_large_scale",
+        "priority": "secondary",
+        "status": "intersects",
+        "reason": "region_wide_layer_class_is_the_finding",
+        "geometry": "polygon",
+        "overlap_pct": null,
+        "crosses_parcel": null,
+        "classes": [
+          "Low"
+        ],
+        "susceptibility": "Low",
+        "data_date": "2025-09-16",
+        "source_id": "ac_landslide"
+      },
+      {
+        "layer": "liquefaction",
+        "priority": "secondary",
+        "status": "intersects",
+        "reason": "region_wide_layer_class_is_the_finding",
+        "geometry": "polygon",
+        "overlap_pct": null,
+        "crosses_parcel": null,
+        "classes": [
+          "Very Low"
+        ],
+        "susceptibility": null,
+        "data_date": "2022-08-18",
+        "source_id": "ac_liquefaction"
+      },
+      {
+        "layer": "tsunami_evacuation_zone",
+        "priority": "secondary",
+        "status": "none",
+        "reason": null,
+        "geometry": "polygon",
+        "overlap_pct": null,
+        "crosses_parcel": null,
+        "classes": [],
+        "susceptibility": null,
+        "data_date": "2024-02-26",
+        "source_id": "ac_tsunami"
+      },
+      {
+        "layer": "coastal_erosion",
+        "priority": "secondary",
+        "status": "none",
+        "reason": null,
+        "geometry": "polygon",
+        "overlap_pct": null,
+        "crosses_parcel": null,
+        "classes": [],
+        "susceptibility": null,
+        "data_date": null,
+        "source_id": "ac_coastal_erosion"
+      }
+    ],
+    "schema_version": "0.1",
+    "generated_at": "2026-10-05T22:12:10+13:00",
+    "address": {
+      "status": "found",
+      "reason": null,
+      "source_id": "linz_addresses",
+      "input": null,
+      "matched": "1/15 Lyttelton Avenue, Forrest Hill, Auckland",
+      "linz_address_id": 1089154,
+      "lat": -36.7684164391,
+      "lng": 174.7425728646
+    },
+    "parcel": {
+      "status": "found",
+      "reason": null,
+      "source_id": "linz_parcels",
+      "parcel_id": 5011038,
+      "spatial_method": "parcel"
+    },
+    "links": [
+      {
+        "id": "homes",
+        "label": "Homes.co.nz",
+        "url": "https://duckduckgo.com/?q=%5Csite%3Ahomes.co.nz+%221%2F15+Lyttelton+Avenue%22+Forrest+Hill+Auckland",
+        "prefilled": true,
+        "kind": "first_result"
+      },
+      {
+        "id": "oneroof",
+        "label": "OneRoof",
+        "url": "https://duckduckgo.com/?q=%5Csite%3Aoneroof.co.nz+%221%2F15+Lyttelton+Avenue%22+Forrest+Hill+Auckland",
+        "prefilled": true,
+        "kind": "first_result"
+      },
+      {
+        "id": "council_valuation",
+        "label": "Auckland Council property search",
+        "url": "https://www.aucklandcouncil.govt.nz/en/property-rates-valuations/find-property-rates-valuation/12340844384.html",
+        "prefilled": true,
+        "kind": "direct"
+      },
+      {
+        "id": "council_flood_viewer",
+        "label": "Auckland Council Flood Viewer",
+        "url": "https://experience.arcgis.com/experience/cbde7f2134404f4d90adce5396a0a630",
+        "prefilled": false,
+        "kind": "home"
+      },
+      {
+        "id": "council_geomaps",
+        "label": "Auckland Council GeoMaps (zoning, pipes and all council layers)",
+        "url": "https://geomapspublic.aucklandcouncil.govt.nz/viewer/index.html?task=select&entity=rateacckey&values=12340844384",
+        "prefilled": true,
+        "kind": "direct"
+      },
+      {
+        "id": "nhc_claims_map",
+        "label": "NHC Natural Hazards Portal",
+        "url": "https://www.naturalhazardsportal.govt.nz/",
+        "prefilled": false,
+        "kind": "home"
+      }
+    ],
+    "sources": [
+      {
+        "id": "linz_addresses",
+        "title": "NZ Addresses - LINZ",
+        "url": "https://data.linz.govt.nz/layer/123113-nz-addresses/",
+        "licence": "CC BY 4.0",
+        "accessed_at": "2026-10-05",
+        "source_type": "official",
+        "attribution": "Contains data sourced from the LINZ Data Service licensed for reuse under CC BY 4.0",
+        "tos_status": null,
+        "tos_url": null,
+        "tos_checked_at": null
+      },
+      {
+        "id": "linz_parcels",
+        "title": "NZ Primary Parcels - LINZ",
+        "url": "https://data.linz.govt.nz/layer/50772-nz-primary-parcels/",
+        "licence": "CC BY 4.0",
+        "accessed_at": "2026-10-05",
+        "source_type": "official",
+        "attribution": "Contains data sourced from the LINZ Data Service licensed for reuse under CC BY 4.0",
+        "tos_status": null,
+        "tos_url": null,
+        "tos_checked_at": null
+      },
+      {
+        "id": "linz_titles",
+        "title": "NZ Property Titles - LINZ",
+        "url": "https://data.linz.govt.nz/layer/50804-nz-property-titles/",
+        "licence": "CC BY 4.0",
+        "accessed_at": "2026-10-05",
+        "source_type": "official",
+        "attribution": "Contains data sourced from the LINZ Data Service licensed for reuse under CC BY 4.0",
+        "tos_status": null,
+        "tos_url": null,
+        "tos_checked_at": null
+      },
+      {
+        "id": "ac_flood_plains",
+        "title": "Flood Plains - Auckland Council",
+        "url": "https://www.arcgis.com/home/item.html?id=0d50200579364e0bb6cda2be0893fc8b",
+        "licence": "No licence stated: internal and external use, with disclaimer",
+        "accessed_at": "2026-10-05",
+        "source_type": "official",
+        "attribution": "Source: Auckland Council. Indicative only; not a substitute for a LIM or a site-specific assessment.",
+        "tos_status": null,
+        "tos_url": null,
+        "tos_checked_at": null
+      },
+      {
+        "id": "ac_flood_prone",
+        "title": "Flood Prone Areas - Auckland Council",
+        "url": "https://www.arcgis.com/home/item.html?id=0be75c47bc1a4f28b9a7745a3eba5cbf",
+        "licence": "Creative Commons (version not stated)",
+        "accessed_at": "2026-10-05",
+        "source_type": "official",
+        "attribution": "Source: Auckland Council. Indicative only; not a substitute for a LIM or a site-specific assessment.",
+        "tos_status": null,
+        "tos_url": null,
+        "tos_checked_at": null
+      },
+      {
+        "id": "ac_overland_flow",
+        "title": "Overland Flow Paths - Auckland Council",
+        "url": "https://www.arcgis.com/home/item.html?id=8217a19b1079402bbd026f5a869e8eed",
+        "licence": "Creative Commons (version not stated)",
+        "accessed_at": "2026-10-05",
+        "source_type": "official",
+        "attribution": "Source: Auckland Council. Indicative only; not a substitute for a LIM or a site-specific assessment.",
+        "tos_status": null,
+        "tos_url": null,
+        "tos_checked_at": null
+      },
+      {
+        "id": "ac_coastal",
+        "title": "Coastal Inundation 1% AEP - Auckland Council",
+        "url": "https://www.arcgis.com/home/item.html?id=e1b4f3e57dc64b6395098a17ac979eeb",
+        "licence": "Creative Commons (version not stated)",
+        "accessed_at": "2026-10-05",
+        "source_type": "official",
+        "attribution": "Source: Auckland Council. Indicative only; not a substitute for a LIM or a site-specific assessment.",
+        "tos_status": null,
+        "tos_url": null,
+        "tos_checked_at": null
+      },
+      {
+        "id": "ac_landslide",
+        "title": "Landslide Susceptibility 2025 (shallow and large scale) - Auckland Council",
+        "url": "https://www.arcgis.com/home/item.html?id=7bc3e13a8c194946b478736afcd9d840",
+        "licence": "CC BY 4.0",
+        "accessed_at": "2026-10-05",
+        "source_type": "official",
+        "attribution": "Source: Auckland Council. Indicative only; not a substitute for a LIM or a site-specific assessment.",
+        "tos_status": null,
+        "tos_url": null,
+        "tos_checked_at": null
+      },
+      {
+        "id": "ac_liquefaction",
+        "title": "Liquefaction Vulnerability Basic Assessment - Auckland Council",
+        "url": "https://www.arcgis.com/home/item.html?id=89f292e28e194457bf04262647bc1905",
+        "licence": "CC BY 4.0",
+        "accessed_at": "2026-10-05",
+        "source_type": "official",
+        "attribution": "Source: Auckland Council. Indicative only; not a substitute for a LIM or a site-specific assessment.",
+        "tos_status": null,
+        "tos_url": null,
+        "tos_checked_at": null
+      },
+      {
+        "id": "ac_tsunami",
+        "title": "Tsunami Evacuation Zone - Auckland Council",
+        "url": "https://www.arcgis.com/home/item.html?id=3fb25ea90d24498b98571f8e84328987",
+        "licence": "CC BY 4.0",
+        "accessed_at": "2026-10-05",
+        "source_type": "official",
+        "attribution": "Source: Auckland Council. Indicative only; not a substitute for a LIM or a site-specific assessment.",
+        "tos_status": null,
+        "tos_url": null,
+        "tos_checked_at": null
+      },
+      {
+        "id": "ac_coastal_erosion",
+        "title": "Coastal Erosion - ASCIE 2130 (RCP8.5+) - Auckland Council GeoMaps",
+        "url": "https://mapspublic.aucklandcouncil.govt.nz/arcgis/rest/services/UnitaryPlan/PNPSUDCoastalErosionPolygon/MapServer/0",
+        "licence": "GeoMaps terms: personal and business use; no substantial copying without consent",
+        "accessed_at": "2026-10-05",
+        "source_type": "official",
+        "attribution": "Source: Auckland Council. Indicative only; not a substitute for a LIM or a site-specific assessment.",
+        "tos_status": null,
+        "tos_url": null,
+        "tos_checked_at": null
+      },
+      {
+        "id": "ac_valuation",
+        "title": "Rate Assessment (valuation and rates) - Auckland Council GeoMaps",
+        "url": "https://mapspublic.aucklandcouncil.govt.nz/arcgis/rest/services/Landbase/MapServer/37",
+        "licence": "GeoMaps terms: personal and business use; no substantial copying without consent",
+        "accessed_at": "2026-10-05",
+        "source_type": "official",
+        "attribution": "Source: Auckland Council (copyright). Council valuations do not represent current market value.",
+        "tos_status": null,
+        "tos_url": null,
+        "tos_checked_at": null
+      },
+      {
+        "id": "ac_property_page",
+        "title": "Find your property rates or valuation - Auckland Council",
+        "url": "https://www.aucklandcouncil.govt.nz/en/property-rates-valuations/find-property-rates-valuation.html",
+        "licence": "Website terms: reproduction for informational purposes with acknowledgement",
+        "accessed_at": "2026-10-05",
+        "source_type": "official",
+        "attribution": "Source: Auckland Council (subject to copyright).",
+        "tos_status": null,
+        "tos_url": null,
+        "tos_checked_at": null
+      }
+    ]
+  },
+  "user_inputs": {
+    "price_override": 1100000,
+    "deposit": 55000,
+    "household_income": 70000,
+    "existing_debts": 40000,
+    "household_type": "single"
+  },
+  "rules_output": {
+    "schema_version": "0.1",
+    "generated_at": "2026-10-05T09:12:20+00:00",
+    "price_used": {
+      "value": 1100000.0,
+      "basis": "user",
+      "valuation_date": null
+    },
+    "deposit": 55000.0,
+    "loan_amount": 1045000.0,
+    "lvr_pct": 95.0,
+    "dti": 15.5,
+    "high_dti_threshold": 380000.0,
+    "rates_snapshot_date": "2026-09-27",
+    "stress_add_pp": 2.0,
+    "loan_term_years": 30,
+    "rates_stale_after_days": 30,
+    "default_rate_pct": 5.79,
+    "fhl_income_caps": {
+      "single": 95000,
+      "multiple_or_dependants": 150000
+    },
+    "scenarios": [
+      {
+        "id": "bank_standard",
+        "rate_pct": null,
+        "rate_range_pct": [
+          5.59,
+          6.69
+        ],
+        "low_equity_margin_pct": [
+          1.2,
+          1.5
+        ],
+        "monthly_range": [
+          5993,
+          6736
+        ],
+        "fortnightly_range": [
+          2764,
+          3108
+        ],
+        "stress_monthly": 8176,
+        "stress_delta_monthly": 1440,
+        "per_bank": [
+          {
+            "bank_id": "kiwibank",
+            "rate_pct": 6.05,
+            "basis": "standard",
+            "captured_at": "2026-09-27T00:00:00+12:00"
+          },
+          {
+            "bank_id": "westpac",
+            "rate_pct": 6.69,
+            "basis": "special+lem",
+            "captured_at": "2026-09-27T00:00:00+12:00"
+          },
+          {
+            "bank_id": "anz",
+            "rate_pct": 5.59,
+            "basis": "standard",
+            "captured_at": "2026-09-27T00:00:00+12:00"
+          },
+          {
+            "bank_id": "asb",
+            "rate_pct": 6.29,
+            "basis": "special+lem",
+            "captured_at": "2026-09-27T00:00:00+12:00"
+          },
+          {
+            "bank_id": "bnz",
+            "rate_pct": 6.39,
+            "basis": "special+lem",
+            "captured_at": "2026-09-27T00:00:00+12:00"
+          },
+          {
+            "bank_id": "tsb",
+            "rate_pct": 5.99,
+            "basis": "standard",
+            "captured_at": "2026-10-03T00:00:00+13:00"
+          },
+          {
+            "bank_id": "sbs",
+            "rate_pct": 5.59,
+            "basis": "standard",
+            "captured_at": "2026-10-03T00:00:00+13:00"
+          },
+          {
+            "bank_id": "unity",
+            "rate_pct": 5.79,
+            "basis": "standard",
+            "captured_at": "2026-10-03T00:00:00+13:00"
+          },
+          {
+            "bank_id": "nbs",
+            "rate_pct": 5.79,
+            "basis": "standard",
+            "captured_at": "2026-10-03T00:00:00+13:00"
+          },
+          {
+            "bank_id": "nzhl",
+            "rate_pct": 6.29,
+            "basis": "special+lem",
+            "captured_at": "2026-10-03T00:00:00+13:00"
+          }
+        ],
+        "source_ids": [
+          "bank_rates_snapshot",
+          "rbnz_lvr"
+        ]
+      },
+      {
+        "id": "first_home_loan",
+        "eligibility": "eligible",
+        "eligibility_note": null,
+        "income_caps": {
+          "single": 95000,
+          "multiple_or_dependants": 150000
+        },
+        "lmi_amount": 12540.0,
+        "lmi_note": "Kāinga Ora charges lenders a 1.2% lenders' mortgage insurance premium, and each lender passes on a different share of it to the borrower. For lenders that have not published their share, the repayment range assumes the full 1.2% premium is added to the loan.",
+        "monthly": null,
+        "stress_monthly": null,
+        "stress_delta_monthly": null,
+        "lenders": [
+          {
+            "bank_id": "kiwibank",
+            "name": "Kiwibank",
+            "captured_at": "2026-09-27T00:00:00+12:00",
+            "rate_pct": 5.15,
+            "rate_basis": "special",
+            "candidate_rates": {
+              "special": 5.15,
+              "standard": 6.05
+            },
+            "lmi_passthrough_pct": 1.0,
+            "lmi_amount": 10450.0,
+            "lmi_amount_if_full_premium": 12540.0,
+            "loan_with_lmi": 1055450.0,
+            "monthly": 5763,
+            "fortnightly": 2659,
+            "stress_monthly": 7129,
+            "stress_delta_monthly": 1366,
+            "monthly_if_full_premium": 5774
+          },
+          {
+            "bank_id": "westpac",
+            "name": "Westpac",
+            "captured_at": "2026-09-27T00:00:00+12:00",
+            "rate_pct": null,
+            "rate_basis": "unknown",
+            "candidate_rates": {
+              "special": 5.19,
+              "standard": 5.79
+            },
+            "lmi_passthrough_pct": null,
+            "lmi_amount": null,
+            "lmi_amount_if_full_premium": 12540.0,
+            "loan_with_lmi": null,
+            "monthly": null,
+            "fortnightly": null,
+            "stress_monthly": null,
+            "stress_delta_monthly": null,
+            "monthly_if_full_premium": null
+          },
+          {
+            "bank_id": "asb",
+            "name": "ASB",
+            "captured_at": "2026-09-27T00:00:00+12:00",
+            "rate_pct": 4.99,
+            "rate_basis": "special",
+            "candidate_rates": {
+              "special": 4.99,
+              "standard": null
+            },
+            "lmi_passthrough_pct": 1.2,
+            "lmi_amount": 12540.0,
+            "lmi_amount_if_full_premium": 12540.0,
+            "loan_with_lmi": 1057540.0,
+            "monthly": 5671,
+            "fortnightly": 2616,
+            "stress_monthly": 7029,
+            "stress_delta_monthly": 1358,
+            "monthly_if_full_premium": 5671
+          },
+          {
+            "bank_id": "coop",
+            "name": "Co-operative Bank",
+            "captured_at": "2026-10-03T00:00:00+13:00",
+            "rate_pct": 5.19,
+            "rate_basis": "special",
+            "candidate_rates": {
+              "special": 5.19,
+              "standard": 5.69
+            },
+            "lmi_passthrough_pct": 1.2,
+            "lmi_amount": 12540.0,
+            "lmi_amount_if_full_premium": 12540.0,
+            "loan_with_lmi": 1057540.0,
+            "monthly": 5801,
+            "fortnightly": 2676,
+            "stress_monthly": 7171,
+            "stress_delta_monthly": 1370,
+            "monthly_if_full_premium": 5801
+          },
+          {
+            "bank_id": "sbs",
+            "name": "SBS Bank",
+            "captured_at": "2026-10-03T00:00:00+13:00",
+            "rate_pct": 4.99,
+            "rate_basis": "special",
+            "candidate_rates": {
+              "special": 4.99,
+              "standard": 5.59
+            },
+            "lmi_passthrough_pct": 1.2,
+            "lmi_amount": 12540.0,
+            "lmi_amount_if_full_premium": 12540.0,
+            "loan_with_lmi": 1057540.0,
+            "monthly": 5671,
+            "fortnightly": 2616,
+            "stress_monthly": 7029,
+            "stress_delta_monthly": 1358,
+            "monthly_if_full_premium": 5671
+          },
+          {
+            "bank_id": "unity",
+            "name": "Unity",
+            "captured_at": "2026-10-03T00:00:00+13:00",
+            "rate_pct": 4.99,
+            "rate_basis": "special",
+            "candidate_rates": {
+              "special": 4.99,
+              "standard": 5.79
+            },
+            "lmi_passthrough_pct": null,
+            "lmi_amount": null,
+            "lmi_amount_if_full_premium": 12540.0,
+            "loan_with_lmi": null,
+            "monthly": null,
+            "fortnightly": null,
+            "stress_monthly": null,
+            "stress_delta_monthly": null,
+            "monthly_if_full_premium": 5671
+          },
+          {
+            "bank_id": "nbs",
+            "name": "Nelson Building Society",
+            "captured_at": "2026-10-03T00:00:00+13:00",
+            "rate_pct": null,
+            "rate_basis": "unknown",
+            "candidate_rates": {
+              "special": 5.19,
+              "standard": 5.79
+            },
+            "lmi_passthrough_pct": 1.2,
+            "lmi_amount": 12540.0,
+            "lmi_amount_if_full_premium": 12540.0,
+            "loan_with_lmi": null,
+            "monthly": null,
+            "fortnightly": null,
+            "stress_monthly": null,
+            "stress_delta_monthly": null,
+            "monthly_if_full_premium": null
+          },
+          {
+            "bank_id": "nzhl",
+            "name": "NZHL (arranged, lender ASB)",
+            "captured_at": "2026-10-03T00:00:00+13:00",
+            "rate_pct": null,
+            "rate_basis": "unknown",
+            "candidate_rates": {
+              "special": 4.99,
+              "standard": null
+            },
+            "lmi_passthrough_pct": null,
+            "lmi_amount": null,
+            "lmi_amount_if_full_premium": 12540.0,
+            "loan_with_lmi": null,
+            "monthly": null,
+            "fortnightly": null,
+            "stress_monthly": null,
+            "stress_delta_monthly": null,
+            "monthly_if_full_premium": null
+          }
+        ],
+        "monthly_range": [
+          5671,
+          5801
+        ],
+        "fortnightly_range": [
+          2616,
+          2676
+        ],
+        "stress_monthly_range": [
+          7029,
+          7171
+        ],
+        "full_premium_assumed_for": [
+          "unity"
+        ],
+        "source_ids": [
+          "kainga_ora_fhl_brochure",
+          "kainga_ora_fhl"
+        ],
+        "note_ids": [
+          "fhl_passthrough_varies"
+        ]
+      }
+    ],
+    "flags": [
+      {
+        "id": "lvr_over_80",
+        "source_ids": [
+          "rbnz_lvr"
+        ]
+      },
+      {
+        "id": "dti_over_6",
+        "source_ids": [
+          "rbnz_dti"
+        ]
+      }
+    ],
+    "hazard_gaps": [],
+    "kb_items": [
+      "kb_auction_unconditional",
+      "kb_flood_insurance_limit",
+      "kb_lim_next_step",
+      "kb_overland_flow_path",
+      "kb_landslide_map_context",
+      "kb_insurance_condition",
+      "kb_nhc_building_cap",
+      "kb_nhc_levy",
+      "kb_nhc_building_excess",
+      "kb_nhc_land_cover_limits",
+      "kb_rbnz_lvr",
+      "kb_rbnz_dti",
+      "kb_fhl_premium",
+      "kb_fhl_govt_not_funding_premium",
+      "kb_fhl_lvr_not_restricted",
+      "kb_fhl_dti_not_restricted",
+      "kb_fhl_deposit_5pct",
+      "kb_fhl_income_cap_individual",
+      "kb_fhl_income_cap_multiple",
+      "kb_low_deposit_higher_rates",
+      "kb_fhl_income_basis",
+      "kb_title_cross_lease",
+      "kb_title_cross_lease_flats_plan",
+      "kb_cv_not_market"
+    ],
+    "kb_includes_draft": false,
+    "kb_items_from_user_input": [],
+    "kb_empty_reason": null,
+    "warnings": [
+      "cladding_unavailable",
+      "lem_base_unverified:westpac",
+      "bank_skipped:coop"
+    ],
+    "disclaimer": "Information only, not financial or legal advice. Figures come from published sources on the dates shown; confirm with the lender or provider before deciding."
+  },
+  "synthetic": false
+}

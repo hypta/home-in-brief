@@ -1,0 +1,118 @@
+{
+  "schema_version": "0.1",
+  "generated_at": "2026-10-05T12:00:00+13:00",
+  "model": "golden-codex",
+  "summary": [
+    {
+      "text": "The flood plain, flood-prone area, overland flow path and coastal inundation layers could not be checked because the services timed out.",
+      "source_ids": [
+        "ac_flood_plains",
+        "ac_flood_prone",
+        "ac_overland_flow",
+        "ac_coastal"
+      ]
+    },
+    {
+      "text": "The council maps shallow landslide susceptibility classes of High and Very Low, large-scale susceptibility of Low, and liquefaction vulnerability of Very Low here; its landslide ratings do not measure risk for an individual property.",
+      "source_ids": [
+        "ac_landslide",
+        "ac_liquefaction",
+        "kb_landslide_map_context"
+      ]
+    },
+    {
+      "text": "The council valuation could not be retrieved, and no loan scenario is available because there is no usable price.",
+      "source_ids": [
+        "ac_valuation"
+      ]
+    },
+    {
+      "text": "The title type and build era could not be found in the available property data.",
+      "source_ids": [
+        "linz_titles",
+        "ac_property_page"
+      ]
+    }
+  ],
+  "next_steps": [
+    {
+      "text": "Check the council property file for geotechnical reports, or ask a geotechnical engineer for site-specific advice.",
+      "source_ids": [
+        "kb_landslide_map_context"
+      ],
+      "kb_item": "kb_landslide_map_context"
+    },
+    {
+      "text": "Ask your lawyer to obtain and review the LIM report and other property documents from the council.",
+      "source_ids": [
+        "kb_lim_next_step"
+      ],
+      "kb_item": "kb_lim_next_step"
+    }
+  ],
+  "not_found_notes": [
+    {
+      "field": "cv",
+      "text": "Council valuation: could not be checked because the service timed out.",
+      "reason": "service_timeout"
+    },
+    {
+      "field": "title_type",
+      "text": "Title type: could not be found in the available property data.",
+      "reason": "not_found"
+    },
+    {
+      "field": "year_built",
+      "text": "Year built: could not be found in the available property data.",
+      "reason": "not_found"
+    },
+    {
+      "field": "cladding",
+      "text": "Cladding: no free public source has this; check the listing or ask the agent.",
+      "reason": "no_free_source"
+    },
+    {
+      "field": "last_sale",
+      "text": "Last sale: we have no licensed source for sale prices; see the Homes.co.nz and OneRoof links.",
+      "reason": "no_licensed_source"
+    },
+    {
+      "field": "land_area_m2",
+      "text": "Land area: the council entry does not provide a usable land area for this property.",
+      "reason": "council_shows_0_for_cross_lease_or_unit_title"
+    },
+    {
+      "field": "hazards.flood_plain",
+      "text": "Flood plain layer: could not be checked because the service timed out.",
+      "reason": "service_timeout"
+    },
+    {
+      "field": "hazards.flood_prone_area",
+      "text": "Flood-prone area layer: could not be checked because the service timed out.",
+      "reason": "service_timeout"
+    },
+    {
+      "field": "hazards.overland_flow_path",
+      "text": "Overland flow path layer: could not be checked because the service timed out.",
+      "reason": "service_timeout"
+    },
+    {
+      "field": "hazards.coastal_inundation",
+      "text": "Coastal inundation layer: could not be checked because the service timed out.",
+      "reason": "service_timeout"
+    }
+  ],
+  "warnings": [
+    "cv_unavailable",
+    "title_type_unavailable",
+    "year_built_unavailable",
+    "cladding_unavailable",
+    "hazards_partial:flood_plain",
+    "hazards_partial:flood_prone_area",
+    "hazards_partial:overland_flow_path",
+    "hazards_partial:coastal_inundation",
+    "hazards_unavailable",
+    "price_missing"
+  ],
+  "dropped": 0
+}

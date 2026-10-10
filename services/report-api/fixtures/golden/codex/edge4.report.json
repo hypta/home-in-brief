@@ -1,0 +1,91 @@
+{
+  "schema_version": "0.1",
+  "generated_at": "2026-10-05T12:00:00+13:00",
+  "model": "golden-codex",
+  "summary": [
+    {
+      "text": "A mapped overland flow path crosses this parcel; Auckland Council says blocked flow paths can cause water to build up and enter homes.",
+      "source_ids": [
+        "ac_overland_flow",
+        "kb_overland_flow_path"
+      ]
+    },
+    {
+      "text": "The council maps shallow landslide susceptibility classes of High and Very Low, large-scale susceptibility of Low, and liquefaction vulnerability of Very Low here; its landslide ratings do not measure risk for an individual property.",
+      "source_ids": [
+        "ac_landslide",
+        "ac_liquefaction",
+        "kb_landslide_map_context"
+      ]
+    },
+    {
+      "text": "The property record identifies the title as Leasehold.",
+      "source_ids": [
+        "linz_titles"
+      ]
+    },
+    {
+      "text": "Based on what you told us, your supplied build year conflicts with the property record, so the recorded value of 1975 takes precedence.",
+      "source_ids": [
+        "ac_property_page"
+      ]
+    },
+    {
+      "text": "Based on what you told us, the cladding is monolithic, which Settled.govt.nz discusses in its leaky-buildings guidance; the public property data could not verify the cladding.",
+      "source_ids": [
+        "kb_monolithic_cladding"
+      ]
+    }
+  ],
+  "next_steps": [
+    {
+      "text": "Ask the council or a drainage engineer whether the mapped overland flow path crosses this property and what the mapping means for it.",
+      "source_ids": [
+        "kb_overland_flow_path"
+      ],
+      "kb_item": "kb_overland_flow_path"
+    },
+    {
+      "text": "Check the council property file for geotechnical reports, or ask a geotechnical engineer for site-specific advice.",
+      "source_ids": [
+        "kb_landslide_map_context"
+      ],
+      "kb_item": "kb_landslide_map_context"
+    },
+    {
+      "text": "Ask whether the cladding is monolithic and consider a pre-purchase building inspection.",
+      "source_ids": [
+        "kb_monolithic_cladding"
+      ],
+      "kb_item": "kb_monolithic_cladding"
+    },
+    {
+      "text": "Ask your lawyer to obtain and review the LIM report and other property documents from the council.",
+      "source_ids": [
+        "kb_lim_next_step"
+      ],
+      "kb_item": "kb_lim_next_step"
+    }
+  ],
+  "not_found_notes": [
+    {
+      "field": "cladding",
+      "text": "Cladding: no free public source has this; check the listing or ask the agent.",
+      "reason": "no_free_source"
+    },
+    {
+      "field": "last_sale",
+      "text": "Last sale: we have no licensed source for sale prices; see the Homes.co.nz and OneRoof links.",
+      "reason": "no_licensed_source"
+    },
+    {
+      "field": "land_area_m2",
+      "text": "Land area: the council entry does not provide a usable land area for this property.",
+      "reason": "council_shows_0_for_cross_lease_or_unit_title"
+    }
+  ],
+  "warnings": [
+    "cladding_unavailable"
+  ],
+  "dropped": 0
+}
