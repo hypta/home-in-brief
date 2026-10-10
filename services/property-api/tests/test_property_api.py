@@ -60,6 +60,7 @@ def test_linz_outage_is_unavailable_not_not_found(monkeypatch):
     ctx = build(1)
     assert {ctx.address.status, ctx.parcel.status, ctx.property.cv.status} == {"unavailable"}
     assert {(h.status, h.reason) for h in ctx.hazards} == {("unavailable", "service_timeout")}
+    assert {s.accessed_at for s in ctx.sources} == {None}
 
 
 def test_failed_layer_metadata_keeps_the_finding(monkeypatch):
@@ -109,9 +110,11 @@ def test_one_failing_layer_does_not_affect_the_others(monkeypatch):
             raise TimeoutError("simulated")
         return replay(method, url, params, **kw)
     monkeypatch.setattr(http, "request", flaky)
-    hz = hazards(build(FLOODED))
+    ctx = build(FLOODED)
+    hz, accessed = hazards(ctx), {s.id: s.accessed_at for s in ctx.sources}
     assert (hz["flood_prone_area"].status, hz["flood_prone_area"].reason) == ("unavailable", "service_timeout")
     assert hz["flood_plain"].status == "intersects"
+    assert accessed["ac_flood_prone"] is None and accessed["ac_flood_plains"] == ctx.generated_at[:10]
 
 
 def test_point_method_when_no_parcel(monkeypatch):
@@ -172,10 +175,12 @@ def test_council_page_is_not_fetched_when_switched_off(monkeypatch):
     monkeypatch.setenv("COUNCIL_PAGE", "off")
     page = Mock()
     monkeypatch.setattr(council, "property_page", page)
-    p = build(FLOODED).property
+    ctx = build(FLOODED)
+    p, accessed = ctx.property, {s.id: s.accessed_at for s in ctx.sources}
     page.assert_not_called()
     assert p.cv.value == 340000
     assert (p.year_built.status, p.year_built.reason) == ("unavailable", "council_site_refuses_this_server")
+    assert accessed["ac_property_page"] is None and accessed["ac_valuation"] == ctx.generated_at[:10]
 
 
 def test_geomaps_down_falls_back_to_the_council_page(monkeypatch):

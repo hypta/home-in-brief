@@ -85,7 +85,7 @@ async function lookup(a) {
     $("price-hint").innerHTML = (cv.status === "found" ? `Filled in with the council valuation (CV) as at ${esc(cv.valuation_date)}, which is not a market value. `
       : "The council valuation could not be found, so enter a price. ") + `Check a current estimate on ${site("homes")}, ${site("oneroof")} or the listing, then change this figure.`;
     $("year-built-hint").innerHTML = `Only used when the council records do not give a build decade. Check the listing, ${site("homes")} or ${site("oneroof")} for the decade, or copy the Property Category from the ${site("council_valuation")}.`;
-    $("cladding-hint").innerHTML = `Check the listing for it. ${site("homes")} and ${site("oneroof")} list it under Construction as External Walls.`;
+    $("cladding-hint").innerHTML = `Check the listing, ${site("homes")} or ${site("oneroof")} for it.`;
     $("status").textContent = "The report is below."; $("report").hidden = false;
     render(state);
     show("matched");

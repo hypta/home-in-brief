@@ -19,8 +19,11 @@ const NO_RISK_CAVEAT = "This is not a statement that there is no risk.";
 const money = v => "$" + Math.round(Number(v)).toLocaleString("en-NZ");
 const pct = v => Number(v).toLocaleString("en-NZ", {maximumFractionDigits: 2}) + "%";
 const m2 = v => Number(v).toLocaleString("en-NZ") + " m²";
-const words = code => String(code || "no reason given").replace(/_/g, " ");
-const missing = f => `${f.status === "unavailable" ? "Could not check" : "Not found"} (${esc(words(f.reason || f.status))}).`;
+const words = code => String(code).replace(/_/g, " ");
+const DEV = ["localhost", "127.0.0.1"].includes(location.hostname);  // raw codes show on a developer's own machine only
+const dev = code => DEV ? ` <span class="muted">[dev: ${esc(code)}]</span>` : "";
+const gone = f => f.status === "unavailable" ? "Could not be checked." : "Not found in the records we checked.";
+const missing = f => gone(f) + dev(f.reason || f.status);
 const span = (r, fmt) => !r ? "not available" : r[0] === r[1] ? fmt(r[0]) : `${fmt(r[0])} to ${fmt(r[1])}`;
 const or = (v, fmt) => v == null ? "not published" : fmt(v);
 const list = items => items.length ? `<ul class="plain">${items.map(i => `<li>${i}</li>`).join("")}</ul>` : "";
@@ -88,7 +91,7 @@ function warnings(rules, block) {
   return list((rules?.warnings || []).map(w => {
     const [code, arg] = w.split(":"), known = WARNINGS[code];
     if (HIDDEN.test(code)) return null;
-    if (!known) return block === "loan" ? esc("Note: " + words(w)) : null;
+    if (!known) return DEV && block === "loan" ? esc("Note: " + words(w)) : null;
     return known[0] === block ? esc(typeof known[1] === "function" ? known[1](arg, rules) : known[1]) : null;
   }).filter(Boolean));
 }
@@ -99,7 +102,7 @@ function hazardDetail(h, where) {
   const bits = [];
   if (h.susceptibility) bits.push(`Highest class ${where}: ${esc(h.susceptibility)}`);
   else if (h.classes.length) bits.push(`Class ${where}: ${h.classes.map(esc).join(", ")}`);
-  if (h.overlap_pct != null) bits.push(`Covers ${h.overlap_pct}% of the parcel`);
+  if (h.overlap_pct != null) bits.push(`Covers ${h.overlap_pct || "less than 0.1"}% of the parcel`);  // 0 is a sliver that rounds to 0.0
   if (h.crosses_parcel) bits.push("Crosses the parcel");
   const near = /^point_method_line_within_(\d+)m$/.exec(h.reason || "");
   if (near) return `Within ${near[1]} m of the address point.`;
@@ -118,13 +121,16 @@ function hazards(state) {
 
 function facts({ctx}) {
   const p = ctx.property, council = ctx.links.find(l => l.id === "council_valuation"), rows = [];
+  const listings = ctx.links.filter(l => l.id === "homes" || l.id === "oneroof").map(l => link(l.url, l.label)).join(" or ");
+  const onListings = [p.year_built, p.cladding, p.last_sale];  // facts the listing sites show: a missing one points to them
   const add = (name, f, text) => rows.push(row(name, (text || missing(f)
-    + (council && (f.source_id || "").startsWith("ac_") ? ` ${link(council.url, "Check the council property search")}.` : ""))
+    + (council && (f.source_id || "").startsWith("ac_") ? ` ${link(council.url, "Check the council property search")}.` : "")
+    + (listings && onListings.includes(f) ? ` Look for it on ${listings}.` : ""))
     + " " + cite(f.source_id), text ? "found" : f.status));
   const fact = (name, f, fmt = esc) => add(name, f, f.status === "found" ? fmt(f.value) : null);
   add("Capital value (CV)", p.cv, p.cv.status === "found" ? `${money(p.cv.value)} as at ${esc(p.cv.valuation_date)}. A council rating valuation, not a market value.` : null);
   add("Annual rates", p.annual_rates, ratesText(p.annual_rates));
-  add("Title type", p.title_type, p.title_type.value ? esc(p.title_type.value) : (p.title_type.linz_types || []).length ? `LINZ records: ${p.title_type.linz_types.map(esc).join(", ")} (${esc(words(p.title_type.reason))})` : null);
+  add("Title type", p.title_type, p.title_type.value ? esc(p.title_type.value) : (p.title_type.linz_types || []).length ? `LINZ records: ${p.title_type.linz_types.map(esc).join(", ")}${dev(p.title_type.reason)}` : null);
   const r = p.year_built.decade_range;
   add("Decade built", p.year_built, r ? (r[0] ? `${r[0]}-${r[1]}` : `Before ${r[1] + 1}`) + " (from the council property category)" : null);
   fact("Land value", p.land_value, money); fact("Value of improvements", p.improvements_value, money);
@@ -232,7 +238,7 @@ export function render(state) {
   const {ctx} = state;
   sources = state.sources; banks = state.banks; cited = [];
   $("matched").textContent = ctx.address.matched || "Address not found";
-  $("meta").textContent = ctx.address.status !== "found" ? `Not found (${words(ctx.address.reason || ctx.address.status)}).`
+  $("meta").textContent = ctx.address.status !== "found" ? gone(ctx.address)
     : `Checked against ${ctx.parcel.spatial_method === "parcel" ? "the parcel boundary" : "the address point only, because no parcel was matched"} · ${ctx.generated_at.slice(0, 16).replace("T", " ")} New Zealand time`;
   draw("hazards", hazards, state); draw("facts", facts, state); draw("loan", loan, state); draw("notes", buildNotes, state);
   draw("links", () => ctx.links.map(l => `<li>${link(l.url, l.label)}${LINK_KIND[l.kind] || ""}</li>`).join(""));

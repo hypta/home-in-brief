@@ -150,8 +150,14 @@ def _council_fields(ra: Optional[dict], ra_err: Optional[str], key: Optional[str
 
 def build(address_id: int, typed: Optional[str] = None) -> dict:
     now = datetime.now(council.NZ)  # Cloud Run hosts run in UTC
-    sources = [{"id": i, "title": t, "url": u, "licence": lic, "attribution": c,
-                "accessed_at": now.date().isoformat()} for i, t, u, lic, c in _SOURCES]
+    sources = [{"id": i, "title": t, "url": u, "licence": lic, "attribution": c, "accessed_at": None}
+               for i, t, u, lic, c in _SOURCES]
+
+    def answered(**ok) -> None:
+        """source id = whether it answered this lookup; only those are dated."""
+        for source in sources:
+            if ok.get(source["id"]):
+                source["accessed_at"] = now.date().isoformat()
     links = {link["id"]: link for link in (
         {"id": "homes", "label": "Homes.co.nz", "url": "https://homes.co.nz/"},
         {"id": "oneroof", "label": "OneRoof", "url": "https://www.oneroof.co.nz/"},
@@ -164,6 +170,7 @@ def build(address_id: int, typed: Optional[str] = None) -> dict:
     ctx = {"generated_at": now.isoformat(timespec="seconds"), "links": list(links.values()), "sources": sources}
 
     addr, err = _try(linz.address, address_id)
+    answered(linz_addresses=not err)
     outside = bool(addr) and addr.get("territorial_authority") != "Auckland"
     if not addr or outside:
         no = _miss(err, "address_not_found")  # LINZ down is "unavailable", never "not_found"
@@ -193,6 +200,8 @@ def build(address_id: int, typed: Optional[str] = None) -> dict:
     ctx["hazards"] = [h.result() for h in hz]
 
     ra, ra_err, key, page, page_err = cc.result()
+    answered(linz_parcels=not perr, linz_titles=not tt.result()[1], ac_valuation=not ra_err, ac_property_page=page,
+             **{h["source_id"]: True for h in ctx["hazards"] if h["status"] != "unavailable"})
     if key:
         links["council_valuation"].update(url=council.RATES_PAGE.format(key=key), prefilled=True, kind="direct")
         links["council_geomaps"].update(url=f"{council.GEOMAPS_VIEWER}?task=select&entity=rateacckey&values={key}",
