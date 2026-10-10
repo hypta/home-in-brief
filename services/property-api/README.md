@@ -4,13 +4,16 @@ Turns one Auckland address into a `PropertyContext` (hazard layers, council valu
 links and source credits). Every field carries `status` (`found` / `not_found` / `unavailable`) and a
 `reason`, so "not found" is never shown as "no risk".
 
+When a source fails or is switched off, `reason` is `source_unavailable` and the cause (a timeout, the error type)
+goes to the log only. Set `REASON_DETAIL=on` while developing to get the cause in the response instead.
+
 ## Endpoints
 
 | Endpoint | Returns |
 |---|---|
 | `GET /v1/addresses?q=` | Up to 8 Auckland addresses starting with the typed text |
 | `GET /v1/property-context?address_id=` | `PropertyContext` for a LINZ `address_id` |
-| `GET /v1/map?address_id=` | GeoJSON (WGS84) for the report map: parcel, address point and hazard features within about 120 m. Not part of the hand-off contract |
+| `GET /v1/map?address_id=` | GeoJSON (WGS84) for the report map: parcel, address point and hazard features within about 300 m. A layer with more features in that window than the council returns at once is listed in `unavailable`. Not part of the hand-off contract |
 | `GET /health` | Health check (`/healthz` gives the same answer locally; Cloud Run reserves some paths ending in `z`) |
 
 ## Run locally

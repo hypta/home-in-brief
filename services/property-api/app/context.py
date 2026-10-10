@@ -49,7 +49,7 @@ _SOURCES = [
      "Source: Auckland Council (subject to copyright)."),
 ]
 FLOOD_VIEWER = "https://experience.arcgis.com/experience/cbde7f2134404f4d90adce5396a0a630"
-MAP_PAD_DEG = 0.0012  # about 110-130 m around the parcel
+MAP_PAD_DEG = 0.003  # about 270-330 m around the parcel
 
 # Valuation facts come from the GeoMaps rate assessment; page facts exist only on the council property page.
 _LAYER_FACTS = ("land_value", "improvements_value", "rateability", "improvement_description", "land_use",
@@ -63,15 +63,20 @@ def _first_result(site: str, number: str, road: str, suburb: Optional[str]) -> s
     return "https://duckduckgo.com/?q=" + quote_plus(" ".join(f'\\site:{site} "{number} {road}" {suburb or ""} Auckland'.split()))
 
 
+def _cause(detail: str) -> str:
+    """The cause stays in the log; the response carries it only when REASON_DETAIL=on (development)."""
+    return detail if os.environ.get("REASON_DETAIL", "").lower() == "on" else "source_unavailable"
+
+
 def _try(fn: Callable, *args):
     """(result, None) or (None, reason)."""
     try:
         return fn(*args), None
     except Exception as e:
         name = type(e).__name__
-        # the response only carries the type; requests puts the URL (with the LINZ key) in its messages
+        # requests puts the URL (with the LINZ key) in its messages: log it redacted
         log.warning("%s failed: %s: %s", getattr(fn, "__name__", fn), name, http.redact(str(e)))
-        return None, "service_timeout" if "Timeout" in name else f"service_error:{name}"
+        return None, _cause("service_timeout" if "Timeout" in name else f"service_error:{name}")
 
 
 def _miss(err: Optional[str], why: str) -> dict:
@@ -101,7 +106,7 @@ def _council(lat: float, lng: float, number: str, road: str):
     if ra_err:  # GeoMaps down: get the key from open data
         key, _ = _try(council.rate_account_key, lat, lng, number, road)
     if os.environ.get("COUNCIL_PAGE", "").lower() == "off":  # the council site answers 406 to cloud hosts
-        return ra, ra_err, key, None, "council_site_refuses_this_server"
+        return ra, ra_err, key, None, _cause("council_site_refuses_this_server")
     page, page_err = _try(council.property_page, key) if key else (None, None)
     return ra, ra_err, key, page, page_err
 
@@ -236,4 +241,5 @@ def map_data(address_id: int) -> Optional[dict]:
     unavailable = [c["layer"] for c, (_, err) in zip(council.HAZARD_LAYERS, results) if err]
     for found, _ in results:
         feats += found or []
-    return {"type": "FeatureCollection", "bbox": list(bbox), "features": feats, "unavailable": unavailable}
+    return {"type": "FeatureCollection", "bbox": list(bbox), "pad_m": int(round(MAP_PAD_DEG * 100_000, -2)),
+            "features": feats, "unavailable": unavailable}

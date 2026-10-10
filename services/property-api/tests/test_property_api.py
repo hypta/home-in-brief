@@ -59,7 +59,7 @@ def test_linz_outage_is_unavailable_not_not_found(monkeypatch):
     monkeypatch.setattr(linz, "address", Mock(side_effect=TimeoutError("simulated")))
     ctx = build(1)
     assert {ctx.address.status, ctx.parcel.status, ctx.property.cv.status} == {"unavailable"}
-    assert {(h.status, h.reason) for h in ctx.hazards} == {("unavailable", "service_timeout")}
+    assert {(h.status, h.reason) for h in ctx.hazards} == {("unavailable", "source_unavailable")}
     assert {s.accessed_at for s in ctx.sources} == {None}
 
 
@@ -112,7 +112,7 @@ def test_one_failing_layer_does_not_affect_the_others(monkeypatch):
     monkeypatch.setattr(http, "request", flaky)
     ctx = build(FLOODED)
     hz, accessed = hazards(ctx), {s.id: s.accessed_at for s in ctx.sources}
-    assert (hz["flood_prone_area"].status, hz["flood_prone_area"].reason) == ("unavailable", "service_timeout")
+    assert (hz["flood_prone_area"].status, hz["flood_prone_area"].reason) == ("unavailable", "source_unavailable")
     assert hz["flood_plain"].status == "intersects"
     assert accessed["ac_flood_prone"] is None and accessed["ac_flood_plains"] == ctx.generated_at[:10]
 
@@ -168,7 +168,7 @@ def test_page_failure_keeps_valuation(monkeypatch):
     p = build(FLOODED).property
     assert p.cv.value == 340000 and p.land_use.value == "Recreational - vacant"
     assert (p.year_built.status, p.local_board.status, p.local_board.reason) == (
-        "unavailable", "unavailable", "service_timeout")
+        "unavailable", "unavailable", "source_unavailable")
 
 
 def test_council_page_is_not_fetched_when_switched_off(monkeypatch):
@@ -179,8 +179,18 @@ def test_council_page_is_not_fetched_when_switched_off(monkeypatch):
     p, accessed = ctx.property, {s.id: s.accessed_at for s in ctx.sources}
     page.assert_not_called()
     assert p.cv.value == 340000
-    assert (p.year_built.status, p.year_built.reason) == ("unavailable", "council_site_refuses_this_server")
+    assert (p.year_built.status, p.year_built.reason) == ("unavailable", "source_unavailable")
     assert accessed["ac_property_page"] is None and accessed["ac_valuation"] == ctx.generated_at[:10]
+
+
+def test_the_cause_of_a_failure_is_only_in_the_response_when_a_developer_asks(monkeypatch):
+    monkeypatch.setenv("REASON_DETAIL", "on")
+    monkeypatch.setenv("COUNCIL_PAGE", "off")
+    monkeypatch.setattr(linz, "title_types", Mock(side_effect=TimeoutError("simulated")))
+    monkeypatch.setattr(linz, "parcel", Mock(side_effect=ConnectionError("simulated")))
+    ctx = build(FLOODED)
+    assert (ctx.property.title_type.reason, ctx.parcel.reason, ctx.property.year_built.reason) == (
+        "service_timeout", "service_error:ConnectionError", "council_site_refuses_this_server")
 
 
 def test_geomaps_down_falls_back_to_the_council_page(monkeypatch):
@@ -195,7 +205,7 @@ def test_geomaps_down_falls_back_to_the_council_page(monkeypatch):
     assert (p.annual_rates.reason, p.annual_rates.rating_year) == ("non_rateable_property", "2026/2027")
     # the page does not show these two
     assert (p.improvement_description.status, p.improvement_description.reason,
-            p.improvement_description.source_id) == ("unavailable", "service_error:ConnectionError", "ac_valuation")
+            p.improvement_description.source_id) == ("unavailable", "source_unavailable", "ac_valuation")
     assert p.rateability.status == "unavailable"
     assert p.local_board.value == "Puketapapa"
     assert next(l for l in ctx.links if l.id == "council_valuation").url.endswith("/12344049554.html")
@@ -207,7 +217,7 @@ def test_geomaps_and_fallback_both_down(monkeypatch):
     monkeypatch.setattr(council, "rate_account_key", down)
     p = build(FLOODED).property
     assert {p.cv.status, p.year_built.status, p.local_board.status} == {"unavailable"}
-    assert p.cv.reason == "service_timeout" and p.title_type.value == "Freehold"
+    assert p.cv.reason == "source_unavailable" and p.title_type.value == "Freehold"
 
 
 @pytest.mark.parametrize("label, expected", [("668 M2", 668), ("2.8668 HA", 28668), ("0 M2", 0), (None, None)])
@@ -288,6 +298,20 @@ def test_map_data_is_clipped_to_the_window_around_the_parcel():
     window = box(*data["bbox"]).buffer(1e-9)
     assert all(window.contains(shape(f["geometry"])) for f in data["features"])
     assert client.get("/v1/map", params={"address_id": FLOODED}).status_code == 200
+
+
+def test_a_layer_the_council_cut_short_is_left_off_the_map(monkeypatch):
+    replay = http.request
+
+    def cut_short(method, url, params=None, **kw):
+        out = replay(method, url, params, **kw)
+        if "Flood_Plains" in url:
+            out["properties"] = {"exceededTransferLimit": True}  # as the layer answers when it holds features back
+        return out
+    monkeypatch.setattr(http, "request", cut_short)
+    data = context.map_data(FLOODED)
+    assert data["unavailable"] == ["flood_plain"]
+    assert "flood_plain" not in {f["properties"]["layer"] for f in data["features"]}
 
 
 def test_http_endpoints():

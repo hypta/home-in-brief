@@ -82,6 +82,14 @@ def _esri_polygon(geojson: dict) -> dict:
     return {"rings": [ring for poly in polys for ring in poly], "spatialReference": {"wkid": 2193}}
 
 
+def _features(body: dict) -> list:
+    """A cut-off answer would understate a layer (its overlap, its class, what the map shows), so fail the layer
+    instead; page with resultOffset if large parcels or windows turn out to hit the server's record limit."""
+    if body.get("exceededTransferLimit") or (body.get("properties") or {}).get("exceededTransferLimit"):
+        raise RuntimeError("upstream answer truncated at the record limit")
+    return body["features"]
+
+
 def hazard(cfg: dict, parcel_geojson: Optional[dict], lat: float, lng: float) -> dict:
     """Intersect one layer with the parcel, or with the address point when there is no parcel."""
     out = {k: cfg[k] for k in HAZARD_KEYS}
@@ -98,12 +106,7 @@ def hazard(cfg: dict, parcel_geojson: Optional[dict], lat: float, lng: float) ->
         params.update(geometry=f"{lng},{lat}", geometryType="esriGeometryPoint", inSR=4167)
         if is_line:
             params.update(distance=POINT_LINE_TOLERANCE_M, units="esriSRUnit_Meter")
-    body = http.request("POST", _layer_url(cfg) + "/query", params)
-    # A cut-off answer would understate overlap and class, so fail the layer instead;
-    # page with resultOffset if large parcels turn out to hit the server's record limit.
-    if body.get("exceededTransferLimit") or (body.get("properties") or {}).get("exceededTransferLimit"):
-        raise RuntimeError("upstream answer truncated at the record limit")
-    feats = body["features"]
+    feats = _features(http.request("POST", _layer_url(cfg) + "/query", params))
     out.update(data_date=_or_none(data_date, _layer_url(cfg)), status="intersects" if feats else "none")
     if not feats:
         return out
@@ -135,13 +138,16 @@ def map_features(cfg: dict, bbox: tuple) -> list[dict]:
               "outFields": cfg.get("class_field") or "OBJECTID", "geometryPrecision": 6,
               "maxAllowableOffset": 0.000005}  # ~0.5 m: display only
     window = box(*bbox)
-    out = []
-    for f in http.request("POST", _layer_url(cfg) + "/query", params)["features"]:
-        geom = make_valid(shape(f["geometry"])).intersection(window)
-        if not geom.is_empty:
-            out.append({"type": "Feature", "geometry": mapping(geom),
-                        "properties": {"layer": cfg["layer"], "class": f["properties"].get(cfg.get("class_field"))}})
-    return out
+    shapes = [(f["properties"].get(cfg.get("class_field")), make_valid(shape(f["geometry"])).intersection(window))
+              for f in _features(http.request("POST", _layer_url(cfg) + "/query", params))]
+    shapes = [(cls, geom) for cls, geom in shapes if not geom.is_empty]
+    if cfg.get("region_wide"):  # hundreds of cells per class: one shape per class draws the same and is far smaller
+        by_class: dict = {}
+        for cls, geom in shapes:
+            by_class.setdefault(cls, []).append(geom)
+        shapes = [(cls, unary_union(geoms)) for cls, geoms in by_class.items()]
+    return [{"type": "Feature", "geometry": mapping(geom), "properties": {"layer": cfg["layer"], "class": cls}}
+            for cls, geom in shapes]
 
 
 def _norm(s: str) -> str:

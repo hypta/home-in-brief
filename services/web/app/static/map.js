@@ -59,8 +59,8 @@ export async function drawMap(request, isCurrent) {
     const layerList = L.control.layers(aerial && {"Aerial photo (LINZ)": aerial, "Street map (OpenStreetMap)": streets}, overlays).addTo(map);
     if (!matchMedia("(max-width: 600px)").matches) layerList.expand();  // open at first on a wide screen; it folds away when the pointer leaves it or the map is clicked
     // "none mapped" is only said when every layer loaded
-    $("mapnote").textContent = (nearby.length ? "Shown within about 120 m: " + nearby.join(", ") + "."
-        : g.unavailable.length ? "" : "No flood, coastal or tsunami layer is mapped within about 120 m.")
+    $("mapnote").textContent = (nearby.length ? `Shown within about ${g.pad_m} m: ` + nearby.join(", ") + "."
+        : g.unavailable.length ? "" : `No flood, coastal or tsunami layer is mapped within about ${g.pad_m} m.`)
       + (g.unavailable.length ? " Could not load: " + g.unavailable.map(layerName).join(", ") + "." : "")
       + " The dotted box is the area checked; layers are cut off at its edge. Landslide and liquefaction can be switched on in the layer list (select an area for its class).";
   } catch (e) { if (isCurrent()) $("mapnote").textContent = "The map could not be loaded (" + e.message + ")." + NOT_NEEDED; }

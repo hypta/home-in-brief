@@ -71,41 +71,23 @@
   },
   "url": "https://services1.arcgis.com/n4yPwebTjJCmXB6W/arcgis/rest/services/Coastal_Inundation_1_AEP/FeatureServer/0/query"
  },
- "1a2163a6b9b5": {
-  "captured_at": "2026-10-04",
-  "file": "1a2163a6b9b5.json",
+ "180c1e36293e": {
+  "captured_at": "2026-10-10",
+  "file": "180c1e36293e.json",
   "method": "POST",
   "params": {
    "f": "geojson",
-   "geometry": "174.72965713329998,-36.9025642361,174.73251593330002,-36.8998689028",
+   "geometry": "174.7278571333,-36.9043642361,174.7343159333,-36.8980689028",
    "geometryPrecision": 6,
    "geometryType": "esriGeometryEnvelope",
    "inSR": 4326,
    "maxAllowableOffset": 5e-06,
-   "outFields": "ZONETYPE",
+   "outFields": "SusceptibilityValue",
    "outSR": 4326,
    "returnGeometry": "true",
    "spatialRel": "esriSpatialRelIntersects"
   },
-  "url": "https://services1.arcgis.com/n4yPwebTjJCmXB6W/arcgis/rest/services/Tsunami_Evacuation_Zone/FeatureServer/0/query"
- },
- "222fb5833bd3": {
-  "captured_at": "2026-10-04",
-  "file": "222fb5833bd3.json",
-  "method": "POST",
-  "params": {
-   "f": "geojson",
-   "geometry": "174.72965713329998,-36.9025642361,174.73251593330002,-36.8998689028",
-   "geometryPrecision": 6,
-   "geometryType": "esriGeometryEnvelope",
-   "inSR": 4326,
-   "maxAllowableOffset": 5e-06,
-   "outFields": "OBJECTID",
-   "outSR": 4326,
-   "returnGeometry": "true",
-   "spatialRel": "esriSpatialRelIntersects"
-  },
-  "url": "https://mapspublic.aucklandcouncil.govt.nz/arcgis/rest/services/UnitaryPlan/PNPSUDCoastalErosionPolygon/MapServer/0/query"
+  "url": "https://services1.arcgis.com/n4yPwebTjJCmXB6W/arcgis/rest/services/Shallow_Landslide_Susceptibility/FeatureServer/0/query"
  },
  "2293254c01ff": {
   "captured_at": "2026-10-04",
@@ -248,24 +230,6 @@
   },
   "url": "https://mapspublic.aucklandcouncil.govt.nz/arcgis/rest/services/UnitaryPlan/PNPSUDCoastalErosionPolygon/MapServer/0"
  },
- "5a107a242d48": {
-  "captured_at": "2026-10-04",
-  "file": "5a107a242d48.json",
-  "method": "POST",
-  "params": {
-   "f": "geojson",
-   "geometry": "174.72965713329998,-36.9025642361,174.73251593330002,-36.8998689028",
-   "geometryPrecision": 6,
-   "geometryType": "esriGeometryEnvelope",
-   "inSR": 4326,
-   "maxAllowableOffset": 5e-06,
-   "outFields": "OBJECTID",
-   "outSR": 4326,
-   "returnGeometry": "true",
-   "spatialRel": "esriSpatialRelIntersects"
-  },
-  "url": "https://services1.arcgis.com/n4yPwebTjJCmXB6W/arcgis/rest/services/Flood_Plains/FeatureServer/0/query"
- },
  "5b11c9916207": {
   "captured_at": "2026-10-04",
   "file": "5b11c9916207.json",
@@ -326,6 +290,24 @@
   },
   "url": "https://services1.arcgis.com/n4yPwebTjJCmXB6W/arcgis/rest/services/Flood_Prone_Areas/FeatureServer/0/query"
  },
+ "65493b25601e": {
+  "captured_at": "2026-10-10",
+  "file": "65493b25601e.json",
+  "method": "POST",
+  "params": {
+   "f": "geojson",
+   "geometry": "174.7278571333,-36.9043642361,174.7343159333,-36.8980689028",
+   "geometryPrecision": 6,
+   "geometryType": "esriGeometryEnvelope",
+   "inSR": 4326,
+   "maxAllowableOffset": 5e-06,
+   "outFields": "OBJECTID",
+   "outSR": 4326,
+   "returnGeometry": "true",
+   "spatialRel": "esriSpatialRelIntersects"
+  },
+  "url": "https://mapspublic.aucklandcouncil.govt.nz/arcgis/rest/services/UnitaryPlan/PNPSUDCoastalErosionPolygon/MapServer/0/query"
+ },
  "65f24f5b3629": {
   "captured_at": "2026-10-04",
   "file": "65f24f5b3629.json",
@@ -374,6 +356,24 @@
   },
   "url": "https://services1.arcgis.com/n4yPwebTjJCmXB6W/arcgis/rest/services/Flood_Prone_Areas/FeatureServer/0/query"
  },
+ "7a170e50920e": {
+  "captured_at": "2026-10-10",
+  "file": "7a170e50920e.json",
+  "method": "POST",
+  "params": {
+   "f": "geojson",
+   "geometry": "174.7278571333,-36.9043642361,174.7343159333,-36.8980689028",
+   "geometryPrecision": 6,
+   "geometryType": "esriGeometryEnvelope",
+   "inSR": 4326,
+   "maxAllowableOffset": 5e-06,
+   "outFields": "OBJECTID",
+   "outSR": 4326,
+   "returnGeometry": "true",
+   "spatialRel": "esriSpatialRelIntersects"
+  },
+  "url": "https://services1.arcgis.com/n4yPwebTjJCmXB6W/arcgis/rest/services/Flood_Prone_Areas/FeatureServer/0/query"
+ },
  "7a2c7d08f502": {
   "captured_at": "2026-10-04",
   "file": "7a2c7d08f502.html",
@@ -381,23 +381,23 @@
   "params": {},
   "url": "https://www.aucklandcouncil.govt.nz/en/property-rates-valuations/find-property-rates-valuation/12345450368.html"
  },
- "7ff2242bb2a5": {
-  "captured_at": "2026-10-04",
-  "file": "7ff2242bb2a5.json",
+ "8ba2341a6b6d": {
+  "captured_at": "2026-10-10",
+  "file": "8ba2341a6b6d.json",
   "method": "POST",
   "params": {
    "f": "geojson",
-   "geometry": "174.72965713329998,-36.9025642361,174.73251593330002,-36.8998689028",
+   "geometry": "174.7278571333,-36.9043642361,174.7343159333,-36.8980689028",
    "geometryPrecision": 6,
    "geometryType": "esriGeometryEnvelope",
    "inSR": 4326,
    "maxAllowableOffset": 5e-06,
-   "outFields": "SusceptibilityValue",
+   "outFields": "OBJECTID",
    "outSR": 4326,
    "returnGeometry": "true",
    "spatialRel": "esriSpatialRelIntersects"
   },
-  "url": "https://services1.arcgis.com/n4yPwebTjJCmXB6W/arcgis/rest/services/Large_Scale_Landslide_Susceptibility/FeatureServer/0/query"
+  "url": "https://services1.arcgis.com/n4yPwebTjJCmXB6W/arcgis/rest/services/Coastal_Inundation_1_AEP/FeatureServer/0/query"
  },
  "8ff85b15cfaa": {
   "captured_at": "2026-10-04",
@@ -445,42 +445,6 @@
   },
   "url": "https://data.linz.govt.nz/services;key=KEY/wfs"
  },
- "97fce7cc4067": {
-  "captured_at": "2026-10-04",
-  "file": "97fce7cc4067.json",
-  "method": "POST",
-  "params": {
-   "f": "geojson",
-   "geometry": "174.72965713329998,-36.9025642361,174.73251593330002,-36.8998689028",
-   "geometryPrecision": 6,
-   "geometryType": "esriGeometryEnvelope",
-   "inSR": 4326,
-   "maxAllowableOffset": 5e-06,
-   "outFields": "OBJECTID",
-   "outSR": 4326,
-   "returnGeometry": "true",
-   "spatialRel": "esriSpatialRelIntersects"
-  },
-  "url": "https://services1.arcgis.com/n4yPwebTjJCmXB6W/arcgis/rest/services/Coastal_Inundation_1_AEP/FeatureServer/0/query"
- },
- "9d1771e063dc": {
-  "captured_at": "2026-10-04",
-  "file": "9d1771e063dc.json",
-  "method": "POST",
-  "params": {
-   "f": "geojson",
-   "geometry": "174.72965713329998,-36.9025642361,174.73251593330002,-36.8998689028",
-   "geometryPrecision": 6,
-   "geometryType": "esriGeometryEnvelope",
-   "inSR": 4326,
-   "maxAllowableOffset": 5e-06,
-   "outFields": "OBJECTID",
-   "outSR": 4326,
-   "returnGeometry": "true",
-   "spatialRel": "esriSpatialRelIntersects"
-  },
-  "url": "https://services1.arcgis.com/n4yPwebTjJCmXB6W/arcgis/rest/services/Overland_Flow_Paths/FeatureServer/0/query"
- },
  "a02941618059": {
   "captured_at": "2026-10-04",
   "file": "a02941618059.json",
@@ -513,41 +477,41 @@
   },
   "url": "https://services1.arcgis.com/n4yPwebTjJCmXB6W/arcgis/rest/services/Liquefaction_Vulnerability_Basic_Assessment/FeatureServer/0/query"
  },
- "ad8e4c8513e4": {
-  "captured_at": "2026-10-04",
-  "file": "ad8e4c8513e4.json",
+ "ae95e38223a4": {
+  "captured_at": "2026-10-10",
+  "file": "ae95e38223a4.json",
   "method": "POST",
   "params": {
    "f": "geojson",
-   "geometry": "174.72965713329998,-36.9025642361,174.73251593330002,-36.8998689028",
+   "geometry": "174.7278571333,-36.9043642361,174.7343159333,-36.8980689028",
    "geometryPrecision": 6,
    "geometryType": "esriGeometryEnvelope",
    "inSR": 4326,
    "maxAllowableOffset": 5e-06,
-   "outFields": "SusceptibilityValue",
+   "outFields": "Vulnerability",
    "outSR": 4326,
    "returnGeometry": "true",
    "spatialRel": "esriSpatialRelIntersects"
   },
-  "url": "https://services1.arcgis.com/n4yPwebTjJCmXB6W/arcgis/rest/services/Shallow_Landslide_Susceptibility/FeatureServer/0/query"
+  "url": "https://services1.arcgis.com/n4yPwebTjJCmXB6W/arcgis/rest/services/Liquefaction_Vulnerability_Basic_Assessment/FeatureServer/0/query"
  },
- "b77474fe82e0": {
-  "captured_at": "2026-10-04",
-  "file": "b77474fe82e0.json",
+ "b7773524732c": {
+  "captured_at": "2026-10-10",
+  "file": "b7773524732c.json",
   "method": "POST",
   "params": {
    "f": "geojson",
-   "geometry": "174.72965713329998,-36.9025642361,174.73251593330002,-36.8998689028",
+   "geometry": "174.7278571333,-36.9043642361,174.7343159333,-36.8980689028",
    "geometryPrecision": 6,
    "geometryType": "esriGeometryEnvelope",
    "inSR": 4326,
    "maxAllowableOffset": 5e-06,
-   "outFields": "OBJECTID",
+   "outFields": "ZONETYPE",
    "outSR": 4326,
    "returnGeometry": "true",
    "spatialRel": "esriSpatialRelIntersects"
   },
-  "url": "https://services1.arcgis.com/n4yPwebTjJCmXB6W/arcgis/rest/services/Flood_Prone_Areas/FeatureServer/0/query"
+  "url": "https://services1.arcgis.com/n4yPwebTjJCmXB6W/arcgis/rest/services/Tsunami_Evacuation_Zone/FeatureServer/0/query"
  },
  "c32dd1547826": {
   "captured_at": "2026-10-04",
@@ -565,23 +529,41 @@
   },
   "url": "https://services1.arcgis.com/n4yPwebTjJCmXB6W/arcgis/rest/services/Shallow_Landslide_Susceptibility/FeatureServer/0/query"
  },
- "cab65249b6c9": {
-  "captured_at": "2026-10-04",
-  "file": "cab65249b6c9.json",
+ "c832f20532c2": {
+  "captured_at": "2026-10-10",
+  "file": "c832f20532c2.json",
   "method": "POST",
   "params": {
    "f": "geojson",
-   "geometry": "174.72965713329998,-36.9025642361,174.73251593330002,-36.8998689028",
+   "geometry": "174.7278571333,-36.9043642361,174.7343159333,-36.8980689028",
    "geometryPrecision": 6,
    "geometryType": "esriGeometryEnvelope",
    "inSR": 4326,
    "maxAllowableOffset": 5e-06,
-   "outFields": "Vulnerability",
+   "outFields": "OBJECTID",
    "outSR": 4326,
    "returnGeometry": "true",
    "spatialRel": "esriSpatialRelIntersects"
   },
-  "url": "https://services1.arcgis.com/n4yPwebTjJCmXB6W/arcgis/rest/services/Liquefaction_Vulnerability_Basic_Assessment/FeatureServer/0/query"
+  "url": "https://services1.arcgis.com/n4yPwebTjJCmXB6W/arcgis/rest/services/Overland_Flow_Paths/FeatureServer/0/query"
+ },
+ "cae808d39bc8": {
+  "captured_at": "2026-10-10",
+  "file": "cae808d39bc8.json",
+  "method": "POST",
+  "params": {
+   "f": "geojson",
+   "geometry": "174.7278571333,-36.9043642361,174.7343159333,-36.8980689028",
+   "geometryPrecision": 6,
+   "geometryType": "esriGeometryEnvelope",
+   "inSR": 4326,
+   "maxAllowableOffset": 5e-06,
+   "outFields": "OBJECTID",
+   "outSR": 4326,
+   "returnGeometry": "true",
+   "spatialRel": "esriSpatialRelIntersects"
+  },
+  "url": "https://services1.arcgis.com/n4yPwebTjJCmXB6W/arcgis/rest/services/Flood_Plains/FeatureServer/0/query"
  },
  "ccd7555f7c64": {
   "captured_at": "2026-10-04",
@@ -645,6 +627,24 @@
   "method": "GET",
   "params": {},
   "url": "https://www.aucklandcouncil.govt.nz/en/property-rates-valuations/find-property-rates-valuation/12344049554.html"
+ },
+ "d1e2faa12f50": {
+  "captured_at": "2026-10-10",
+  "file": "d1e2faa12f50.json",
+  "method": "POST",
+  "params": {
+   "f": "geojson",
+   "geometry": "174.7278571333,-36.9043642361,174.7343159333,-36.8980689028",
+   "geometryPrecision": 6,
+   "geometryType": "esriGeometryEnvelope",
+   "inSR": 4326,
+   "maxAllowableOffset": 5e-06,
+   "outFields": "SusceptibilityValue",
+   "outSR": 4326,
+   "returnGeometry": "true",
+   "spatialRel": "esriSpatialRelIntersects"
+  },
+  "url": "https://services1.arcgis.com/n4yPwebTjJCmXB6W/arcgis/rest/services/Large_Scale_Landslide_Susceptibility/FeatureServer/0/query"
  },
  "d22f41d6a64a": {
   "captured_at": "2026-10-04",

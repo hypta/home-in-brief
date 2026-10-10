@@ -22,7 +22,18 @@ const m2 = v => Number(v).toLocaleString("en-NZ") + " m²";
 const words = code => String(code).replace(/_/g, " ");
 const DEV = ["localhost", "127.0.0.1"].includes(location.hostname);  // raw codes show on a developer's own machine only
 const dev = code => DEV ? ` <span class="muted">[dev: ${esc(code)}]</span>` : "";
-const gone = f => f.status === "unavailable" ? "Could not be checked." : "Not found in the records we checked.";
+// A reason that is a fact about the property or the data is said in words; a source that failed is not explained.
+const REASONS = {
+  non_rateable_property: "The council lists this property as non-rateable.",
+  council_shows_0_for_cross_lease_or_unit_title: "The council entry does not provide a usable land area for this property.",
+  property_category_has_no_build_decade: "The council's property category for this address has no build decade.",
+  not_on_council_page: "Not shown on the council property page.",
+  no_unique_council_property_match: "The council records could not be matched to a single property at this address.",
+  no_free_source: "No free public source has this.",
+  no_licensed_source: "We have no licensed source for sale prices.",
+  outside_auckland: "This address is outside Auckland. This tool covers Auckland only.",
+};
+const gone = f => REASONS[f.reason] || (f.status === "unavailable" ? "Could not be checked." : "Not found in the records we checked.");
 const missing = f => gone(f) + dev(f.reason || f.status);
 const span = (r, fmt) => !r ? "not available" : r[0] === r[1] ? fmt(r[0]) : `${fmt(r[0])} to ${fmt(r[1])}`;
 const or = (v, fmt) => v == null ? "not published" : fmt(v);
