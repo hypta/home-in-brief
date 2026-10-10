@@ -101,6 +101,10 @@ def _unhandled(_: Request, exc: Exception) -> JSONResponse:
     return _error(500, "internal_error", "Internal server error.")
 
 
+def _n(v) -> str:
+    return " ".join(str(v).split()).casefold()
+
+
 def _safe(fn, default, warnings: list[str], tag: str):
     """Run a data-source read; on failure keep serving and record why."""
     try:
@@ -135,6 +139,10 @@ def rules(req: RulesRequest) -> RulesOutput:
 
     all_items, kb_ok = _safe(repo.kb_items, [], out.warnings, "kb_unavailable")
     items = _visible(all_items, out.warnings)
+    if kb_ok and norm.title_type is not None:
+        mapped = {_n(t) for i in items for t in i.applies_when.get("title_type", []) if isinstance(t, str)}
+        if _n(norm.title_type) not in mapped:
+            out.warnings.append("title_type_unmapped")
     out.kb_items = pick(items, True)
     without_chat = set(pick(items, False))
     out.kb_items_from_user_input = [i for i in out.kb_items if i not in without_chat]

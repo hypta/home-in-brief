@@ -46,6 +46,9 @@ Each flag is `{id, source_ids}`. A flag is only listed when it applies.
 | `year_built_unparseable` | Year information is unusable | `year_built.value` is not a year (1000-2200) or a decade such as `1990s`, or `decade_range` is malformed | Treat as unknown. |
 | `title_type_unresolved` | LINZ lists title types but none was chosen | `title_type.value` is null while `linz_types` is not empty | No title-type notes are selected. Say the title type needs confirming (see `linz_types`); do not guess. |
 | `chat_year_built_unparseable` | Same, for the user-supplied year | Unparseable `chat_supplied.year_built` | Ask again. |
+| `title_type_unmapped` | The title type is known but no knowledge base note covers it | `title_type.value` is set and `found`, and no verified KB item lists it in `applies_when.title_type` (for example Leasehold) | No title-type note is shown. Say the title type is not covered by the guide and suggest asking a lawyer; do not reuse a note for another title type. |
+| `year_built_user_conflict` | The user's year disagrees with the property record | `year_built` is `found` and `chat_supplied.year_built` is set, and the user's year (or decade) does not overlap the property's `decade_range` or value | The property record is still used. Tell the user both figures and ask which is right; suggest checking the LIM or building consent. |
+| `cladding_user_conflict` | The user's cladding disagrees with the property record | `cladding` is `found` and `chat_supplied.cladding` is set and is a different cladding | The property record is still used. Tell the user both values and ask which is right. |
 
 ### Hazards
 

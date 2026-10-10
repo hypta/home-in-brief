@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Union
 
+from b_common import cladding as cladding_table
 from b_common.schemas import (
     MAX_AMOUNT,
     BankRate,
@@ -142,6 +143,10 @@ def parse_decade_range(r: list) -> Optional[tuple[int, int]]:
     return (lo, hi) if lo <= hi else None
 
 
+def _clad_key(text: str) -> str:
+    return cladding_table.normalize(text) or " ".join(text.split()).casefold()
+
+
 def normalize(ctx: PropertyContext, ui: UserInputs, warnings: list[str]) -> Normalized:
     """Use a property field only when its status is "found"; chat fills year and cladding."""
     p, n = ctx.property, Normalized()
@@ -183,6 +188,18 @@ def normalize(ctx: PropertyContext, ui: UserInputs, warnings: list[str]) -> Norm
             warnings.append("chat_year_built_unparseable")
     if n.cladding is None and chat.cladding:
         n.cladding = chat.cladding
+    # The user's answer never overrides a found property value; a disagreement is only flagged.
+    prop_years = n.year_range if p.year_built.status == "found" and n.year_range is not None else None
+    if prop_years is None and p.year_built.status == "found" and "decade_range" in p.year_built.model_fields_set \
+            and p.year_built.decade_range is None:
+        prop_years = parse_year(p.year_built.value)  # mixed eras: the single year is still a claim
+    if prop_years is not None and chat.year_built is not None:
+        chat_years = parse_year(chat.year_built)
+        if chat_years is not None and not (chat_years[0] <= prop_years[1] and prop_years[0] <= chat_years[1]):
+            warnings.append("year_built_user_conflict")
+    if p.cladding.status == "found" and p.cladding.value and chat.cladding:
+        if _clad_key(p.cladding.value) != _clad_key(chat.cladding):
+            warnings.append("cladding_user_conflict")
 
     for h in ctx.hazards:
         status, priority = h.status, h.priority
