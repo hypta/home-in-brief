@@ -91,6 +91,9 @@ const WARNINGS = {
   lem_base_unverified: ["loan", id => `${bank(id)}'s rate here is approximate: the rate its low-equity margin is added to is not confirmed.`],
   title_type_unavailable: ["notes", "The title type could not be confirmed."],
   title_type_unresolved: ["notes", "LINZ lists more than one kind of title here, so no title notes are shown. The title type needs confirming on the record of title."],
+  title_type_unmapped: ["notes", "We have no guidance note for this type of title yet, so ask your lawyer what it means for you."],
+  year_built_user_conflict: ["notes", "The year you gave differs from the council record, which we used; please check which is right."],
+  cladding_user_conflict: ["notes", "The cladding you gave differs from the property record, which we used; please check which is right."],
   year_built_unavailable: ["notes", () => $("year-built").value.trim() ? null : "The year built could not be found. Check the listing for it, then enter it in the form above."],
   year_built_unparseable: ["notes", "The year built could not be read. Check the listing for it."],
   cladding_unavailable: ["notes", () => $("cladding").value ? null : "Cladding is not available from any free public source. Check the listing for it, then choose it in the form above."],
@@ -225,7 +228,7 @@ function summary({rules, rulesError, kb, report: r, reportError: err}) {
     return `${esc(s.text)} ${s.source_ids.filter(id => !quoted.has(id)).map(id => items[id] ? kbCite(items[id]) : cite(id)).join(" ")}`;
   };
   return list(r.summary.map(line))
-    + (r.dropped ? `<p class="muted">${r.dropped === 1 ? "1 sentence was" : r.dropped + " sentences were"} left out because the check against the sources did not pass.</p>` : "")
+    + (r.dropped ? `<p class="muted">${r.dropped === 1 ? "1 of these sentences is" : r.dropped + " of these sentences are"} in the program's own wording, because the model's version did not pass the check against the sources.</p>` : "")
     + (r.next_steps.length ? `<h3>Next steps</h3>${list(r.next_steps.map(line))}` : "")
     + (r.not_found_notes.length ? `<h3>What could not be found</h3>${list(r.not_found_notes.map(n => esc(n.text)))}` : "")
     + `<p class="muted">Summary written by ${esc(r.model)}. A sentence is shown only when it passes a check against the sources it cites.</p>`;
