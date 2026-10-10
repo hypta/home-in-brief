@@ -413,7 +413,7 @@ def _topics(req: ReportRequest, ev: Evidence, kb_items: dict[str, dict]) -> list
         if yb and yb.status in MISSING and yb.reason == COUNCIL_REFUSED and uy is None:
             # Every live report has this: one short optional fact (not a must-mention), not a "not checked" topic.
             out.append(_Topic(O_MISSING, P_EXTRA, "council_not_readable").set(
-                "Council records could not be read from our server, so the year built is unknown.",
+                "Council records could not be read from our server, so the year built is unknown; you can enter it in the form.",
                 [yb.source_id or "ac_property_page"]))
             yb = None
         if title and title.status in MISSING:
