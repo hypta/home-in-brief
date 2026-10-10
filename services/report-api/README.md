@@ -58,7 +58,8 @@ Request: the three documents plus `question` (1-1000 characters) and `history` (
 `{role: "user"|"assistant", text}`, text at most 2000 characters; web sends the last 3 turns). No server state.
 Query `refusal_mode`: `exempt` (default) or `strict`.
 
-Response 200: `{language, answer: [{text, source_ids}], out_of_scope, user_supplied, links, dropped}`.
+Response 200: `{language, answer: [{text, source_ids}], out_of_scope, user_supplied, links, dropped, warnings}`.
+`warnings` is `[]` except `rules_rerun_unavailable` (mock mode answered from the input RulesOutput).
 1 or more passing sentences gives 200 (at most 3); 0 gives 502 `validation_failed`.
 
 Steps (INTERFACE_DRAFT 5 and 6.1):
@@ -71,11 +72,20 @@ Steps (INTERFACE_DRAFT 5 and 6.1):
    negation word (`if`, `not`, `如果`, `假如`, `不是`, ...) gives no value. Logged as `user_supplied_ignored`.
 3. Out of scope: the answer is one fixed English refusal chosen by code, translated by a Gemini call that
    sees only that sentence (English is kept if the translation has digits, URLs or is empty). `links` are
-   the suggested PropertyContext link ids, or all of them. `exempt`: the refusal has `source_ids: []` and skips
+   the suggested PropertyContext link ids; if Gemini suggests none, code picks at most 2 by question type
+   (valuation or sale: `homes`, `oneroof`, `council_valuation`; flooding: `council_flood_viewer`,
+   `council_geomaps`; other hazards: `council_geomaps`, `council_flood_viewer`; anything else: `council_geomaps`),
+   keeping only ids PropertyContext has (else its first link). `exempt`: the refusal has `source_ids: []` and skips
    the validator; `strict`: it goes through the validator, is dropped, and the response is 502.
 4. Merge: values only add to `user_inputs.chat_supplied`. A field PropertyContext has with status `found`
-   wins: the value is not used, it is still returned in `user_supplied`, and the answer says the council
-   data differs (code adds a fixed sentence citing the council source if the model's answer does not).
+   wins: the value is not used and is still returned in `user_supplied`. Code writes the first answer
+   sentence comparing both values and cites the field's `source_id`, e.g. `你提供的建造年份是 1985 年；市議會資料記錄為
+   1990 年代（1990–1999）。以下說明以市議會資料為準。` / "You gave the year built as 1985; the council records the 1990s
+   (1990–1999), and this answer uses the council's record." A user year inside the council decade is not a
+   conflict: `你提供的 1998 年落在市議會資料記錄的 1990 年代（1990–1999）內。` Cladding is handled the same way when
+   the property has a value. **Program-sentence rule:** this sentence runs through the same checks as any
+   answer sentence, except that the user's year is an allowed number for the cited field in this sentence
+   only. Gemini is told the comparison is already stated and never to write the user's value.
    When a used value is new, report-api calls `POST {RULES_API_URL}/v1/rules` (ID token for `https://`) and
    uses the new RulesOutput; its `kb_items_from_user_input` are the items that depend on the user's value.
 5. Gemini call 2 (answer) from a case-data prompt; `question` and `history` (including assistant turns) are
@@ -94,7 +104,15 @@ Steps (INTERFACE_DRAFT 5 and 6.1):
    Gemini, falling back to English.
 
 Time: one budget, `REQUEST_DEADLINE_S`; each Gemini call gets at most `GEMINI_TIMEOUT_S` and what is left;
-the rules re-run at most 5 s. Mock mode does not cover the follow-up yet.
+the rules re-run at most 5 s.
+
+Mock (`REPORT_MOCK=true`, no Gemini call, for front-end work without a key): code classifies the question.
+Out-of-scope keywords (school, zone, commute, crime, neighbour, traffic, 學區, 通勤, 治安, ...; not when the
+question names a hazard) give the refusal (Chinese text for Chinese questions) and the link fallback. A year
+or cladding goes through the same checks, merge and rules re-run; if rules-api is unavailable the input
+RulesOutput is used and `warnings` has `rules_rerun_unavailable`. The answer is the comparison sentence (if
+any) plus the `claim_en` of each item the user's value selected, verbatim, validated and prefixed. Any other
+question gets one fixed mock sentence citing a PropertyContext source.
 
 ```
 curl -s 'localhost:8090/v1/followup?refusal_mode=exempt' -H 'content-type: application/json' \
