@@ -114,6 +114,11 @@ CHECKS = {
         ("N", "kb_monolithic_cladding"),
     ],
 }
+# case1 with the user's 1998 + monolithic (inputs_council_off/case1_filled): case1's checks plus the leaky-building
+# user fact (must, prefixed) and both triggered items in next steps
+CHECKS["case1_filled"] = CHECKS["case1"] + [
+    ("S", PREFIX + r".*leaky", ["kb_monolithic_cladding"]), ("N", "kb_monolithic_cladding"), ("N", "kb_leaky_build_era"),
+]
 MANUAL = [
     "Topic order follows RUBRIC 1 (hazards, lending, FHL, title, non-residential use, build era, not checked).",
     "Plain language; LVR and DTI explained once; one topic per sentence.",
@@ -211,9 +216,13 @@ def main() -> int:
                     "uses the checks of case1")
     ap.add_argument("--out", default=str(ROOT / "out" / "golden" / "eval"))
     ap.add_argument("--followup", action="store_true", help="real follow-up questions for case1 and case5")
+    ap.add_argument("--questions", nargs="*", help="with --followup: these questions instead of the default three; "
+                    "--inputs and --cases pick the cases")
     args = ap.parse_args()
     if args.followup:
-        return followup_eval(Path(args.out))
+        questions = [(f"q{n}", q) for n, q in enumerate(args.questions, 1)] if args.questions else FOLLOWUP_QUESTIONS
+        inputs = Path(args.inputs) if args.questions else FIXTURES
+        return followup_eval(Path(args.out), inputs, args.cases or ["case1", "case5"], questions)
 
     inputs = Path(args.inputs)
     cases = args.cases or sorted(p.stem for p in inputs.glob("*.json") if p.stem.split("_")[0] in CHECKS)
@@ -235,7 +244,7 @@ def main() -> int:
                 row["passed"] = sum(s["text"] not in fixed for s in rep["summary"])
                 row["dropped"] = rep["dropped"]
                 row["hard_violations"] = hard_checks(req, rep, data.items, ev)
-                row["rubric"] = rubric(case.split("_")[0], rep, data.items)
+                row["rubric"] = rubric(case if case in CHECKS else case.split("_")[0], rep, data.items)
             else:
                 row["error"] = rep.get("error", {}).get("code")
             if dbg:
@@ -336,16 +345,16 @@ FOLLOWUP_QUESTIONS = [
 ]
 
 
-def followup_eval(out: Path) -> int:
-    """Case1 and case5, three questions each, through followup.answer_followup (real Gemini; the rules-api
-    re-run goes to RULES_API_URL). Writes out/golden/eval/followup_rewrite_<ts>.json."""
+def followup_eval(out: Path, inputs: Path = FIXTURES, cases=("case1", "case5"), questions=None) -> int:
+    """Each case and question (default: case1 and case5, three questions) through followup.answer_followup (real
+    Gemini; the rules-api re-run goes to RULES_API_URL). Writes out/golden/eval/followup_rewrite_<ts>.json."""
     from app import followup
 
     rows = []
-    for case in ("case1", "case5"):
-        d = json.loads((FIXTURES / f"{case}.json").read_text(encoding="utf-8"))
+    for case in cases:
+        d = json.loads((inputs / f"{case}.json").read_text(encoding="utf-8"))
         base = {k: d[k] for k in ("property_context", "user_inputs", "rules_output")}
-        for qid, q in FOLLOWUP_QUESTIONS:
+        for qid, q in questions or FOLLOWUP_QUESTIONS:
             dbg: dict = {}
             t0 = time.monotonic()
             try:
@@ -356,7 +365,8 @@ def followup_eval(out: Path) -> int:
                 resp, status = {"error": {"code": e.code, "message": e.message}}, e.status
             row = {"case": case, "question_id": qid, "question": q, "status": status,
                    "seconds": round(time.monotonic() - t0, 2), "response": resp,
-                   "rewrite": dbg.get("rewrite"), "composed": dbg.get("composed"), "attempts": dbg.get("attempts")}
+                   "rewrite": dbg.get("rewrite"), "composed": dbg.get("composed"), "attempts": dbg.get("attempts"),
+                   "program": dbg.get("program")}
             if dbg.get("composed"):
                 drafts = {f["id"]: f["draft"] for f in dbg.get("facts", [])}
                 row["similarity"] = [round(difflib.SequenceMatcher(

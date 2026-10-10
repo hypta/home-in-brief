@@ -383,6 +383,40 @@ def mock_answer(ev: Evidence, kb_items: dict[str, dict], used: dict) -> tuple[li
     return passed, dropped
 
 
+# ---- program facts (prompt.program_facts): shown as their drafts, never rewritten ------------------
+# Questions about a field, for the safety net when the model names no program fact for it. Any language is
+# understood by the model; these cover the common English and Chinese wordings of the demo questions.
+_FIELD_Q = {
+    "cladding": re.compile(r"cladding|exterior|outside walls?|\bwalls?\b|weatherboard|stucco|plaster|monolithic|"
+                           r"roughcast|brick|leaky|外牆|牆|漏水", re.I),
+    "year_built": re.compile(r"\bbuilt\b|\bbuild\b|year built|how old|\bage\b|decade|建造|屋齡|哪一年蓋|幾年蓋", re.I),
+    "last_sale": re.compile(r"last sale|last sold|sale price|sold for|成交", re.I),
+}
+
+
+def program_sentences(fs: list, named: list[str], question: str, ev: Evidence) -> list[Sentence]:
+    """The drafts of the program facts the model named, plus (safety net) the program fact of a field the
+    question asks about; each checked by prompt.check_program and prefixed when it states what the user entered."""
+    by_id = {f.id: f for f in fs if f.program}
+    ids = [i for i in named if i in by_id]
+    for f in by_id.values():
+        field = f.topic.removeprefix("program:")
+        rx = _FIELD_Q.get(field)
+        if rx and rx.search(question) and f.id not in ids:
+            ids.append(f.id)
+    out = []
+    for i in dict.fromkeys(ids):
+        f = by_id[i]
+        s = Sentence(text=f.draft(), source_ids=list(f.source_ids))
+        fails = facts_prompt.check_program(s, ev, f.slots) + (
+            [NON_ENGLISH] if _CJK_RE.search(s.text) else [])
+        if fails:
+            log.warning("program sentence %s dropped: %s", i, ",".join(fails))
+            continue
+        out.append(add_prefix(s) if f.user else s)
+    return out
+
+
 # ---- main flow ----------------------------------------------------------------------------------
 def answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
                     generate: Optional[JsonGenerator] = None, debug: Optional[dict] = None,
@@ -509,9 +543,11 @@ def answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
         def final(s: Sentence) -> list[str]:
             return check_answer(s, ev)
 
+        prog_ids = {f.id for f in fs if f.program}
         base = fp.answer_prompt(eff, ev, data.items, titles, req.question, history, notes, fs)
         prompt = base
         best: Optional[list] = None
+        named: list[str] = []
         for attempt in range(2):
             if attempt and clock.left() < 6.0:
                 break
@@ -523,21 +559,30 @@ def answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
                 last = e
                 prompt = base
                 continue
-            checked = [check_rewrite(s, fs, ev, final=final) for s in out.answer]
+            # a sentence naming a program fact is replaced by that fact's draft (program_sentences)
+            prog_named = [i for s in out.answer for i in s.fact_ids if i in prog_ids]
+            rewrites = [s for s in out.answer if not set(s.fact_ids) & prog_ids]
+            checked = [check_rewrite(s, fs, ev, final=final) for s in rewrites]
             debug["attempts"].append([{"text": s.text, "fact_ids": s.fact_ids, "filled": r.filled, "fails": r.fails}
-                                      for s, r in zip(out.answer, checked)])
+                                      for s, r in zip(rewrites, checked)]
+                                     + [{"program": i} for i in prog_named])
             for r in checked:
                 if r.fails:
                     log.info("dropped answer sentence: %s", ",".join(r.fails))
             out_links = out.links
-            if best is None or sum(r.sentence is not None for r in checked) > sum(r.sentence is not None for r in best):
-                best = checked
-            if any(r.sentence is not None for r in checked):
+            score = sum(r.sentence is not None for r in checked) + len(prog_named)
+            if best is None or score > sum(r.sentence is not None for r in best) + len(named):
+                best, named = checked, prog_named
+            if score:
                 break
             last = ReportError(502, "validation_failed", "No answer sentence passed validation.")
             prompt = base + ("\nYour previous answer could not be used (" +
                              ", ".join(sorted({f for r in checked for f in r.fails} or {"no sentences"})) +
                              "). Follow every rule exactly.\n")
+        prog = program_sentences(fs, named, req.question, ev)[:limit]
+        debug["program"] = [s.text for s in prog]
+        passed.extend(prog)
+        limit -= len(prog)
         items = rewrite.compose(best or [], fs, limit, add_musts=False, sort=False,
                                 check_draft=lambda s: check_answer(s, ev)) if limit else []
         dropped = sum(r.sentence is None for r in best or [])

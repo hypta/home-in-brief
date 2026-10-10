@@ -60,6 +60,13 @@ These codes are deliberately not in CODES.md (web's tests require page text for 
    `topic`, `priority`, `user` (relies on chat-supplied facts) and `must` (a RUBRIC 8 must-mention; at most 5).
    Optional facts add lending and user-input meaning without any calculated value (household type used for the
    First Home Loan cap, a self-entered rate) and topics beyond the 5-sentence cap.
+   A user fact that cites a leaky-building item the user's own input triggered (`kb_leaky_build_era`,
+   `kb_monolithic_cladding` in `kb_items_from_user_input`) ranks right after the title, so it is always a
+   must-mention with the prefix; with the council year unknown, a 1998 + monolithic input becomes one sentence
+   naming both ("the year you gave and the monolithic cladding are both discussed in Settled.govt.nz's guidance
+   on leaky buildings; public data could not confirm them"). The non-residential use sentence it pushes out is
+   merged into the title sentence (without the title's KB clause when needed to stay within 25 words), so the
+   summary stays at 5 sentences. `next_steps` keeps those triggered items within the 6 shown (`assemble.py`).
 2. **Rewrite**: Gemini returns `{"summary": [{"text", "fact_ids"}]}`, 3-5 sentences, and may merge facts. It never
    sees a value: digits, years, amounts, title names and the council's land-use words are written only as
    placeholders. Code fills them in (`51.2%`, `$95,000`, `1990s`, `Freehold`).
@@ -152,6 +159,19 @@ Steps (INTERFACE_DRAFT 5 and 6.1):
    validator: only the host of a source the sentence cites passes ("Settled.govt.nz says ..." citing a Settled KB
    item). One retry when nothing passes and time allows.
 7. Sentences citing a `kb_items_from_user_input` item get the prefix "Based on what you told us, " from code.
+8. **Program facts** (`prompt._program_topics`, `followup.program_sentences`): a property field no public source
+   gives us (cladding: no free source; last sale: no licensed source) has no `source_id` to cite, and a year or
+   cladding the user entered earlier is not a property value. For these the fact list has program facts: "No free
+   public source records the cladding, so it could not be confirmed; you can enter it in the form if you know it.",
+   "... the cladding you gave is monolithic, which Settled.govt.nz discusses in its guidance on leaky buildings;
+   public data could not confirm it." (cites `kb_monolithic_cladding`), "... the cladding you gave is brick; ..."
+   (no source), "... the year built you gave is 1998, ...". Gemini only picks them by id; the answer shows the
+   draft, never a rewrite. A safety net adds the program fact of a field the question names (cladding, year built,
+   last sale) when Gemini picks none. Checks: `prompt.check_program` = `check_sentence` with the user's year
+   allowed under the cited ids, and a sentence with no source exempt from the source-id rule only (as the
+   `not_found_notes` and no-loan sentences are). Fields the council page could not be read for (floor area,
+   local board, building site coverage) get ordinary cited facts ("Council records could not be read from our
+   server, so the floor area is unknown.").
 
 Time: one budget, `REQUEST_DEADLINE_S`; each Gemini call gets at most `GEMINI_TIMEOUT_S` and what is left;
 the rules re-run at most 5 s.

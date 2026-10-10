@@ -437,8 +437,10 @@ _NEG_RE = re.compile(r"\b(?:not|no|never|neither|nor|without|cannot)\b|n't\b", r
 # ("your income is within the cap, making it exempt") that its facts do not have.
 _SAY_RE = re.compile(r"\b(?:says?|said|states?|stated|stating|notes?|noted|noting|explains?|explained|describes?|"
                      r"described|discusses|discussed|according to|reports?|reported|warns?|advises?)\b", re.I)
+# ", as no debts were entered" is a cause too (REVIEW_cladding_fix.md); "as you entered", "describes it as" are not
 _CAUSE_RE = re.compile(r"\b(?:because|so|therefore|thus|hence|since|making|makes|means?|meaning|as a result|due to|"
-                       r"leads? to|results? in)\b", re.I)
+                       r"leads? to|results? in|(?<=, )as(?=\s+(?:no|there|its?|the|your|they|this|these|those)\b))\b",
+                       re.I)
 _CJK_NEG_RE = re.compile(r"[不沒没未無无非否]")
 _CJK_RE = re.compile(r"[぀-ヿ㐀-鿿가-힯]")
 

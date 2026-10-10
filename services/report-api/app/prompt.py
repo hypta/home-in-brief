@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import replace
 from decimal import Decimal
 from typing import Any, Optional
 
@@ -17,8 +18,8 @@ from b_common.report_schemas import ReportRequest, Sentence
 
 from . import facts
 from .facts import DRAFT_ID, Fact, Slot
-from .validator import (MAX_WORDS, PREFIX, Evidence, check_sentence, negations, publishers_in, qualifiers_in, strip_prefix,
-                        terms_in, to_decimal)
+from .validator import (MAX_WORDS, NO_SOURCE_IDS, PREFIX, Allowed, Evidence, check_sentence, negations, publishers_in,
+                        qualifiers_in, strip_prefix, terms_in, to_decimal)
 
 REWRITE_MAX_WORDS = MAX_WORDS - 3  # asked of Gemini; the validator allows MAX_WORDS
 
@@ -101,10 +102,13 @@ MERGED_MAX_WORDS = MAX_WORDS - 1  # a merged draft leaves one word of slack
 # use, build era with a KB note or a user fact, not checked), then High landslide ratings, other hazard layers, a
 # bare council decade and an unflagged lending sentence. Facts outside the cap, and the user-input meaning facts,
 # are optional extras for Gemini (must=False).
+# A user fact that triggered a leaky-building KB item (P_USER_LEAKY) ranks right after the title: it is a must-mention,
+# and a non-residential use sentence it pushes out is merged into the title sentence when that fits.
 (O_PRIMARY, O_SECONDARY, O_LANDSLIDE, O_LENDING, O_DEBTS, O_FHL, O_TITLE, O_USE, O_ERA, O_USER,
  O_MISSING) = range(11)
-P_HAZARD, P_LENDING, P_FHL, P_TITLE, P_USE, P_ERA, P_MISSING, P_LANDSLIDE, P_SECONDARY, P_ERA_PLAIN, \
-    P_LENDING_PLAIN, P_EXTRA = range(12)
+P_HAZARD, P_LENDING, P_FHL, P_TITLE, P_USER_LEAKY, P_USE, P_ERA, P_MISSING, P_LANDSLIDE, P_SECONDARY, P_ERA_PLAIN, \
+    P_LENDING_PLAIN, P_EXTRA = range(13)
+LEAKY_KB = ("kb_leaky_build_era", "kb_monolithic_cladding")
 
 
 class _Topic:
@@ -115,6 +119,7 @@ class _Topic:
         self.slots: dict[str, Slot] = {}
         self.clause: Optional[str] = None  # lower-case form appended to another sentence when over the cap
         self.keep: list[str] = []          # extra phrases a rewrite must keep, in this order
+        self.plain: Optional[tuple[str, list[str]]] = None  # (say, cite) without the KB clause, for merging
 
     def slot(self, name: str, value: Any, kind: str, what: str, source_id: str, **kw) -> str:
         self.slots[name] = Slot(name, value, kind, what, source_id, **kw)
@@ -322,6 +327,8 @@ def _topics(req: ReportRequest, ev: Evidence, kb_items: dict[str, dict]) -> list
             say = f"LINZ records the title as {v}"
             say += "; " + facts.KB_CLAUSE[kb_title[0]] + "." if kb_title else "."
             out.append(t.set(say, ["linz_titles"] + kb_title, keep=["title"]))
+            if kb_title:
+                t.plain = (f"LINZ records the title as {v}.", ["linz_titles"])
         elif extra.get("linz_types"):
             t = _Topic(O_TITLE, P_TITLE, "title")
             v = t.slot("linz_types", " and ".join(extra["linz_types"]), "text", "the title types LINZ lists",
@@ -343,6 +350,7 @@ def _topics(req: ReportRequest, ev: Evidence, kb_items: dict[str, dict]) -> list
             a = t.slot("use", vals[0], "text", "the council valuation's description", "ac_valuation", strict=True)
             say = f"The council valuation describes this property as {a}."
         out.append(t.set(say, ["ac_valuation"], keep=["council valuation"]))
+        t.clause = say[:1].lower() + say[1:].rstrip(".")
 
     # build era and user-supplied facts
     chat = req.chat_supplied()
@@ -352,6 +360,7 @@ def _topics(req: ReportRequest, ev: Evidence, kb_items: dict[str, dict]) -> list
     yb_found = bool(yb and yb.status == "found" and yb.value is not None)
     clad = chat.get("cladding")
     clad_ok = isinstance(clad, str) and "monolithic" in clad.lower() and "kb_monolithic_cladding" in sel
+    user_leaky = {i for i in LEAKY_KB if i in sel and i in ev.user_kb}
     year_user = None  # (clause, slots) for the user-year sentence, when there is one
     if yb_found:
         is_decade = (isinstance(decade, list) and len(decade) == 2 and all(isinstance(x, int) for x in decade)
@@ -379,8 +388,20 @@ def _topics(req: ReportRequest, ev: Evidence, kb_items: dict[str, dict]) -> list
             if inside:
                 year_user = (_Topic(O_USER, P_ERA, "user_year", user=True), "the year you gave falls in the same decade")
     elif uy is not None:
-        year_user = (_Topic(O_USER, P_ERA, "user_year", user=True),
-                     "the year you gave could not be checked against council records")
+        u = _Topic(O_USER, P_ERA, "user_year", user=True)
+        if "kb_leaky_build_era" in user_leaky and clad_ok:
+            # both leaky-building items from what the user told us: one sentence names both (RUBRIC 3, user facts)
+            out.append(u.set("The year you gave and the monolithic cladding are both discussed in Settled.govt.nz's "
+                             "guidance on leaky buildings; public data could not confirm them.",
+                             ["ac_property_page", "kb_leaky_build_era", "kb_monolithic_cladding"],
+                             keep=["monolithic cladding", "leaky buildings", "could not confirm them"]))
+            u.topic, clad_ok = "user_year_cladding", False
+        elif "kb_leaky_build_era" in user_leaky:
+            out.append(u.set("The year you gave falls in a period covered by Settled.govt.nz's guidance on leaky "
+                             "buildings; council records could not confirm it.",
+                             ["ac_property_page", "kb_leaky_build_era"], keep=["leaky buildings", "could not confirm it"]))
+        else:
+            year_user = (u, "the year you gave could not be checked against council records")
     clad_text = "the cladding is monolithic, which Settled.govt.nz discusses in its leaky-building guidance"
     if year_user:
         u, clause = year_user
@@ -397,6 +418,9 @@ def _topics(req: ReportRequest, ev: Evidence, kb_items: dict[str, dict]) -> list
         out.append(_Topic(O_USER, P_ERA, "user_cladding", user=True).set(
             clad_text[:1].upper() + clad_text[1:] + "; public data could not confirm it.", ["kb_monolithic_cladding"],
             keep=["is monolithic", "discusses"]))
+    for t in out:  # a user fact that cites a leaky-building item the user's input triggered is a must-mention
+        if t.user and set(t.cite) & user_leaky:
+            t.prio = P_USER_LEAKY
 
     # the most important things that could not be checked
     nomatch = [n for n in ("cv", "year_built") if pf.get(n) and pf[n].status in MISSING
@@ -440,14 +464,19 @@ def _select(out: list[_Topic]) -> tuple[list[_Topic], list[_Topic]]:
     for t in rest:
         merged_into = None
         if t.clause:
-            for host in sorted((k for k in keep if k.order in (O_USE, O_TITLE)), key=lambda k: -k.order):
-                merged = host.say.rstrip(".") + "; " + t.clause + "."
-                probe = _Topic(host.order, host.prio, host.topic)
-                probe.slots, probe.say = host.slots, merged
-                if words(probe.rendered()) <= MERGED_MAX_WORDS:
-                    host.say = merged
-                    host.cite = list(dict.fromkeys(host.cite + t.cite))
-                    merged_into = host
+            for host in sorted((k for k in keep if k.order in (O_USE, O_TITLE) and k is not t), key=lambda k: -k.order):
+                # the host as it is, else without its KB clause (title), so a must-mention still fits
+                for say, cite in [(host.say, host.cite)] + ([host.plain] if host.plain else []):
+                    merged = say.rstrip(".") + "; " + t.clause + "."
+                    probe = _Topic(host.order, host.prio, host.topic)
+                    probe.slots, probe.say = {**host.slots, **t.slots}, merged
+                    if words(probe.rendered()) <= MERGED_MAX_WORDS:
+                        host.say, host.slots, host.plain = merged, probe.slots, None
+                        host.cite = list(dict.fromkeys(cite + t.cite))
+                        host.keep = list(dict.fromkeys(host.keep + t.keep))
+                        merged_into = host
+                        break
+                if merged_into:
                     break
         if not merged_into:
             optional.append(t)
@@ -527,7 +556,17 @@ FIELD_FACTS = {  # property field -> (sentence with {v}, slot kind, label)
 }
 FIELD_LABELS = {"cv": "council valuation", "title_type": "title type", "year_built": "year built",
                 "cladding": "cladding", "last_sale": "last sale", "annual_rates": "annual rates",
-                "land_value": "land value", "floor_area_m2": "floor area", "land_area_m2": "land area"}
+                "land_value": "land value", "floor_area_m2": "floor area", "land_area_m2": "land area",
+                "local_board": "local board", "building_site_coverage_m2": "building site coverage"}
+# Program facts (follow-up): a field no public source could give us, or one the user entered and we could not check.
+# They state that, and what the user entered, so a question about the field is answered instead of skipped. Some
+# have no source id to cite (cladding, last sale: no free or licensed source), so they are never rewritten: the
+# follow-up shows the draft, checked by check_program like the not_found_notes wording it follows (assemble.py).
+NO_SOURCE_TEXT = {
+    "cladding": "No free public source records the cladding, so it could not be confirmed; you can enter it in the "
+                "form if you know it.",
+    "last_sale": "We have no licensed source for sale prices, so the last sale could not be checked.",
+}
 
 
 def _claim_fact(t: _Topic, kb_id: str, claim: str) -> str:
@@ -546,6 +585,7 @@ def followup_facts(req: ReportRequest, ev: Evidence, kb_items: dict[str, dict],
     layers that could not be checked, other hazard layers, and the value the user just told us (only with the KB
     items it selected, P-V3). None of these is a must-mention."""
     base = fact_list(req, ev, kb_items)
+    chat = req.chat_supplied()
     extra: list[_Topic] = []
     for i in req.selected_kb_ids():
         claim = (kb_items.get(i) or {}).get("claim_en")
@@ -563,9 +603,14 @@ def followup_facts(req: ReportRequest, ev: Evidence, kb_items: dict[str, dict],
             v = t.slot(name, f.value, kind, f"the {name.replace('_', ' ')} from the council records", f.source_id,
                        label=label, strict=kind == "text")
             extra.append(t.set(text.format(v=v), [f.source_id]))
-        elif f.status in MISSING and name in FIELD_LABELS and f.reason != COUNCIL_REFUSED:
-            extra.append(_Topic(92, P_EXTRA, "missing:" + name).set(
-                f"The {FIELD_LABELS[name]} could not be checked from public records.", [f.source_id]))
+        elif f.status in MISSING and name in FIELD_LABELS and name not in chat:
+            if f.reason != COUNCIL_REFUSED:
+                text = f"The {FIELD_LABELS[name]} could not be checked from public records."
+            elif name == "year_built":
+                continue  # the summary's council_not_readable fact says it, with the form hint
+            else:
+                text = f"Council records could not be read from our server, so the {FIELD_LABELS[name]} is unknown."
+            extra.append(_Topic(92, P_EXTRA, "missing:" + name).set(text, [f.source_id]))
     primary = set(PRIMARY_ORDER)
     for h in req.hazards():
         if not h.source_id or h.layer in primary or h.layer.startswith("landslide"):
@@ -599,8 +644,72 @@ def followup_facts(req: ReportRequest, ev: Evidence, kb_items: dict[str, dict],
         # banned class word) is left out; long KB claims stay in, for Gemini to shorten
         if check_sentence(Sentence(text=t.rendered(), source_ids=t.cite), ev, max_words=None):
             continue
-        fid = f"F{len(out) + 1}"
-        text = _DRAFT_RE.sub(lambda m: "{{" + fid + "." + m.group(1) + "}}", t.say)
-        out.append(Fact(id=fid, text=text, source_ids=t.cite, slots=dict(t.slots), topic=t.topic, priority=t.prio,
-                        user=t.user, must=False, order=t.order, keep=list(t.keep)))
+        out.append(_fact(t, len(out) + 1))
+    for t in _program_topics(req, ev, kb_items, used or {}):
+        if not check_program(Sentence(text=t.rendered(), source_ids=t.cite), ev, t.slots):
+            out.append(_fact(t, len(out) + 1, program=True))
     return out
+
+
+def _fact(t: _Topic, n: int, program: bool = False) -> Fact:
+    fid = f"F{n}"
+    text = _DRAFT_RE.sub(lambda m: "{{" + fid + "." + m.group(1) + "}}", t.say)
+    return Fact(id=fid, text=text, source_ids=t.cite, slots=dict(t.slots), topic=t.topic, priority=t.prio,
+                user=t.user, must=False, order=t.order, keep=list(t.keep), program=program)
+
+
+def _program_topics(req: ReportRequest, ev: Evidence, kb_items: dict[str, dict], used: dict[str, Any]) -> list[_Topic]:
+    """Program facts for the follow-up (see NO_SOURCE_TEXT): a field with no source to cite, and a year built or
+    cladding the user entered earlier while the property field is missing (it states the value; user=True). A value
+    stated in this very question is left to the user_said fact."""
+    chat = {k: v for k, v in req.chat_supplied().items() if k not in used}
+    user_kb = {topic: [i for i in sorted(ev.user_kb) if (kb_items.get(i) or {}).get("topic") == topic]
+               for topic in ("build_era", "cladding")}
+    out = []
+    for name, f in req.property_fields().items():
+        if f.status not in MISSING:
+            continue
+        given = chat.get(name) if name in ("year_built", "cladding") else None
+        t = _Topic(95, P_EXTRA, "program:" + name, user=given is not None)
+        if name == "year_built" and given is not None:
+            m = re.fullmatch(r"(\d{3}0)s", str(given))
+            if not m and not isinstance(given, int):
+                continue
+            v = t.slot("user_year", int(m.group(1)) if m else given, "decade" if m else "year",
+                       "the year built the user entered (unverified)", f.source_id or "ac_property_page")
+            if "kb_leaky_build_era" in user_kb["build_era"]:  # rules-api matched the year to the leaky era
+                say = (f"The year built you gave is {'the ' if m else ''}{v}, a period Settled.govt.nz's guidance on "
+                       "leaky buildings covers; council records could not confirm it.")
+            else:
+                why = ("council records could not be read from our server to confirm it"
+                       if f.reason == COUNCIL_REFUSED else "council records could not confirm it")
+                say = f"The year built you gave is {'the ' if m else ''}{v}; {why}."
+            out.append(t.set(say, [f.source_id or "ac_property_page"] + user_kb["build_era"]))
+        elif name == "cladding" and given is not None:
+            if "kb_monolithic_cladding" in user_kb["cladding"]:
+                v = t.slot("user_cladding", "monolithic", "text", "the cladding the user entered (unverified)",
+                           "kb_monolithic_cladding")
+                say = (f"The cladding you gave is {v}, which Settled.govt.nz discusses in its guidance on leaky "
+                       "buildings; public data could not confirm it.")
+            else:
+                label = cladding_table.label(str(given)) or str(given)
+                v = t.slot("user_cladding", label.lower(), "text", "the cladding the user entered (unverified)",
+                           (user_kb["cladding"] or [""])[0])
+                say = (f"The cladding you gave is {v}; no free public source records the cladding, so public data "
+                       "could not confirm it.")
+            out.append(t.set(say, user_kb["cladding"]))
+        elif not f.source_id and name in NO_SOURCE_TEXT:
+            out.append(t.set(NO_SOURCE_TEXT[name], []))
+    return out
+
+
+def check_program(s: Sentence, ev: Evidence, slots: Optional[dict[str, Slot]] = None) -> list[str]:
+    """validator.check_sentence for a program fact: a year the user entered is allowed under the ids the sentence
+    cites (as for the follow-up comparison sentence), and a sentence with no source to cite is exempt from the
+    source-id rule (like the not_found_notes and no-loan sentences)."""
+    allowed = {k: list(v) for k, v in ev.allowed.items()}
+    years = [to_decimal(sl.value) for sl in (slots or {}).values() if sl.kind in ("year", "decade")]
+    for sid in s.source_ids:
+        allowed.setdefault(sid, []).extend(Allowed(y) for y in years if y is not None)
+    fails = check_sentence(s, replace(ev, allowed=allowed))
+    return [f for f in fails if not (f == NO_SOURCE_IDS and not s.source_ids)]

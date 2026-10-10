@@ -177,7 +177,7 @@ def test_chinese_question_with_year_1997_is_extracted_and_answered_in_english(mo
 
     monkeypatch.setattr(followup, "call_rules", rules)
     kw = {"rules_output": _rules_with_leaky(b), "used": {"year_built": 1997}}
-    year, era = fid("case1", "The year built you gave", **kw), fid("case1", "leaky buildings", **kw)
+    year, era = fid("case1", "The year built you gave", **kw), fid("case1", "mostly built", **kw)
     gen = fake(cls(year_built="1997"),
                [ans(("Settled.govt.nz discusses homes built in {{%s.user_year}} in its leaky-building guidance."
                      % year, [year, era]), FLOOD_EN)])
@@ -201,7 +201,7 @@ def test_supplied_year_english_prefix(monkeypatch):
     b = body("case1")
     monkeypatch.setattr(followup, "call_rules", lambda pc, ui, t: _rules_with_leaky(b))
     kw = {"rules_output": _rules_with_leaky(b), "used": {"year_built": 1997}}
-    year, era = fid("case1", "The year built you gave", **kw), fid("case1", "leaky buildings", **kw)
+    year, era = fid("case1", "The year built you gave", **kw), fid("case1", "mostly built", **kw)
     monkeypatch.setattr(followup, "gemini_json", fake(cls(year_built="1997"), [ans(
         ("Settled.govt.nz discusses homes built in {{%s.user_year}} in its leaky-building guidance." % year,
          [year, era]))]))

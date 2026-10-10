@@ -31,6 +31,10 @@ def test_every_fact_text_passes_as_its_own_rewrite(case, followup):
     fs, ev = facts(case, followup)
     assert len({f.id for f in fs}) == len(fs)
     for f in fs:
+        if f.program:  # never rewritten: the draft is shown as is, checked by check_program
+            assert prompt.check_program(Sentence(text=f.draft(), source_ids=f.source_ids), ev, f.slots) == []
+            assert not any(c.isdigit() for c in prompt.facts.template_words(f.text)), f.text
+            continue
         r = V.check_rewrite({"text": f.text, "fact_ids": [f.id]}, fs, ev, max_words=None)
         assert r.fails == [], (f.id, f.text, r.fails)
         assert r.sentence.source_ids == f.source_ids
@@ -182,11 +186,12 @@ def test_case1_hazard_rewrite_and_formats():
 
 def test_user_prefix_written_by_the_model_is_removed_and_flagged_by_the_fact():
     fs, ev = facts("edge4")
+    clad = next(f for f in fs if f.topic == "user_cladding")
     r = V.check_rewrite({"text": "Based on what you told us, the cladding is monolithic, which Settled.govt.nz "
                                  "discusses in leaky guidance, though public data could not confirm it.",
-                         "fact_ids": ["F6"]}, fs, ev)
+                         "fact_ids": [clad.id]}, fs, ev)
     assert r.fails == [] and not r.sentence.text.startswith("Based on")
-    assert fs[5].user
+    assert clad.user
 
 
 # ---- compose: fallback and must facts --------------------------------------------------------------------

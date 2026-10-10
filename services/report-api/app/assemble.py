@@ -8,6 +8,7 @@ from b_common.report_schemas import NextStep, NotFoundNote, ReportRequest, Sente
 MAX_NEXT_STEPS = 6
 MISSING = ("not_found", "unavailable")
 PRIMARY_FLOOD_LAYERS = ("flood_plain", "flood_prone_area", "coastal_inundation")
+LEAKY_KB = ("kb_leaky_build_era", "kb_monolithic_cladding")
 HAZARD_DISCLAIMER = "This does not mean there is no hazard."
 
 # ---- fixed sentences (no source id; exempt from provenance checks) ------------------------------
@@ -205,8 +206,18 @@ def next_steps(req: ReportRequest, kb_items: dict[str, dict], summary: list[Sent
             merged[text] = NextStep(text=text, source_ids=[i], kb_item=i)
     steps = list(merged.values())
 
-    if layers & set(PRIMARY_FLOOD_LAYERS):
-        idx = next((n for n, s in enumerate(steps) if "kb_flood_insurance_limit" in s.source_ids), None)
-        if idx is not None and idx >= MAX_NEXT_STEPS:
-            steps.insert(MAX_NEXT_STEPS - 1, steps.pop(idx))
+    # Items that must be shown: flood insurance when a flood layer intersects, and a leaky-building item the
+    # user's own input triggered (the summary must mention it). Each one past the cap takes the last free slot.
+    pinned = (["kb_flood_insurance_limit"] if layers & set(PRIMARY_FLOOD_LAYERS) else []) + \
+        [i for i in LEAKY_KB if i in req.kb_items_from_user_input()]
+    for kb_id in pinned:
+        idx = next((k for k, s in enumerate(steps) if kb_id in s.source_ids), None)
+        if idx is None or idx < MAX_NEXT_STEPS:
+            continue
+        free = [k for k in range(MAX_NEXT_STEPS) if not set(pinned) & set(steps[k].source_ids)]
+        if not free:
+            continue
+        item = steps.pop(idx)
+        steps.insert(MAX_NEXT_STEPS, steps[free[-1]])  # the displaced item moves just past the cap
+        steps[free[-1]] = item
     return steps[:MAX_NEXT_STEPS]

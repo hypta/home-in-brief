@@ -114,6 +114,7 @@ class Fact:
     must: bool = False            # a RUBRIC must-mention: always in the summary (draft if not rewritten)
     order: int = 0                # display order (RUBRIC 1)
     keep: list[str] = field(default_factory=list)  # extra phrases a rewrite must keep (besides validator.QUALIFIERS)
+    program: bool = False         # follow-up only: shown as its draft, never rewritten (prompt.program_facts)
 
     def draft(self) -> str:
         return fill(self.text, {self.id: self})
