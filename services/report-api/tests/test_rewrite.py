@@ -239,3 +239,19 @@ def test_user_fact_draft_is_marked_for_the_prefix():
     user = [it for it in items if it.user]
     assert [it.fact_ids for it in user] == [["F5"], ["F6"]]
     assert prompt.draft_text(fs[4]).startswith(V.PREFIX)
+
+
+def test_council_refused_year_built_is_one_short_optional_fact():
+    from conftest import body
+    from b_common.report_schemas import ReportRequest
+    from app import kb
+    from app.validator import build_evidence
+    b = body("case1")
+    b["property_context"]["property"]["year_built"].update(value=None, status="unavailable",
+                                                           reason="council_site_refuses_this_server")
+    req = ReportRequest.model_validate(b)
+    data = kb.load(req.selected_kb_ids())
+    fs = prompt.fact_list(req, build_evidence(req, data.items, data.sources.keys()), data.items)
+    hit = [f for f in fs if f.topic == "council_not_readable"]
+    assert len(hit) == 1 and not hit[0].must and len(hit[0].text.split()) <= 16
+    assert not any(f.topic == "not_checked" and "year built" in f.text for f in fs)

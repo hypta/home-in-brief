@@ -75,6 +75,10 @@ FIELD_REASON_TEXT = {
 REASON_TEXT = {
     "no_unique_council_property_match": "the council records could not be matched to a single property at this address.",
     "service_timeout": "the data service did not respond in time, so this could not be checked.",
+    # property-api reason when it skips the council property page on a cloud host (COUNCIL_PAGE=off). Neutral:
+    # the data exists, we just could not read it from here.
+    "council_site_refuses_this_server": "council property records could not be read from our server; you can "
+                                        "enter the year built and cladding in the form if you know them.",
 }
 STATUS_TEXT = {
     "not_found": "not found in the public records we checked.",

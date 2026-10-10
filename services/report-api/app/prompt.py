@@ -76,6 +76,7 @@ PRIMARY_ORDER = ("flood_plain", "flood_prone_area", "overland_flow_path", "coast
 HOUSEHOLD = {"single": "a single buyer", "single_with_dependants": "a single buyer with dependants",
              "multiple": "multiple buyers"}
 MISSING = ("not_found", "unavailable")
+COUNCIL_REFUSED = "council_site_refuses_this_server"  # property-api reason: council page not read from the cloud
 _DRAFT_RE = re.compile(r"\{\{\$\.([A-Za-z0-9_]+)\}\}")
 
 
@@ -408,6 +409,12 @@ def _topics(req: ReportRequest, ev: Evidence, kb_items: dict[str, dict]) -> list
             ["ac_valuation" if n == "cv" else "ac_property_page" for n in nomatch]))
     else:
         missing = []
+        if yb and yb.status in MISSING and yb.reason == COUNCIL_REFUSED and uy is None:
+            # Every live report has this: one short optional fact (not a must-mention), not a "not checked" topic.
+            out.append(_Topic(O_MISSING, P_EXTRA, "council_not_readable").set(
+                "Council records could not be read from our server, so the year built is unknown.",
+                [yb.source_id or "ac_property_page"]))
+            yb = None
         if title and title.status in MISSING:
             missing.append(("title type", "linz_titles"))
         if yb and yb.status in MISSING and uy is None:
@@ -555,7 +562,7 @@ def followup_facts(req: ReportRequest, ev: Evidence, kb_items: dict[str, dict],
             v = t.slot(name, f.value, kind, f"the {name.replace('_', ' ')} from the council records", f.source_id,
                        label=label, strict=kind == "text")
             extra.append(t.set(text.format(v=v), [f.source_id]))
-        elif f.status in MISSING and name in FIELD_LABELS:
+        elif f.status in MISSING and name in FIELD_LABELS and f.reason != COUNCIL_REFUSED:
             extra.append(_Topic(92, P_EXTRA, "missing:" + name).set(
                 f"The {FIELD_LABELS[name]} could not be checked from public records.", [f.source_id]))
     primary = set(PRIMARY_ORDER)

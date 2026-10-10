@@ -108,3 +108,24 @@ def test_no_loan_sentence(case, code):
 
 def test_no_loan_sentence_absent_with_a_loan():
     assert assemble.no_loan_sentence(request("case1")) is None
+
+
+REFUSED = "council_site_refuses_this_server"
+
+
+def _council_refused(case="case1"):
+    b = body(case)
+    for name in ("year_built", "floor_area_m2", "building_site_coverage_m2", "local_board"):
+        b["property_context"]["property"][name].update(value=None, status="unavailable", reason=REFUSED)
+    return ReportRequest.model_validate(b)
+
+
+def test_council_refused_reason_merges_into_one_neutral_note():
+    notes_ = [n for n in assemble.not_found_notes(_council_refused()) if n.reason == REFUSED]
+    assert len(notes_) == 1
+    n = notes_[0]
+    assert n.field == "year_built,floor_area_m2,building_site_coverage_m2,local_board"
+    assert n.text == ("Year built, floor area, building site coverage and local board: council property records "
+                      "could not be read from our server; you can enter the year built and cladding in the form "
+                      "if you know them.")
+    assert "no data" not in n.text.lower() and "not found" not in n.text.lower()
