@@ -64,7 +64,7 @@ function kbCard(k) {
   return card(s, [`Quoted: "${k.quote}"`, s.published_or_updated && "Published or updated " + s.published_or_updated]);
 }
 // The one control at the end of a line that opens its sources in place.
-const control = (cards, label) => !cards.length ? "" : `<details class="src"><summary>${label || (cards.length === 1 ? "Source" : cards.length + " sources")}</summary><ul class="cards">${cards.join("")}</ul></details>`;
+const control = (cards, label, after = "") => !cards.length ? "" : `<details class="src"><summary>${label || (cards.length === 1 ? "Source" : cards.length + " sources")}</summary><ul class="cards">${cards.join("")}</ul>${after}</details>`;
 const cite = (refs, lines) => control([].concat(refs ?? []).map(ref => card(ref, lines)));
 const kbCite = k => control([kbCard(k)]);
 
@@ -257,9 +257,16 @@ function cardsOf(s, items) {
   return s.source_ids.filter(id => !quoted.has(id)).map(id => items[id] ? kbCard(items[id]) : card(id));
 }
 // A sentence that passed the check against its sources is highlighted. A fixed sentence from the program cites none.
-function checked(s, items) {
+function checked(s, items, after) {
   const cards = cardsOf(s, items), n = cards.length;
-  return `<p class="s">${n ? `<span class="hl">${esc(s.text)}</span>` : esc(s.text)}</p>${control(cards, `Checked against ${count(n, "source")}`)}`;
+  return `<p class="s">${n ? `<span class="hl">${esc(s.text)}</span>` : esc(s.text)}</p>${control(cards, `Checked against ${count(n, "source")}`, after)}`;
+}
+// The section that holds the records behind a sentence, named by its first source: a note's topic, a hazard layer, a property record, or else the lending sources.
+const SECTION = {hazards: "the mapped hazards", facts: "this home's records", loan: "the repayment figures", notes: "the build era and title notes"};
+function jump(s, items, ctx) {
+  const id = s.source_ids[0], item = items[id];
+  const to = item ? TOPIC_BLOCK[item.topic] || "notes" : ctx.hazards.some(h => h.source_id === id) ? "hazards" : ctx.sources.some(x => x.id === id) ? "facts" : "loan";
+  return `<a class="jump" href="#sec-${to}" target="_self">See ${SECTION[to]}</a>`;
 }
 const reworded = n => !n ? "" : `<p class="muted">${n === 1 ? "1 of these sentences is" : n + " of these sentences are"} in the program's own wording, because the model's version did not pass the check against the sources.</p>`;
 
@@ -269,7 +276,7 @@ const steps = (at, failed) => `<ol class="steps" aria-label="How this summary is
   return `<li class="${mark}">${name}<span class="sr">: ${said}</span></li>`; }).join("")}</ol>`;
 
 // report-api only returns sentences that passed its check against the sources they cite.
-function summary({rules, rulesError, kb, report: r, reportError: err, done}) {
+function summary({ctx, rules, rulesError, kb, report: r, reportError: err, done, first}) {
   if (!rules) return rulesError ? steps(0, true) + `<p class="problem">The summary is unavailable until the repayment figures can be calculated.</p>`
     : steps(0) + `<p class="muted">Reading the records…</p>`;
   if (err) return err.code === "validation_failed"
@@ -277,8 +284,13 @@ function summary({rules, rulesError, kb, report: r, reportError: err, done}) {
     : steps(1, true) + `<p class="problem">The summary is unavailable right now. The rest of the report is not affected.</p><button type="button" id="retry-summary">Try again</button>`;
   if (!r) return steps(1) + `<p class="muted">Writing the summary…</p>`;
   const items = byId(kb || []);
-  return steps(3) + r.summary.map(s => checked(s, items)).join("") + reworded(r.dropped)
-    + `<p class="muted rec">Summary written by ${esc(r.model)}. A sentence is shown only when it passes a check against the sources it cites.</p>`
+  return steps(3) + r.summary.map(s => checked(s, items, jump(s, items, ctx))).join("") + reworded(r.dropped)
+    + `<details class="how"${first ? " open" : ""}><summary>How this summary is made</summary><ol>
+      <li>The program collects the facts from council and LINZ records, your loan figures and the notes that apply.</li>
+      <li>The model rewrites them as three to five plain sentences. It never sees a figure: the program fills those in.</li>
+      <li>Each sentence is checked against the sources it cites. One that fails is replaced by the program's own wording.</li></ol>
+      <p class="muted rec">Wording by ${esc(r.model)}.</p>
+      <p class="muted">The check compares wording and figures. It cannot judge everything a sentence means, so open the sources of any sentence that matters to you.</p></details>`
     + (r.next_steps.length ? `<h3>Next steps</h3><ul class="todo">${r.next_steps.map(s => `<li><label><input type="checkbox"${done.has(s.text) ? " checked" : ""}><span>${esc(s.text)}</span></label>${control(cardsOf(s, items))}</li>`).join("")}</ul>` : "")
     + (r.not_found_notes.length ? `<h3>Could not be found</h3><div class="gap">${list(r.not_found_notes.map(n => esc(n.text)))}</div>` : "");
 }
@@ -290,9 +302,10 @@ const linkItem = l => `${link(l.url, l.label)}${LINK_KIND[l.kind] || ""}`;
 // it to be shown as returned, with Google's search suggestions: the text is plain text, the suggestions are Google's
 // own HTML and sit in a frame that runs no scripts.
 // The language of the text is not known here, so it does not inherit the page's.
+// The frame's document accepts both colour schemes: one that only knew light would be given an opaque white ground on a dark page.
 const webAnswer = w => `<div class="web"><p><b>Found by Gemini with Google Search. Not checked against this report's sources.</b></p>
   <div class="say" lang="">${w.text.split(/\n\s*\n/).map(p => `<p>${esc(p)}</p>`).join("")}</div>${list(w.sources.map(s => link(s.url, s.title || "Source")))}
-  ${w.search_suggestions ? `<iframe class="suggest" title="Google Search suggestions" sandbox="allow-popups allow-popups-to-escape-sandbox" srcdoc="${esc('<base target="_blank">' + w.search_suggestions)}"></iframe>` : ""}</div>`;
+  ${w.search_suggestions ? `<iframe class="suggest" title="Google Search suggestions" sandbox="allow-popups allow-popups-to-escape-sandbox" srcdoc="${esc('<meta name="color-scheme" content="light dark"><base target="_blank">' + w.search_suggestions)}"></iframe>` : ""}</div>`;
 
 // The conversation about this report, in order. A turn holds the question and, once settled, report-api's answer with
 // the knowledge-base items on the page at that time, or the error. The sentences carry the language the answer names.
@@ -304,6 +317,7 @@ function thread({ctx, rules, rulesError, kb: onPage, thread: turns}) {
     : !a ? `<p class="muted">Answering…</p>`
     : (a.web ? webAnswer(a.web) : `<div class="say${a.answer.some(s => s.source_ids.length) ? "" : " fixed"}"${a.language ? ` lang="${esc(a.language)}"` : ""}>${a.answer.map(s => checked(s, items)).join("")}</div>` + reworded(a.dropped))
       + list((a.links || []).map(id => ctx.links.find(l => l.id === id)).filter(Boolean).map(linkItem))
+      + (a.out_of_scope && !a.web ? `<p class="muted rec">A fixed reply from the program.</p>` : "")
       + (added?.length ? `<p class="muted rec">Added to your details from your question: ${esc(added.join("; "))}.</p>` : "");
   return turns.map(t => `<div class="msg you">${esc(t.question)}</div><div class="msg">${answer(t)}</div>`).join("")
     + (!rules && rulesError ? `<p class="problem">Questions are unavailable until the repayment figures can be calculated.</p>` : "");
@@ -317,7 +331,7 @@ function draw(id, block, state) {
 
 function listSources({ctx}) {
   $("sources").innerHTML = cited.map(s => card(s)).join("");
-  $("d-originals").textContent = `${ctx.links.length} sites to look at yourself, and the ${cited.length} sources cited on this page.`;
+  $("d-originals").textContent = $("o-originals").textContent = `${ctx.links.length} sites to look at yourself, and the ${cited.length} sources cited on this page.`;
 }
 
 // The summary and the answers arrive after the rest and are drawn on their own: redrawing the other blocks would close the sources a reader has opened.
@@ -333,6 +347,7 @@ export function renderSummary(state) {
 export function renderThread(state) {
   draw("thread", thread, state);
   $("ask").disabled = !state.inputs || state.thread.some(t => !t.answer && !t.error);
+  $("handle-count").textContent = state.thread.length; $("thread").scrollTop = $("thread").scrollHeight;  // the newest turn is in view
   listSources(state);
 }
 
@@ -342,7 +357,7 @@ export function renderThread(state) {
 // reader hears them once, when they are complete.
 export function typeAnswer() {
   const box = $("thread"), el = [...box.querySelectorAll(".msg:not(.you) .say")].at(-1);
-  if (!el || document.hidden || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  if (!el || el.closest(".web") || document.hidden || matchMedia("(prefers-reduced-motion: reduce)").matches) return;  // a search answer is shown as returned, all at once
   const nodes = [], walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
   while (walk.nextNode()) if (walk.currentNode.data.trim() && !walk.currentNode.parentElement.closest(".src")) nodes.push(walk.currentNode);
   const texts = nodes.map(n => n.data);
@@ -390,7 +405,7 @@ export function render(state) {
   const {ctx} = state;
   sources = state.sources; banks = state.banks; cited = [];
   draw("readout", () => state.inputs ? readout(state) : "<b>Your details</b>");
-  try { for (const [id, text] of Object.entries(digests(state))) $("d-" + id).textContent = text; } catch (e) { console.error(e); }
+  try { for (const [id, text] of Object.entries(digests(state))) $("d-" + id).textContent = $("o-" + id).textContent = text; } catch (e) { console.error(e); }
   $("matched").textContent = ctx.address.matched || "Address not found";
   $("meta").textContent = ctx.address.status !== "found" ? gone(ctx.address)
     : `Checked against ${ctx.parcel.spatial_method === "parcel" ? "the parcel boundary" : "the address point only, because no parcel was matched"}, ${ctx.generated_at.slice(0, 16).replace("T", " ")} New Zealand time.`;

@@ -5,7 +5,7 @@ import {drawMap} from "./map.js";
 
 // kb: null means the notes could not be loaded; inputs: what the rules on the page were calculated with
 const CLEARED = {rules: null, rulesError: null, inputs: null, kb: [], report: null, reportError: null};
-const state = {ctx: null, ...CLEARED, sources: {}, banks: {}, thread: [], done: new Set()};  // done: the next steps ticked for this address
+const state = {ctx: null, ...CLEARED, sources: {}, banks: {}, thread: [], done: new Set(), first: true};  // done: the next steps ticked for this address; first: the first report in this tab
 let timer, lastTyped = "", searchSeq = 0, lookupSeq = 0, calcSeq = 0, rulesSources, kbIds, kbItems;
 let asked = {};  // the summary last asked for: its key and the pending or settled answer
 
@@ -91,6 +91,9 @@ async function lookup(a) {
     $("cladding-hint").innerHTML = `Check the listing, ${site("homes")} or ${site("oneroof")} for it.`;
     $("status").textContent = "The report is below."; $("report").hidden = $("readout-row").hidden = false;
     $("intro").hidden = $("start-note").hidden = true; details(false);
+    // explanations are open, and our margin notes on show, for the first report in a tab only
+    try { state.first = !sessionStorage.getItem("seen"); sessionStorage.setItem("seen", "1"); } catch {}
+    document.body.dataset.seen = state.first ? "0" : "1";
     $("sec-hazards").open = floodMapped(ctx).length > 0;  // the map is on show when a flood layer is mapped here
     render(state);
     show("matched");
@@ -136,7 +139,6 @@ async function ask(question) {
   } catch (e) { turn.error = e; }
   if (!state.thread.includes(turn)) return;  // another address owns the page
   if (turn.answer) {
-    if ($("question").value.trim() === question) $("question").value = "";
     turn.added = fill(turn.answer.user_supplied || {});
     if (turn.added.length) await calculate();
     turn.kb = state.kb;
@@ -144,10 +146,23 @@ async function ask(question) {
   renderThread(state);
   if (turn.answer) typeAnswer();
 }
+// The question panel is a bar at the bottom of a narrow screen that opens upward over the page; beside the report on a wide one it is always open.
+const wide = matchMedia("(min-width: 1000px)");
+function panel(open) {
+  $("ask-panel").classList.toggle("open", open); $("handle").setAttribute("aria-expanded", open); $("handle").setAttribute("aria-label", open ? "Hide the answers" : "Show the answers");
+}
+$("handle").addEventListener("click", () => panel(!$("ask-panel").classList.contains("open")));
+$("question").addEventListener("focus", () => panel(true));
+addEventListener("keydown", e => { if (e.key === "Escape") panel(false); });
+document.addEventListener("click", e => {
+  const to = e.target.closest('a[href^="#sec-"]'), starter = e.target.closest(".starters button");
+  if (to) { $(to.hash.slice(1)).open = true; if (!wide.matches) panel(false); }  // a link to a folded section opens it
+  if (starter) { $("question").value = starter.textContent; $("question").focus(); }
+});
 $("ask-form").addEventListener("submit", e => {
   e.preventDefault();
   const question = $("question").value.trim();
-  if (question) ask(question);
+  if (question && !$("ask").disabled) { $("question").value = ""; ask(question); }  // the box is free for the next question; a failed turn keeps its own "Try again"
 });
 $("thread").addEventListener("click", e => { if (e.target.id === "retry-answer") ask(state.thread.at(-1).question); });
 

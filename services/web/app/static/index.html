@@ -104,13 +104,14 @@
 </div>
 </section>
 
-<div id="report" hidden>
+<div id="report" class="cols" hidden>
+<div class="main">
 <article class="sheet">
 <h2 id="matched" tabindex="-1"></h2>
 <svg class="underline" viewBox="0 0 340 10" preserveAspectRatio="none" aria-hidden="true"><path d="M2 6c40-4 80 3 130-1s100-2 206 1" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
 <p id="meta" class="muted rec"></p>
 <section aria-labelledby="h-summary">
-<h3 id="h-summary">Summary</h3>
+<h3 id="h-summary">Summary <span class="hand first-only" aria-hidden="true">every sentence is checked</span></h3>
 <div id="summary" aria-live="polite"></div>
 </section>
 </article>
@@ -124,12 +125,14 @@
 <p id="mapnote" class="muted"></p>
 <p id="maplegend" class="muted"></p>
 <div id="hazards"></div>
+<div class="starters"><span class="muted">Ask about this</span><button type="button">What do the mapped hazards mean for insurance?</button><button type="button">What should I ask the council about this land?</button></div>
 </div>
 </details>
 <details class="sec" id="sec-facts">
 <summary><span class="num">2</span><h3>This home</h3><span class="digest" id="d-facts"></span></summary>
 <div class="body">
 <div id="facts"></div>
+<div class="starters"><span class="muted">Ask about this</span><button type="button">Why is the council valuation not the market value?</button><button type="button">What does the title type mean for me?</button></div>
 </div>
 </details>
 <details class="sec" id="sec-loan">
@@ -137,12 +140,14 @@
 <div class="body">
 <p><a href="#details" id="edit-details" target="_self">Change the price or your loan details</a></p>
 <div id="loan" aria-live="polite"></div>
+<div class="starters"><span class="muted">Ask about this</span><button type="button">What does a low deposit change?</button><button type="button">What is a First Home Loan?</button></div>
 </div>
 </details>
 <details class="sec" id="sec-notes">
 <summary><span class="num">4</span><h3>Build era and title</h3><span class="digest" id="d-notes"></span></summary>
 <div class="body">
 <div id="notes"></div>
+<div class="starters"><span class="muted">Ask about this</span><button type="button">What should I check for a home of this age?</button><button type="button">What should my lawyer look at on the title?</button></div>
 </div>
 </details>
 <details class="sec" id="sec-originals">
@@ -158,16 +163,26 @@
 </details>
 </section>
 
-<section class="asking" aria-labelledby="h-ask">
-<h2 id="h-ask">Ask about this home</h2>
-<p class="muted">Ask about this property or this report, in any language.</p>
-<div id="thread" aria-live="polite"></div>
+</div>
+<aside class="ask" id="ask-panel" aria-label="Questions about this report">
+<details class="outline">
+<summary>In this report</summary>
+<ol>
+<li><a href="#sec-hazards" target="_self"><span class="num">1</span><b>Mapped hazards</b><small id="o-hazards"></small></a></li>
+<li><a href="#sec-facts" target="_self"><span class="num">2</span><b>This home</b><small id="o-facts"></small></a></li>
+<li><a href="#sec-loan" target="_self"><span class="num">3</span><b>Money</b><small id="o-loan"></small></a></li>
+<li><a href="#sec-notes" target="_self"><span class="num">4</span><b>Build era and title</b><small id="o-notes"></small></a></li>
+<li><a href="#sec-originals" target="_self"><span class="num">5</span><b>Originals and sources</b><small id="o-originals"></small></a></li>
+</ol>
+</details>
+<div id="thread" aria-live="polite" tabindex="0" aria-label="Your questions and the answers"></div>
 <form id="ask-form" class="field">
-<label for="question">Your question</label>
-<textarea id="question" class="box" rows="2" maxlength="1000" required placeholder="Ask in any language"></textarea>
+<label for="question">Ask about this home <span class="hand first-only" aria-hidden="true">your own language is fine</span></label>
+<button type="button" id="handle" aria-expanded="false" aria-controls="thread" aria-label="Show the answers"><span aria-hidden="true">&#9650;</span> <span id="handle-count">0</span></button>
+<input id="question" class="box" type="text" maxlength="1000" required placeholder="Ask in any language" autocomplete="off">
 <button type="submit" id="ask">Ask</button>
 </form>
-</section>
+</aside>
 </div>
 </main>
 <footer class="foot">

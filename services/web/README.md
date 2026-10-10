@@ -66,6 +66,11 @@ five folded sections with the records. The hazards section is open when a flood 
 step on the summary's list is not repeated under the note it comes from. Each line opens its sources from one control.
 The three typefaces are served from `app/static/fonts/` with their licence texts (SIL Open Font License).
 
+Questions sit in one panel: a bar at the bottom of a narrow screen that opens upward over the page, and a column
+beside the report from 1000 px. A folded list of the five sections with their one-line digests sits above the conversation. Each section
+ends with two starter questions. A summary sentence links to the section that holds its records. The explanation of
+how the summary is made, and the handwritten margin notes, are open for the first report in a tab only.
+
 The summary block is drawn from `/api/report` after each calculation. The follow-up block
 sends each question to `/api/followup` with the last 3 answered turns and draws the turns as a conversation; they
 live in page memory and are cleared when another address is chosen. An answer report-api found with Google Search

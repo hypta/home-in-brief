@@ -55,11 +55,16 @@ red: beside a hazard they read as a verdict. The map keeps its own colours.
 - **Could not be found.** One dashed box. A layer that could not be checked keeps its caveat sentence.
 - **Section.** A drawn number, the title, one line of digest from API values, a chevron. Closed by default; the
   hazards section is open when a flood layer is mapped on the parcel.
+- **Questions.** One panel: a bar at the bottom of a narrow screen that opens upward, a column beside the report
+  from 1000 px. A folded list of the five sections with their digests sits above the conversation. The box says "Ask in any language".
+  Each section ends with two starter questions.
 - **Answer from a web search.** Neutral wash, the label "Found by Gemini with Google Search. Not checked against
   this report's sources." in bold, no highlighter, text and search suggestions as returned.
 - **Fixed reply.** Dashed box, no highlighter, no source.
-- **Motion.** The step in progress pulses; an answer's words appear in order. Both are off under
-  `prefers-reduced-motion`.
+- **First report.** The explanation of how the summary is made, and our margin notes, are open for the first
+  report in a tab and folded or hidden after it. A caveat is never treated this way.
+- **Motion.** The step in progress pulses; a checked answer's words appear in order (a web-search answer is shown
+  at once). Both are off under `prefers-reduced-motion`.
 
 ## Do
 

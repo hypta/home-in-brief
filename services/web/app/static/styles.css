@@ -172,14 +172,53 @@ th, td { text-align:left; padding:6px 10px; border-bottom:1px solid var(--line);
 #map { height:420px; border:1px solid var(--line); border-radius:10px; margin-top:8px }
 .swatch { display:inline-block; width:12px; height:12px; border-radius:3px; margin-right:6px; vertical-align:-1px }
 
-/* questions: the visitor's messages sit to the right, the answers to the left */
-.asking { padding:20px 16px 0 }
-.msg { max-width:92%; margin-top:18px }
-.msg.you { width:fit-content; margin:34px 0 0 auto; padding:8px 14px; background:var(--ink); color:var(--paper); border-radius:16px 16px 4px 16px }
+/* questions: a bar at the bottom of a narrow screen that opens upward; a column beside the report on a wide one */
+.starters { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-top:30px }
+.starters button { min-height:44px; margin:0; padding:8px 16px; font-weight:400; text-align:left; color:var(--pen); background:none; border:1.5px solid var(--pen); border-radius:22px }
+.jump { display:inline-flex; align-items:center; min-height:44px; font-size:.875rem }
+.how { margin-top:14px }
+.how > summary { display:inline-flex; align-items:center; min-height:44px; color:var(--pen); font-size:.875rem; font-weight:700 }
+.how > summary::after { content:""; width:9px; height:9px; border:solid currentColor; border-width:0 2px 2px 0; transform:rotate(45deg); margin:0 4px 3px 8px }
+.how ol { display:grid; gap:6px; margin:0; padding-left:1.3em; font-size:.9375rem; max-width:62ch }
+.how p { margin-top:8px; max-width:62ch }
+body[data-seen="1"] .first-only { display:none }
+.ask { position:fixed; inset:auto 0 0 0; z-index:1000; display:flex; flex-direction:column; max-height:86dvh; background:var(--paper); border-top:2px solid var(--ink) }
+.outline, #thread, #ask-form > label { display:none }
+.ask.open .outline, .ask.open #thread, .ask.open #ask-form > label { display:block }
+.ask.open #ask-form > label { display:flex }
+.outline { padding:0 16px; border-bottom:1px solid var(--line) }
+.outline > summary { display:flex; align-items:center; justify-content:space-between; min-height:44px; font-weight:700 }
+.outline > summary::after { content:""; width:9px; height:9px; border:solid currentColor; border-width:0 2px 2px 0; transform:rotate(45deg); margin:0 4px 3px 8px }
+.outline ol { margin:0; padding:0 0 10px; list-style:none }
+.outline a { display:grid; grid-template-columns:auto minmax(0, 1fr); align-items:center; gap:0 10px; padding:5px 0; color:inherit; text-decoration:none }
+.outline .num { width:26px; height:26px; font-size:.875rem }
+.outline small { grid-column:2; color:var(--pencil); font-size:.8125rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+#thread { flex:1; overflow:auto; padding:6px 16px 14px }
+.msg { margin-top:18px }
+.msg.you { width:fit-content; max-width:86%; margin:30px 0 0 auto; padding:8px 14px; background:var(--ink); color:var(--paper); border-radius:16px 16px 4px 16px }
 .say .s { font-size:1rem }
 .web { padding:12px 14px; background:var(--quiet); border:1px solid var(--edge); border-radius:10px }
 .fixed { padding:10px 16px; border:2px dashed var(--edge); border-radius:var(--box) }
 .suggest { display:block; width:100%; height:64px; border:0 }
+#ask-form { display:grid; grid-template-columns:auto 1fr auto; gap:6px 8px; padding:10px 16px 14px }
+#ask-form > label { grid-column:1 / -1; justify-content:flex-start; gap:12px; margin:0 }
+#ask-form button { margin:0; min-height:48px }
+#handle { min-width:48px; padding:0 8px; color:var(--ink); background:none; border:1.5px solid var(--edge) }
+.ask.open #handle span:first-child { display:inline-block; transform:rotate(180deg) }
+.cols { padding-bottom:96px }
+body:has(.cols:not([hidden])) .foot { padding-bottom:120px }
+@media (min-width: 1000px) {
+  .cols { display:grid; grid-template-columns:minmax(0, 1fr) 360px; gap:24px; align-items:start; padding:0 16px }
+  .cols .sheet { margin-inline:0 }
+  .cols .evidence { padding-inline:0 }
+  .ask { position:sticky; inset:16px auto auto; height:calc(100dvh - 32px); max-height:none; border:1px solid var(--line); border-radius:14px; z-index:auto }
+  .outline, #thread { display:block }
+  #ask-form > label { display:flex }
+  #ask-form { grid-template-columns:1fr auto }
+  #handle { display:none }
+  body:has(.cols:not([hidden])) .foot { padding-bottom:56px }
+}
+
 /* always on the page: what this is and is not, and whose data it shows */
 .foot { display:grid; gap:8px; max-width:1024px; margin:0 auto; padding:0 16px 56px; color:var(--pencil); font-size:.8125rem }
 .foot p:empty { display:none }

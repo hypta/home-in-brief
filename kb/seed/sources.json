@@ -146,7 +146,7 @@
     "id": "bank_rates_snapshot",
     "title": "Bank published home loan rates (manually maintained snapshot)",
     "url": "https://www.anz.co.nz/rates-fees-agreements/home-loans/",
-    "licence": "Varies by bank; see jobs/rates-refresh/config/banks.yaml",
+    "licence": "Varies by bank; each bank's own website terms apply",
     "accessed_at": "2026-10-03",
     "source_type": "official",
     "attribution": "Source: each bank's published home loan rates page (URL per bank in rates_latest source_url).",
