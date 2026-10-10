@@ -73,6 +73,7 @@ Each flag is `{id, source_ids}`. A flag is only listed when it applies.
 | `kb_unavailable` | Knowledge base could not be read | Repository error | Say background notes are unavailable; see `kb_empty_reason`. |
 | `kb_hash_mismatch:<id>` | A verified item changed after review | Recomputed content hash differs from `verified_content_hash`, or the hash is missing | Item is withheld. Not user-facing. |
 | `kb_verification_incomplete:<id>` | A verified item lacks `verified_by` or `verified_at` | Either field empty | Item is withheld. Not user-facing. |
+| `kb_includes_draft` | Draft knowledge-base items may be included (development mode) | Not in rules-api `warnings[]`: rules-api only sets the boolean field `kb_includes_draft` (see Other fields). report-api copies it into the report's `warnings[]` when the field is true | Not shown to end users. Internal development-mode notice only. |
 
 ## Other fields that explain absence
 
