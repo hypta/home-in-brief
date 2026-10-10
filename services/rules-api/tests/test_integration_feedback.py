@@ -101,10 +101,10 @@ def test_new_fields_in_api_and_openapi():
 # ---- 6. deposit above the price ----
 def test_deposit_exceeds_price_like_cash_purchase():
     out = run(price_override=500000, deposit=600000, household_income=100000, existing_debts=20000)
-    assert out.loan_amount == 0 and out.lvr_pct == 0 and out.scenarios == []
+    assert out.loan_amount == 0 and out.lvr_pct is None and out.scenarios == []
     assert out.deposit == 600000
     assert "deposit_exceeds_price" in out.warnings and "cash_purchase_no_loan" not in out.warnings
-    assert out.dti == 0.2  # existing debts only, no loan part
+    assert out.dti is None  # no new loan: DTI (a limit on new lending) is not computed
     assert not any(f.id in ("lvr_over_80", "dti_over_6") for f in out.flags)
     cash = run(price_override=500000, deposit=500000)
     assert "cash_purchase_no_loan" in cash.warnings and "deposit_exceeds_price" not in cash.warnings
@@ -125,3 +125,10 @@ def test_health_endpoints_match():
     a, b = client.get("/health"), client.get("/healthz")
     assert a.status_code == b.status_code == 200 and a.json() == b.json() == {"status": "ok"}
     assert "/health" in app.openapi()["paths"]
+
+
+def test_no_loan_lvr_and_dti_are_null_but_price_missing_unchanged():
+    cash = run(price_override=500000, deposit=500000, household_income=100000, existing_debts=20000)
+    assert cash.loan_amount == 0 and cash.lvr_pct is None and cash.dti is None
+    assert run(household_income=100000).lvr_pct is None
+    assert run(price_override=500000, deposit=100000, household_income=100000).dti == 4.0

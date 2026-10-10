@@ -59,7 +59,7 @@ def test_api_deposit_over_price_is_200_cash_purchase():
     r = TestClient(app).post("/v1/rules", json={"user_inputs": {"price_override": 500000, "deposit": 600000}})
     assert r.status_code == 200
     d = r.json()
-    assert d["loan_amount"] == 0 and d["lvr_pct"] == 0 and d["scenarios"] == []
+    assert d["loan_amount"] == 0 and d["lvr_pct"] is None and d["scenarios"] == []
     assert "deposit_exceeds_price" in d["warnings"]
 
 

@@ -308,8 +308,8 @@ class RulesOutput(BaseModel):
     price_used: PriceUsed
     deposit: Optional[float] = None
     loan_amount: Optional[float] = None
-    lvr_pct: Optional[float] = None
-    dti: Optional[float] = None
+    lvr_pct: Optional[float] = Field(default=None, description="Null when there is no loan (price, deposit missing, or deposit >= price)")
+    dti: Optional[float] = Field(default=None, description="(existing debts + loan) / income. Null when there is no loan or income is missing")
     high_dti_threshold: Optional[float] = None
     rates_snapshot_date: Optional[str] = None
     stress_add_pp: float = 2.0

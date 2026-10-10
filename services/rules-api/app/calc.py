@@ -392,16 +392,20 @@ def compute_with_raw(
             warnings.append("deposit_exceeds_price")
         elif loan == 0:
             warnings.append("cash_purchase_no_loan")
-        lvr = raw.lvr = loan / price * 100
         out.loan_amount = round(loan, 2)
-        out.lvr_pct = round(lvr, 2)
-        if lvr > 80:
-            flags.append(Flag(id="lvr_over_80", source_ids=["rbnz_lvr"]))
+        lvr = loan / price * 100
+        if loan > 0:
+            raw.lvr = lvr
+            out.lvr_pct = round(lvr, 2)
+            if lvr > 80:
+                flags.append(Flag(id="lvr_over_80", source_ids=["rbnz_lvr"]))
+        # No loan: LVR and DTI stay null (both limits apply to new lending; the warning above says why).
         if income is not None:
-            dti = raw.dti = (debts + loan) / income
-            out.dti = round(dti, 2)
-            if dti > 6:
-                flags.append(Flag(id="dti_over_6", source_ids=["rbnz_dti"]))
+            if loan > 0:
+                dti = raw.dti = (debts + loan) / income
+                out.dti = round(dti, 2)
+                if dti > 6:
+                    flags.append(Flag(id="dti_over_6", source_ids=["rbnz_dti"]))
         else:
             warnings.append("income_missing")
         if loan > 0:

@@ -1487,7 +1487,8 @@
                 "type": "null"
               }
             ],
-            "title": "Lvr Pct"
+            "title": "Lvr Pct",
+            "description": "Null when there is no loan (price, deposit missing, or deposit >= price)"
           },
           "dti": {
             "anyOf": [
@@ -1498,7 +1499,8 @@
                 "type": "null"
               }
             ],
-            "title": "Dti"
+            "title": "Dti",
+            "description": "(existing debts + loan) / income. Null when there is no loan or income is missing"
           },
           "high_dti_threshold": {
             "anyOf": [
@@ -2022,4 +2024,3 @@
       }
     }
   }
-}

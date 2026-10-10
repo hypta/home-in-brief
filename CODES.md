@@ -29,8 +29,8 @@ Each flag is `{id, source_ids}`. A flag is only listed when it applies.
 | `deposit_missing` | Price known, deposit not | `deposit` is null | Ask for a deposit. |
 | `existing_debts_assumed_zero` | DTI and the high-DTI threshold were calculated with no other debts | `existing_debts` is null or not sent | Say the DTI assumes the user has no other debts, and ask for the figure (enter 0 to confirm none). |
 | `income_missing` | DTI and First Home Loan cannot be checked | `household_income` is null | Ask for income if the user wants DTI or First Home Loan figures. |
-| `cash_purchase_no_loan` | Deposit equals the price | deposit == price | Say no loan is needed, so no repayment scenarios are shown. |
-| `deposit_exceeds_price` | Deposit is larger than the price used | deposit > price | Treated like a cash purchase: loan is 0, no repayment scenarios. Say the deposit covers the whole price and invite the user to check the amounts (price override or deposit). Not an error (HTTP 200). |
+| `cash_purchase_no_loan` | Deposit equals the price | deposit == price | Say no loan is needed, so no repayment scenarios are shown. `lvr_pct` and `dti` are null (not 0). |
+| `deposit_exceeds_price` | Deposit is larger than the price used | deposit > price | Treated like a cash purchase: loan is 0, no repayment scenarios. Say the deposit covers the whole price and invite the user to check the amounts (price override or deposit). Not an error (HTTP 200). `lvr_pct` and `dti` are null (not 0). |
 | `fhl_skipped_income_missing` | First Home Loan not evaluated | LVR > 80 but income is null | Ask for income. |
 | `fhl_no_lenders` | The snapshot has no First Home Loan lenders | Eligible but no bank has `fhl.lender` | Say lender information is unavailable. |
 

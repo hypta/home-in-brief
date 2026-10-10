@@ -110,3 +110,19 @@ def test_known_wording_fixes():
 
 def test_low_temperature_and_seed():
     assert gemini.TEMPERATURE == 0.0 and isinstance(gemini.SEED, int)
+
+
+def test_null_lvr_and_dti_when_no_loan_are_handled():
+    """rules-api now returns lvr_pct/dti as null without a loan: no lending topic, no crash, no blacklist trouble."""
+    from b_common.report_schemas import ReportRequest
+    from app import kb
+    from conftest import body
+    b = body("edge2")
+    b["rules_output"]["lvr_pct"] = None
+    b["rules_output"]["dti"] = None
+    req = ReportRequest.model_validate(b)
+    data = kb.load(req.selected_kb_ids())
+    ev = V.build_evidence(req, data.items, data.sources.keys())
+    tops = prompt.topics(req, ev, data.items)
+    assert ev.no_loan and not any("loan" in t["say"].lower() for t in tops)
+    assert not any("lending" in t["say"].lower() for t in tops)
