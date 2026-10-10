@@ -327,3 +327,13 @@ def test_hash_matches_kb_module_on_every_seed_item():
             assert content_hash(raw) == kb.content_hash(raw), raw["id"]
             n += 1
     assert n > 0
+
+
+@pytest.mark.parametrize("value", __import__("b_common.cladding", fromlist=["VALUES"]).VALUES)
+def test_all_thirteen_cladding_values_only_monolithic_selects(kbdir, value):
+    """Shared table (b_common.cladding): no value errors; only monolithic picks the cladding entry."""
+    for body in ({"user_inputs": {"chat_supplied": {"cladding": value}}},
+                 {"property_context": {"property": {"cladding": found(value)}}}):
+        out = post(body)
+        assert "error" not in out and "kb_items" in out
+        assert set(out["kb_items"]) == ({"clad"} if value == "monolithic" else set())

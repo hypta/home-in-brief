@@ -285,7 +285,7 @@ def test_cladding_conflict_lists_both_values(monkeypatch, rules_calls):
     monkeypatch.setattr(followup, "gemini_json", fake(cls(cladding="monolithic"), [ans(FLOOD_EN)]))
     r = client.post("/v1/followup", json=b | {"question": "外牆是 monolithic", "history": []})
     out = r.json()
-    assert out["answer"][0] == {"text": "You gave the cladding as monolithic; the council records Weatherboard, and this "
+    assert out["answer"][0] == {"text": "You gave the cladding as Roughcast, stucco or texture coat; the council records Weatherboard, and this "
                                 "answer uses the council's record.",
                                 "source_ids": ["ac_property_page"]}
     assert out["user_supplied"] == {"cladding": "monolithic"} and not rules_calls
@@ -562,3 +562,44 @@ def test_mock_other_question_gets_fixed_english_sentence(mock_mode, rules_calls)
 def test_mock_strict_refusal_is_502(mock_mode, rules_calls):
     r = post("case1", "Which school zone?", mode="strict")
     assert r.status_code == 502
+
+
+# ---- shared cladding table (b_common.cladding) ----------------------------------------------------
+def _mock_rules(monkeypatch, seen, kb_add):
+    b = body("case1")
+
+    def rules(pc, ui, timeout):
+        seen.append(ui["chat_supplied"])
+        ro = copy.deepcopy(b["rules_output"])
+        ro["kb_items"] += kb_add
+        ro["kb_items_from_user_input"] = list(kb_add)
+        return ro
+
+    monkeypatch.setattr(followup, "call_rules", rules)
+
+
+def test_mock_stucco_is_monolithic_and_triggers_entry(monkeypatch, mock_mode):
+    seen = []
+    _mock_rules(monkeypatch, seen, ["kb_monolithic_cladding"])
+    out = post("case1", "the walls are stucco").json()
+    assert out["user_supplied"] == {"cladding": "monolithic"} and seen == [{"cladding": "monolithic"}]
+    assert [s["source_ids"] for s in out["answer"]] == [["kb_monolithic_cladding"]]
+
+
+def test_mock_weatherboard_is_wood_and_triggers_nothing(monkeypatch, mock_mode):
+    seen = []
+    _mock_rules(monkeypatch, seen, [])
+    out = post("case1", "the walls are weatherboard").json()
+    assert out["user_supplied"] == {"cladding": "wood"} and seen == [{"cladding": "wood"}]
+    assert all("kb_monolithic_cladding" not in s["source_ids"] for s in out["answer"])
+
+
+def test_cladding_value_needs_its_keyword_in_the_question(monkeypatch, rules_calls):
+    # model says "brick" but the question only has stucco: dropped; "wood" for weatherboard is kept
+    monkeypatch.setattr(followup, "gemini_json", fake(cls(cladding="brick"), [ans(FLOOD_EN)]))
+    assert post("case1", "The walls are stucco.").json()["user_supplied"] == {}
+    # "wood" with the keyword present is accepted (the property record has no cladding found, so rules re-run)
+    seen = []
+    _mock_rules(monkeypatch, seen, [])
+    monkeypatch.setattr(followup, "gemini_json", fake(cls(cladding="wood"), [ans(FLOOD_EN)]))
+    assert post("case1", "The walls are weatherboard.").json()["user_supplied"] == {"cladding": "wood"}

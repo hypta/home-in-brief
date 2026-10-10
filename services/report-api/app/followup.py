@@ -27,6 +27,7 @@ from typing import Any, Callable, Literal, Optional
 import requests
 from pydantic import BaseModel, Field, ValidationError
 
+from b_common import cladding as cladding_table
 from b_common.report_schemas import FieldView, ReportRequest, Sentence
 
 from . import gemini, kb, rewrite
@@ -72,7 +73,7 @@ class FollowupResponse(BaseModel):
 class ClassifyOut(BaseModel):
     out_of_scope: bool = False
     year_built: Optional[str] = None
-    cladding: Optional[Literal["monolithic", "weatherboard", "brick", "concrete", "other"]] = None
+    cladding: Optional[Literal[cladding_table.VALUES]] = None  # type: ignore[valid-type]  # the 13 shared values
     hypothetical: bool = False
     links: list[str] = Field(default_factory=list)
 
@@ -143,13 +144,6 @@ def _call(generate: JsonGenerator, prompt: str, schema: type, timeout: float):
 # ---- user_supplied (5.3) ------------------------------------------------------------------------
 _CONDITIONAL_RE = re.compile(r"\b(?:if|suppose|assuming|whether|not|isn't|wasn't|isnt|wasnt)\b|如果|假如|假設|若是|"
                              r"要是|萬一|不是|並非", re.I)
-_CLADDING_WORDS = {
-    "monolithic": r"monolithic|plaster|stucco|eifs|texture[- ]coated|灰泥|整體式|單體|monolith",
-    "weatherboard": r"weatherboard|clapboard|木板|護牆板|木外牆",
-    "brick": r"brick|磚",
-    "concrete": r"concrete|混凝土|水泥",
-    "other": r"cladding|外牆|外墙",
-}
 
 
 def extract_user_supplied(question: str, c: ClassifyOut) -> dict[str, Any]:
@@ -171,8 +165,8 @@ def extract_user_supplied(question: str, c: ClassifyOut) -> dict[str, Any]:
         else:
             log.info("user_supplied_ignored: year_built not valid or not in the question")
     if c.cladding:
-        words = _CLADDING_WORDS[c.cladding]
-        if re.search(words, question, re.I) or (c.cladding == "other" and re.search(_CLADDING_WORDS["other"], question)):
+        # the value must have a keyword written in the question itself
+        if c.cladding in cladding_table.find_all(question):
             out["cladding"] = c.cladding
         else:
             log.info("user_supplied_ignored: cladding not stated in the question")
@@ -262,11 +256,12 @@ def comparison_sentence(key: str, value: Any, f: FieldView) -> Optional[Sentence
             en_t = f"You gave the year built as {u_en}; {src_en} records {c_en}, and this answer uses {src_en}'s record."
     else:
         cv = str(f.value)
-        same = cv.strip().lower() == str(value).lower()
+        shown = cladding_table.label(str(value))
+        same = cv.strip().lower() == shown.lower() or cladding_table.normalize(cv) == value
         if same:
-            en_t = f"The cladding you gave, {value}, matches {src_en}'s record, {cv}."
+            en_t = f"The cladding you gave, {shown}, matches {src_en}'s record, {cv}."
         else:
-            en_t = f"You gave the cladding as {value}; {src_en} records {cv}, and this answer uses {src_en}'s record."
+            en_t = f"You gave the cladding as {shown}; {src_en} records {cv}, and this answer uses {src_en}'s record."
     return Sentence(text=en_t.replace("  ", " "), source_ids=[f.source_id])
 
 
@@ -316,8 +311,7 @@ def mock_classify(question: str) -> ClassifyOut:
     m = re.search(r"(?<!\d)(\d{3}0s)(?![\w])", question) or re.search(r"(?<!\d)(1[89]\d\d|20\d\d)(?!\d)", question)
     if m:
         year = m.group(1)
-    cladding = next((k for k in ("monolithic", "weatherboard", "brick", "concrete")
-                     if re.search(_CLADDING_WORDS[k], question, re.I)), None)
+    cladding = cladding_table.normalize(question)
     oos = bool(_MOCK_OOS.search(question)) and not (_FLOOD_Q.search(question) or _HAZARD_Q.search(question))
     return ClassifyOut(out_of_scope=oos, year_built=year,
                        cladding=cladding)

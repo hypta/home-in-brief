@@ -12,6 +12,7 @@ import re
 from decimal import Decimal
 from typing import Any, Optional
 
+from b_common import cladding as cladding_table
 from b_common.report_schemas import ReportRequest, Sentence
 
 from . import facts
@@ -589,7 +590,7 @@ def followup_facts(req: ReportRequest, ev: Evidence, kb_items: dict[str, dict],
             extra.append(t.set(f"The year built you gave is {'the ' if m else ''}{v}.", user_kb))
         if used.get("cladding"):
             t = _Topic(94, P_EXTRA, "user_said", user=True)
-            v = t.slot("user_cladding", used["cladding"], "text", "the cladding the user told us (unverified)",
+            v = t.slot("user_cladding", cladding_table.label(str(used["cladding"])), "text", "the cladding the user told us (unverified)",
                        user_kb[0])
             extra.append(t.set(f"The cladding you gave is {v}.", user_kb))
     out = list(base)

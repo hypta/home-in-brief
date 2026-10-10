@@ -13,13 +13,16 @@ import json
 from decimal import Decimal
 from typing import Optional
 
+from b_common import cladding as cladding_table
 from b_common.report_schemas import ReportRequest
 
 from .facts import Fact
 from .prompt import facts_for_prompt
 from .validator import MAX_WORDS, Evidence
 
-CLADDING_VALUES = ("monolithic", "weatherboard", "brick", "concrete", "other")
+CLADDING_VALUES = cladding_table.VALUES  # the shared 13-value table (LINZ Rating Valuations Rules, Table 10)
+
+_CLADDING_LABELS = "; ".join(f"{c.value} = {c.label}" for c in cladding_table.CLADDINGS)
 
 TASK_CLASSIFY = "TASK: classify"
 TASK_ANSWER = "TASK: answer"
@@ -50,6 +53,7 @@ Return JSON with these keys:
 - "year_built": the year or decade the asker states the building was built, copied exactly as written in the
   QUESTION ("1997" or "1990s"), else null. Never take it from HISTORY.
 - "cladding": one of {list(CLADDING_VALUES)} when the asker states this building's exterior cladding, else null.
+  Meaning of each value: {_CLADDING_LABELS}.
 - "hypothetical": true when the year or cladding is only conditional, asked about, or negated
   ("if it was built in 1997", "is it brick?", "it is not brick").
 - "links": ids from LINKS the asker could open to look this up themselves (0 to 3), else [].
