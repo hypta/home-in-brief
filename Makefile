@@ -5,17 +5,17 @@ BASE ?= http://localhost:8080
 SEED_ENV = FIRESTORE_EMULATOR_HOST=$(EMU_HOST) GOOGLE_CLOUD_PROJECT=local-dev
 RATES_PP = PYTHONPATH=jobs/rates-refresh:shared
 
-.PHONY: setup test test-b test-property-api test-web up seed rates rates-fetch kb smoke down local-api local-rates local-kb
+.PHONY: setup test test-b test-property-api test-web test-report-api up seed rates rates-fetch kb smoke down local-api local-rates local-kb local-report
 
 # One-time: create the venv (Python 3.12) and install every service's dependencies plus pytest.
 # Needs uv (https://docs.astral.sh/uv/). Without uv: python3.12 -m venv .venv, then .venv/bin/pip install
 # -r <each requirements.txt> pytest
 setup:
 	uv venv --python 3.12 $(VENV)
-	uv pip install --python $(PY) -r services/rules-api/requirements.txt -r jobs/rates-refresh/requirements.txt -r jobs/kb-refresh/requirements.txt -r services/property-api/requirements.txt -r services/web/requirements.txt pytest
+	uv pip install --python $(PY) -r services/rules-api/requirements.txt -r jobs/rates-refresh/requirements.txt -r jobs/kb-refresh/requirements.txt -r services/property-api/requirements.txt -r services/web/requirements.txt -r services/report-api/requirements.txt pytest
 
 # Each service has its own top-level `app` package, so suites run in separate pytest processes.
-test: test-b test-property-api test-web
+test: test-b test-property-api test-web test-report-api
 
 test-b:
 	$(PY) -m pytest -q services/rules-api jobs/rates-refresh jobs/kb-refresh kb
@@ -25,6 +25,9 @@ test-property-api:
 
 test-web:
 	cd services/web && ../../$(PY) -m pytest tests -q
+
+test-report-api:
+	cd services/report-api && ../../$(PY) -m pytest tests -q
 
 # --- Docker + Firestore emulator ---
 up:
@@ -58,3 +61,7 @@ local-rates:
 
 local-kb:
 	DATA_BACKEND=local $(PY) jobs/kb-refresh/main.py
+
+# report-api on :8090 with KB items read from kb/seed. REPORT_MOCK=true needs no Gemini key.
+local-report:
+	set -a; [ -f .env ] && . ./.env; set +a; KB_SOURCE=local PYTHONPATH=shared:services/report-api $(PY) -m uvicorn app.main:app --port 8090

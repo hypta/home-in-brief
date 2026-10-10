@@ -30,6 +30,17 @@
       "flags": []
     },
     {
+      "name": "report-api",
+      "kind": "service",
+      "dockerfile": "services/report-api/Dockerfile",
+      "paths": ["services/report-api/", "shared/"],
+      "public": false,
+      "env": {},
+      "secrets": {"GEMINI_API_KEY": "GEMINI_API_KEY:latest"},
+      "url_env": {"RULES_API_URL": "rules-api"},
+      "flags": []
+    },
+    {
       "name": "web",
       "kind": "service",
       "dockerfile": "services/web/Dockerfile",
