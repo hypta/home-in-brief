@@ -79,6 +79,7 @@ HOUSEHOLD = {"single": "a single buyer", "single_with_dependants": "a single buy
              "multiple": "multiple buyers"}
 MISSING = ("not_found", "unavailable")
 COUNCIL_REFUSED = "council_site_refuses_this_server"  # property-api reason: council page not read from the cloud
+from .assemble import SOURCE_UNAVAILABLE, page_unreadable  # noqa: E402  live reason for any read failure
 _DRAFT_RE = re.compile(r"\{\{\$\.([A-Za-z0-9_]+)\}\}")
 
 
@@ -434,10 +435,12 @@ def _topics(req: ReportRequest, ev: Evidence, kb_items: dict[str, dict]) -> list
             ["ac_valuation" if n == "cv" else "ac_property_page" for n in nomatch]))
     else:
         missing = []
-        if yb and yb.status in MISSING and yb.reason == COUNCIL_REFUSED and uy is None:
+        if yb and yb.status in MISSING and page_unreadable('year_built', yb.reason) and uy is None:
             # Every live report has this: one short optional fact (not a must-mention), not a "not checked" topic.
             out.append(_Topic(O_MISSING, P_EXTRA, "council_not_readable").set(
-                "Council records could not be read from our server, so the year built is unknown; you can enter it in the form.",
+                ("Council property records could not be retrieved, so the year built is unknown; you can enter it in the form."
+                 if yb.reason == SOURCE_UNAVAILABLE else
+                 "Council records could not be read from our server, so the year built is unknown; you can enter it in the form."),
                 [yb.source_id or "ac_property_page"]))
             yb = None
         if title and title.status in MISSING:
@@ -604,10 +607,12 @@ def followup_facts(req: ReportRequest, ev: Evidence, kb_items: dict[str, dict],
                        label=label, strict=kind == "text")
             extra.append(t.set(text.format(v=v), [f.source_id]))
         elif f.status in MISSING and name in FIELD_LABELS and name not in chat:
-            if f.reason != COUNCIL_REFUSED:
+            if not page_unreadable(name, f.reason):
                 text = f"The {FIELD_LABELS[name]} could not be checked from public records."
             elif name == "year_built":
                 continue  # the summary's council_not_readable fact says it, with the form hint
+            elif f.reason == SOURCE_UNAVAILABLE:
+                text = f"Council property records could not be retrieved, so the {FIELD_LABELS[name]} is unknown."
             else:
                 text = f"Council records could not be read from our server, so the {FIELD_LABELS[name]} is unknown."
             extra.append(_Topic(92, P_EXTRA, "missing:" + name).set(text, [f.source_id]))
@@ -681,8 +686,9 @@ def _program_topics(req: ReportRequest, ev: Evidence, kb_items: dict[str, dict],
                 say = (f"The year built you gave is {'the ' if m else ''}{v}, a period Settled.govt.nz's guidance on "
                        "leaky buildings covers; council records could not confirm it.")
             else:
-                why = ("council records could not be read from our server to confirm it"
-                       if f.reason == COUNCIL_REFUSED else "council records could not confirm it")
+                why = {COUNCIL_REFUSED: "council records could not be read from our server to confirm it",
+                       SOURCE_UNAVAILABLE: "council records could not be retrieved to confirm it"
+                       }.get(f.reason, "council records could not confirm it")
                 say = f"The year built you gave is {'the ' if m else ''}{v}; {why}."
             out.append(t.set(say, [f.source_id or "ac_property_page"] + user_kb["build_era"]))
         elif name == "cladding" and given is not None:

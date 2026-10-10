@@ -79,6 +79,8 @@ REASON_TEXT = {
     # property-api reason when it skips the council property page on a cloud host (COUNCIL_PAGE=off). Neutral:
     # the data exists, we just could not read it from here.
     "council_site_refuses_this_server": "council property records could not be read from our server.",
+    # What property-api sends for any read failure unless REASON_DETAIL=on.
+    "source_unavailable": "could not be retrieved this time.",
 }
 STATUS_TEXT = {
     "not_found": "not found in the public records we checked.",
@@ -86,6 +88,7 @@ STATUS_TEXT = {
 }
 HAZARD_REASON_TEXT = {
     "service_timeout": "the council map service did not respond in time, so {it} could not be checked.",
+    "source_unavailable": "could not be retrieved this time.",
 }
 HAZARD_STATUS_TEXT = {
     "unavailable": "could not be checked this time.",
@@ -109,6 +112,15 @@ def _field_text(field: str, reason: Optional[str], status: str) -> str:
 
 
 COUNCIL_REFUSED = "council_site_refuses_this_server"
+SOURCE_UNAVAILABLE = "source_unavailable"
+# Fields read from the council property page (property-api context.py: year_built and _PAGE_FACTS).
+PAGE_FIELDS = ("year_built", "floor_area_m2", "building_site_coverage_m2", "local_board")
+PAGE_UNREADABLE_TEXT = "council property records could not be retrieved."
+
+
+def page_unreadable(field: str, reason: Optional[str]) -> bool:
+    """A council-page field the server could not read (refused in development, source_unavailable live)."""
+    return field in PAGE_FIELDS and reason in (COUNCIL_REFUSED, SOURCE_UNAVAILABLE)
 
 
 def _council_hint(req: ReportRequest) -> str:
@@ -132,7 +144,9 @@ def not_found_notes(req: ReportRequest) -> list[NotFoundNote]:
     for name, f in req.property_fields().items():
         if f.status in MISSING:
             text = _field_text(name, f.reason, f.status)
-            if f.reason == COUNCIL_REFUSED:
+            if page_unreadable(name, f.reason):
+                if f.reason == SOURCE_UNAVAILABLE:  # the real cause is only in the log: stay neutral
+                    text = PAGE_UNREADABLE_TEXT
                 text += _council_hint(req)
             put(("field", text, f.reason or f.status), name, _label(name), f.reason or f.status)
     for h in req.hazards():
