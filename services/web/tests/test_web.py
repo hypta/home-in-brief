@@ -185,6 +185,15 @@ def test_page_is_served():
     assert r.status_code == 200 and "<title>" in r.text and r.headers["cache-control"] == "no-cache"
 
 
+def test_page_puts_the_address_and_the_summary_first_and_ships_its_fonts():
+    html, css = (STATIC / "index.html").read_text(), (STATIC / "styles.css").read_text()
+    order = [html.index(f'id="{part}"') for part in ("q", "loan-form", "summary", "hazards", "sources")]
+    assert order == sorted(order)
+    fonts = re.findall(r"url\((fonts/[^)]+)\)", css)
+    assert len(fonts) == 5 and all((STATIC / font).is_file() for font in fonts)
+    assert client.get("/" + fonts[0]).headers["cache-control"] == "public, max-age=2592000"
+
+
 def test_config_hands_the_basemap_key_to_the_page(monkeypatch):
     monkeypatch.setenv("LINZ_BASEMAPS_KEY", "k")
     assert client.get("/config.json").json() == {"linz_basemaps_key": "k"}

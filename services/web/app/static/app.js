@@ -1,15 +1,19 @@
 // Page flow: address search -> PropertyContext and map -> rules and knowledge-base notes -> render -> summary -> questions.
 // Each request fails on its own: a failed call only affects the block it feeds.
-import {$, byId, esc, link, render, renderSummary, renderThread, typeAnswer} from "./report.js";
+import {$, byId, esc, floodMapped, link, render, renderSummary, renderThread, typeAnswer} from "./report.js";
 import {drawMap} from "./map.js";
 
 // kb: null means the notes could not be loaded; inputs: what the rules on the page were calculated with
 const CLEARED = {rules: null, rulesError: null, inputs: null, kb: [], report: null, reportError: null};
-const state = {ctx: null, ...CLEARED, sources: {}, banks: {}, thread: []};
+const state = {ctx: null, ...CLEARED, sources: {}, banks: {}, thread: [], done: new Set()};  // done: the next steps ticked for this address
 let timer, lastTyped = "", searchSeq = 0, lookupSeq = 0, calcSeq = 0, rulesSources, kbIds, kbItems;
 let asked = {};  // the summary last asked for: its key and the pending or settled answer
 
 const show = id => { $(id).scrollIntoView(); $(id).focus({preventScroll: true}); };
+// The form is open until the first report is on the page; after that it is folded behind "Change" and the readout says what was used.
+function details(open) {
+  $("details").hidden = !open; $("change").textContent = open ? "Close" : "Change"; $("change").setAttribute("aria-expanded", open);
+}
 
 // What a council property category says about the build date, to show the visitor how it was read
 // (LINZ Rating Valuations Rules 2008, Table 21). The web service does the same reading before it asks rules-api.
@@ -74,23 +78,23 @@ async function lookup(a) {
   clearTimeout(timer); ++searchSeq;  // drop any address search still pending
   $("suggestions").innerHTML = ""; $("q").value = a.full_address; $("report").hidden = true;
   $("status").textContent = "Looking up council and LINZ data…";
-  const mapRequest = api("map?address_id=" + a.address_id);
-  mapRequest.catch(() => {});
   try {
     const ctx = await api(`property-context?address_id=${a.address_id}&input=${encodeURIComponent(lastTyped)}`);
     if (mine !== lookupSeq) return;  // a newer lookup owns the page
     if (state.ctx && state.ctx.address.linz_address_id !== a.address_id) $("year-built").value = $("cladding").value = "";  // facts about the previous home
-    Object.assign(state, CLEARED, {ctx, sources: byId(ctx.sources), thread: []});  // earlier answers were about another report
+    Object.assign(state, CLEARED, {ctx, sources: byId(ctx.sources), thread: [], done: new Set()});  // earlier answers were about another report
     const cv = ctx.property.cv, site = id => { const l = ctx.links.find(x => x.id === id); return l ? link(l.url, l.label) : id; };
     $("price").value = cv.status === "found" ? cv.value : "";
     $("price-hint").innerHTML = (cv.status === "found" ? `Filled in with the council valuation (CV) as at ${esc(cv.valuation_date)}, which is not a market value. `
       : "The council valuation could not be found, so enter a price. ") + `Check a current estimate on ${site("homes")}, ${site("oneroof")} or the listing, then change this figure.`;
-    $("year-built-hint").innerHTML = `Only used when the council records do not give a build decade. Check the listing, ${site("homes")} or ${site("oneroof")} for the decade, or copy the Property Category from the ${site("council_valuation")}.`;
+    $("year-built-hint").innerHTML = `Only used when the council records do not give a build decade. Check the listing, ${site("homes")} or ${site("oneroof")} for the decade, or copy the Property Category from the ${site("council_valuation")}. A year (1997), a decade (1990s) or the category code (for example RD199B) all work.`;
     $("cladding-hint").innerHTML = `Check the listing, ${site("homes")} or ${site("oneroof")} for it.`;
-    $("status").textContent = "The report is below."; $("report").hidden = false;
+    $("status").textContent = "The report is below."; $("report").hidden = $("readout-row").hidden = false;
+    $("intro").hidden = $("start-note").hidden = true; details(false);
+    $("sec-hazards").open = floodMapped(ctx).length > 0;  // the map is on show when a flood layer is mapped here
     render(state);
     show("matched");
-    drawMap(mapRequest, () => mine === lookupSeq);
+    drawMap(() => api("map?address_id=" + a.address_id), () => mine === lookupSeq);
     calculate();
   } catch (e) { if (mine === lookupSeq) { state.ctx = null; $("status").textContent = "Lookup failed: " + e.message; } }
 }
@@ -101,6 +105,8 @@ async function lookup(a) {
 try { for (const field of $("loan-form").elements) field.value = sessionStorage.getItem("loan." + field.id) || field.value; } catch {}
 $("loan-form").addEventListener("change", e => { try { sessionStorage.setItem("loan." + e.target.id, e.target.value); } catch {} });
 $("summary").addEventListener("click", e => { if (e.target.id === "retry-summary") summarise(); });
+// a tick survives the summary being written again for the same address
+$("summary").addEventListener("change", e => { if (e.target.matches(".todo input")) state.done[e.target.checked ? "add" : "delete"](e.target.closest("label").textContent); });
 
 // A year built or cladding stated in a question goes into the form when the report on the page was not calculated with
 // it, unless the records already have that fact: the rules then use the record, and report-api's answer says how the
@@ -149,8 +155,17 @@ $("loan-form").addEventListener("submit", e => {
   e.preventDefault();
   if (!state.ctx) { $("status").textContent = "Choose an address first."; $("q").focus(); return; }
   calculate();
-  show("h-loan");
+  details(false); show("matched");
 });
+$("change").addEventListener("click", () => details($("details").hidden));
+// The theme follows the system until the visitor picks the other one; picking the system's own goes back to following it.
+$("theme").addEventListener("click", () => {
+  const root = document.documentElement, system = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  const next = (root.dataset.theme || system) === "dark" ? "light" : "dark";
+  if (next === system) delete root.dataset.theme; else root.dataset.theme = next;
+  try { next === system ? localStorage.removeItem("theme") : localStorage.setItem("theme", next); } catch {}
+});
+$("edit-details").addEventListener("click", e => { e.preventDefault(); details(true); show("details"); });
 
 // Bank names, and the default interest rate: the middle of the banks' published 1-year standard rates.
 api("rates/latest").then(snap => {

@@ -17,15 +17,20 @@ const legend = (title, colours) => title + ": " + Object.entries(colours).map(([
 // every line gets a white edge underneath, so it stays readable on aerial imagery as well as on the street map
 const edged = (make, style) => L.layerGroup([
   make({...style, color: "#fff", weight: style.weight + 3, opacity: .9, dashArray: null, fill: false, interactive: false}), make(style)]);
+// Leaflet cannot size a map that has no layout yet (its section is folded), so the map waits for one.
+const laidOut = el => new Promise(done => { const seen = new ResizeObserver(() => { if (el.offsetWidth) { seen.disconnect(); done(); } }); seen.observe(el); });
 let map;
 
-export async function drawMap(request, isCurrent) {
+// fetchMap is called when the map is about to be drawn: a map nobody opens costs the council's servers nothing
+export async function drawMap(fetchMap, isCurrent) {
   if (map) { map.remove(); map = null; }
   $("mapnote").textContent = "Loading map…";
   $("maplegend").innerHTML = legend("Landslide classes", LANDSLIDE) + "<br>" + legend("Liquefaction classes", CLASS_COLOURS.liquefaction);
   if (!window.L) { $("mapnote").textContent = "The map library could not be loaded." + NOT_NEEDED; return; }
   try {
-    const [g, {linz_basemaps_key: key}] = await Promise.all([request, config]);
+    await laidOut($("map"));
+    if (!isCurrent()) return;
+    const [g, {linz_basemaps_key: key}] = await Promise.all([fetchMap(), config]);
     const [w, s, e, n] = g.bbox, features = layer => g.features.filter(f => f.properties.layer === layer);
     if (!isCurrent()) return;
     // open on the parcel; the view stays inside the checked window, where the layers are complete

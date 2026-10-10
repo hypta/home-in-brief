@@ -5,76 +5,83 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <base target="_blank">
 <title>Home Buyer Copilot - Auckland property report</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="preload" href="fonts/figtree-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
 <link rel="stylesheet" href="styles.css">
 <script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script>try { const theme = localStorage.getItem("theme"); if (theme) document.documentElement.dataset.theme = theme; } catch {}</script>
 <script type="module" src="app.js"></script>
 </head>
 <body>
-<main>
-<header>
-<h1>Home Buyer Copilot</h1>
-<p class="muted">A free first look at one Auckland property: what the council maps show, what the council records say and what a loan could cost. Every statement links to its official source. Information only, not financial or legal advice.</p>
+<header class="top">
+<h1><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="5" y="17.5" width="22" height="9" rx="3.5" fill="#ffe45c"/><path d="M4.5 14.8 16 5l11.5 9.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>Home Buyer Copilot</h1>
+<span class="muted">Information, not advice</span>
+<button type="button" id="theme" class="theme" aria-label="Switch between the light and the dark theme"></button>
 </header>
-
-<section aria-labelledby="h-start">
-<h2 id="h-start">Start here</h2>
-<p class="muted">Add your loan details once to see repayments, then choose an address. You can check one address after another.</p>
+<main>
+<section class="entry" aria-label="Address and your details">
+<div class="field">
+<label for="q">Auckland address <span id="start-note" class="hand" aria-hidden="true">start here <svg viewBox="0 0 34 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4c10-2 20 3 25 15"/><path d="M20 15l8 5 3-9"/></svg></span></label>
+<input id="q" class="box" type="search" autocomplete="off" placeholder="Start typing, e.g. 44 Lorne Street" aria-describedby="status">
+</div>
+<ul id="suggestions"></ul>
+<p id="status" class="muted" role="status" aria-live="polite"></p>
+<p id="intro" class="muted">A free first look at one Auckland property: what the council maps show, what the council records say and what a loan could cost. Every statement links to its official source. Information only, not financial or legal advice.</p>
+<div class="readout" id="readout-row" hidden>
+<p id="readout"></p>
+<button type="button" id="change" aria-expanded="false" aria-controls="details">Change</button>
+</div>
+<div id="details" tabindex="-1">
 <form id="loan-form" class="fields" aria-labelledby="h-loan-form">
-<h3 id="h-loan-form">Your loan details (optional)</h3>
-<p class="muted">Kept in this browser tab until you close it, and used for every address you check.</p>
+<h2 id="h-loan-form">Your loan details (optional) <button type="button" class="hint" popovertarget="loan-hint" aria-label="About your loan details">?</button></h2>
+<p id="loan-hint" class="tip" popover>Add them once to see repayments. They are kept in this browser tab until you close it, and used for every address you check.</p>
 <div class="field">
-<label for="deposit">Deposit ($)</label>
-<input id="deposit" type="number" inputmode="decimal" min="0" step="any">
+<label for="deposit">Deposit ($) <button type="button" class="hint" popovertarget="deposit-hint" aria-label="About the deposit">?</button></label>
+<input id="deposit" type="number" inputmode="decimal" step="any" placeholder="e.g. 60000" min="0" aria-describedby="deposit-hint">
+<p id="deposit-hint" class="tip" popover>The money you already have for this purchase. With it the report shows the loan amount and repayments.</p>
 </div>
 <div class="field">
-<label for="income">Household income before tax, per year ($)</label>
-<input id="income" type="number" inputmode="decimal" min="1" step="any">
+<label for="income">Household income ($) <button type="button" class="hint" popovertarget="income-hint" aria-label="About household income">?</button></label>
+<input id="income" type="number" inputmode="decimal" step="any" placeholder="Before tax, per year" min="1" aria-describedby="income-hint">
+<p id="income-hint" class="tip" popover>Before tax, per year, for everyone who will be on the loan. Used for the debt-to-income ratio and the First Home Loan income cap.</p>
 </div>
 <div class="field">
-<label for="debts">Existing debts ($)</label>
-<input id="debts" type="number" inputmode="decimal" min="0" step="any" aria-describedby="debts-hint">
-<p id="debts-hint" class="muted">Count credit cards at their limit, and include student loans and car loans.</p>
+<label for="debts">Existing debts ($) <button type="button" class="hint" popovertarget="debts-hint" aria-label="About existing debts">?</button></label>
+<input id="debts" type="number" inputmode="decimal" step="any" placeholder="Cards at their limit" min="0" aria-describedby="debts-hint">
+<p id="debts-hint" class="tip" popover>Count credit cards at their limit, and include student loans and car loans.</p>
 </div>
 <div class="field">
-<label for="household">Household (optional)</label>
+<label for="household">Household <button type="button" class="hint" popovertarget="household-hint" aria-label="About the household">?</button></label>
 <select id="household" aria-describedby="household-hint">
 <option value="">Not stated</option>
 <option value="single">One applicant, no dependants</option>
 <option value="single_with_dependants">One applicant with dependants</option>
 <option value="multiple">Two or more applicants</option>
 </select>
-<p id="household-hint" class="muted">Only used for the First Home Loan income cap.</p>
+<p id="household-hint" class="tip" popover>Only used for the First Home Loan income cap.</p>
 </div>
 <div class="field">
-<label for="rate">Interest rate (%)</label>
-<input id="rate" type="number" inputmode="decimal" min="0" max="30" step="any" aria-describedby="rate-hint">
-<p id="rate-hint" class="muted">Leave blank to use each bank's published 1-year rate.</p>
+<label for="rate">Interest rate (%) <button type="button" class="hint" popovertarget="rate-hint" aria-label="About the interest rate">?</button></label>
+<input id="rate" type="number" inputmode="decimal" step="any" placeholder="Blank: bank rates" min="0" max="30" aria-describedby="rate-hint">
+<p id="rate-hint" class="tip" popover>Leave blank to use each bank's published 1-year rate.</p>
 </div>
 </form>
-
-<div class="field">
-<label for="q">Auckland address</label>
-<input id="q" type="search" autocomplete="off" placeholder="Start typing, e.g. 44 Lorne Street" aria-describedby="status">
-</div>
-<ul id="suggestions"></ul>
-<p id="status" class="muted" role="status" aria-live="polite"></p>
-
 <div class="fields">
-<h3 id="h-home-form">About this home (optional)</h3>
+<h2 id="h-home-form">About this home (optional)</h2>
 <div class="field">
-<label for="price">Price to calculate with ($)</label>
-<input id="price" form="loan-form" type="number" inputmode="decimal" min="1" step="any" aria-describedby="price-hint">
-<p id="price-hint" class="muted">Filled in with the council valuation (CV) when you choose an address. You can change it.</p>
+<label for="price">Price ($) <button type="button" class="hint" popovertarget="price-hint" aria-label="About the price">?</button></label>
+<input id="price" type="number" inputmode="decimal" step="any" placeholder="Council valuation" form="loan-form" min="1" aria-describedby="price-hint">
+<p id="price-hint" class="tip" popover>Filled in with the council valuation (CV) when you choose an address. You can change it.</p>
 </div>
 <div class="field">
-<label for="year-built">Year or decade built, or the council property category</label>
-<input id="year-built" form="loan-form" type="text" maxlength="8" placeholder="e.g. 1997, 1990s or RD199B" aria-describedby="year-built-hint">
-<p id="year-built-hint" class="muted">Only used when the council records do not give a build decade. Check the listing for it.</p>
+<label for="year-built">Year built <button type="button" class="hint" popovertarget="year-built-hint" aria-label="About the year built">?</button></label>
+<input id="year-built" form="loan-form" type="text" maxlength="8" placeholder="e.g. 1997 or 1990s" aria-describedby="year-built-hint">
+<p id="year-built-hint" class="tip" popover>Only used when the council records do not give a build decade. Check the listing for it. A year (1997), a decade (1990s) or the council's Property Category code (for example RD199B) all work.</p>
 <p id="year-built-read" class="muted" role="status"></p>
 </div>
 <div class="field">
-<label for="cladding">Outside walls (cladding)</label>
+<label for="cladding">Outside walls (cladding) <button type="button" class="hint" popovertarget="cladding-hint" aria-label="About the cladding">?</button></label>
 <select id="cladding" form="loan-form" aria-describedby="cladding-hint">
 <option value="">Not sure</option>
 <option value="aluminium">Aluminium</option>
@@ -91,68 +98,78 @@
 <option value="wood">Wood</option>
 <option value="mixed">Mixed or other</option>
 </select>
-<p id="cladding-hint" class="muted">Check the listing for it.</p>
+<p id="cladding-hint" class="tip" popover>Check the listing for it.</p>
 </div>
 <button type="submit" form="loan-form">Update report</button>
+</div>
 </div>
 </section>
 
 <div id="report" hidden>
-<section aria-labelledby="matched">
+<article class="sheet">
 <h2 id="matched" tabindex="-1"></h2>
-<p id="meta" class="muted"></p>
+<svg class="underline" viewBox="0 0 340 10" preserveAspectRatio="none" aria-hidden="true"><path d="M2 6c40-4 80 3 130-1s100-2 206 1" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
+<p id="meta" class="muted rec"></p>
+<section aria-labelledby="h-summary">
+<h3 id="h-summary">Summary</h3>
+<div id="summary" aria-live="polite"></div>
 </section>
+</article>
 
-<section aria-labelledby="h-hazards">
-<h2 id="h-hazards">1. Mapped hazards</h2>
+<section class="evidence" aria-labelledby="h-records">
+<h2 id="h-records">The records behind it</h2>
+<details class="sec" id="sec-hazards">
+<summary><span class="num">1</span><h3>Mapped hazards</h3><span class="digest" id="d-hazards"></span></summary>
+<div class="body">
 <div id="map" role="region" aria-label="Map of the parcel and nearby council hazard layers"></div>
 <p id="mapnote" class="muted"></p>
 <p id="maplegend" class="muted"></p>
 <div id="hazards"></div>
-</section>
-
-<section aria-labelledby="h-facts">
-<h2 id="h-facts">2. Property facts</h2>
+</div>
+</details>
+<details class="sec" id="sec-facts">
+<summary><span class="num">2</span><h3>This home</h3><span class="digest" id="d-facts"></span></summary>
+<div class="body">
 <div id="facts"></div>
-</section>
-
-<section aria-labelledby="h-loan">
-<h2 id="h-loan" tabindex="-1">3. Repayment range</h2>
-<p><a href="#h-start" target="_self">Change the price or your loan details</a></p>
+</div>
+</details>
+<details class="sec" id="sec-loan">
+<summary><span class="num">3</span><h3>Money</h3><span class="digest" id="d-loan"></span></summary>
+<div class="body">
+<p><a href="#details" id="edit-details" target="_self">Change the price or your loan details</a></p>
 <div id="loan" aria-live="polite"></div>
-</section>
-
-<section aria-labelledby="h-notes">
-<h2 id="h-notes">4. Build era and title notes</h2>
+</div>
+</details>
+<details class="sec" id="sec-notes">
+<summary><span class="num">4</span><h3>Build era and title</h3><span class="digest" id="d-notes"></span></summary>
+<div class="body">
 <div id="notes"></div>
-</section>
-
-<section aria-labelledby="h-summary">
-<h2 id="h-summary">5. Summary and next steps</h2>
-<div id="summary" aria-live="polite"></div>
-</section>
-
-<section aria-labelledby="h-links">
-<h2 id="h-links">6. Check the originals</h2>
+</div>
+</details>
+<details class="sec" id="sec-originals">
+<summary><span class="num">5</span><h3>Originals and sources</h3><span class="digest" id="d-originals"></span></summary>
+<div class="body">
+<h4>Check the originals</h4>
 <ul id="links"></ul>
+<details class="more">
+<summary>Sources cited on this page</summary>
+<ul id="sources" class="cards"></ul>
+</details>
+</div>
+</details>
 </section>
 
-<section aria-labelledby="h-ask">
-<h2 id="h-ask">7. Ask a follow-up question</h2>
+<section class="asking" aria-labelledby="h-ask">
+<h2 id="h-ask">Ask about this home</h2>
 <p class="muted">Ask about this property or this report, in any language.</p>
 <div id="thread" aria-live="polite"></div>
 <form id="ask-form" class="field">
 <label for="question">Your question</label>
-<textarea id="question" rows="2" maxlength="1000" required></textarea>
+<textarea id="question" class="box" rows="2" maxlength="1000" required placeholder="Ask in any language"></textarea>
 <button type="submit" id="ask">Ask</button>
 </form>
 </section>
-
-<section aria-labelledby="h-sources">
-<h2 id="h-sources">Sources and credits</h2>
-<ol id="sources"></ol>
 <p id="disclaimer" class="muted"></p>
-</section>
 </div>
 </main>
 </body>

@@ -58,7 +58,15 @@ The relay is tested against real rules-api, property-api and report-api response
 ## Page
 
 Plain HTML, CSS and JavaScript modules, no build step: `app.js` (page flow), `report.js` (the report blocks),
-`map.js` (Leaflet map). The summary block is drawn from `/api/report` after each calculation. The follow-up block
+`map.js` (Leaflet map). The look and the rules for each part of the page are in `DESIGN.md`.
+
+Order: the address box, then the details the report was calculated with in one line each (the form is open until the
+first report and folded behind "Change" after it), then the summary, the next steps and what could not be found, then
+five folded sections with the records. The hazards section is open when a flood layer is mapped on the parcel. A next
+step on the summary's list is not repeated under the note it comes from. Each line opens its sources from one control.
+The three typefaces are served from `app/static/fonts/` with their licence texts (SIL Open Font License).
+
+The summary block is drawn from `/api/report` after each calculation. The follow-up block
 sends each question to `/api/followup` with the last 3 answered turns and draws the turns as a conversation; they
 live in page memory and are cleared when another address is chosen. An answer report-api found with Google Search
 (`web`) is shown as returned, with its sources and with Google's search suggestions in a frame that runs no scripts.

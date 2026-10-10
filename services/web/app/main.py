@@ -53,7 +53,8 @@ async def edge(request: Request, call_next):
         return _error(413, "too_large", "Request body is missing its length or is too large.")
     response = await call_next(request)
     if not request.url.path.startswith("/api/"):
-        response.headers["Cache-Control"] = "no-cache"  # page files must not go stale across a deploy
+        # page files must not go stale across a deploy; a font file keeps its content for as long as it keeps its name
+        response.headers["Cache-Control"] = "public, max-age=2592000" if request.url.path.startswith("/fonts/") and response.status_code == 200 else "no-cache"
     return response
 
 
