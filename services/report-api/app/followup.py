@@ -258,16 +258,14 @@ def check_answer(s: Sentence, ev: Evidence) -> list[str]:
 
     For CJK text the validator's word limit (whitespace split) is replaced by CJK_MAX_UNITS, and "一" is
     masked before the validator's numeral check, because it is part of ordinary words (一些, 之一, 一樣).
-    In every language the publisher names Settled.govt.nz and unittitles.govt.nz are masked before the
-    validator's URL check, which accepts them only before a few English verbs ("Settled.govt.nz says"), so
-    "Settled.govt.nz 指出" or "unittitles.govt.nz states" are not dropped. Other domains still fail.
+    Domains follow the validator's rule (only the host of a cited source passes); for CJK text the same rule
+    is applied again with ASCII boundaries, because \b does not separate a domain glued to CJK characters.
     """
     cjk = bool(_HAN_RE.search(s.text) or _KANA_RE.search(s.text) or _HANGUL_RE.search(s.text))
     if not cjk:
-        v = validate([Sentence(text=_PUBLISHER_RE.sub("Settled", s.text), source_ids=s.source_ids)], ev, MAX_WORDS)
+        v = validate([s], ev, MAX_WORDS)
         return v.rejected[0][1] if v.rejected else []
-    probe_text = _PUBLISHER_RE.sub("Settled", s.text.replace("一", "某"))
-    probe = Sentence(text=probe_text, source_ids=s.source_ids)
+    probe = Sentence(text=s.text.replace("一", "某"), source_ids=s.source_ids)
     v = validate([probe], ev, max_words=None)
     fails = list(v.rejected[0][1]) if v.rejected else []
     if cjk_units(s.text) > fp.CJK_MAX_UNITS:
@@ -276,8 +274,9 @@ def check_answer(s: Sentence, ev: Evidence) -> list[str]:
         fails.append(BANNED_WORD)
     if _ZH_NUMBER.search(s.text):
         fails.append(NUMBER_WORD)
-    if re.search(r"https?|www|\.(?:com|nz|org|net)\b", s.text, re.I) and URL_OR_HTML not in fails \
-            and not _PUBLISHER_RE.search(s.text):
+    cited_hosts = {h for i in s.source_ids for h in ev.cited_hosts.get(i, ())}
+    if URL_OR_HTML not in fails and (re.search(r"https?|www\.", s.text, re.I) or any(
+            m.group(0).lower() not in cited_hosts for m in _CJK_DOMAIN_RE.finditer(s.text))):
         fails.append(URL_OR_HTML)
     return list(dict.fromkeys(fails))
 
@@ -441,7 +440,7 @@ def mock_answer(ev: Evidence, kb_items: dict[str, dict], used: dict, language: s
     return passed, dropped
 
 
-_PUBLISHER_RE = re.compile(r"\b(?:settled|unittitles)\.govt\.nz\b", re.I)
+_CJK_DOMAIN_RE = re.compile(r"(?<![A-Za-z0-9-])(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,}(?![A-Za-z0-9-])")
 _PLAIN_RE = re.compile(r"\d|https?://|www\.|<|\n")
 
 
@@ -489,7 +488,7 @@ def answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
         links = links or fallback_links(req.question, link_ids)
         if refusal_mode == "strict":
             data = _kb(req, clock)
-            ev = build_evidence(req, data.items, data.sources.keys())
+            ev = build_evidence(req, data.items, data.sources.keys(), source_urls=data.sources.urls)
             if check_answer(refusal, ev):
                 raise ReportError(502, "validation_failed", "No answer sentence passed validation.")
         return FollowupResponse(language=language, answer=[refusal], out_of_scope=True, user_supplied=supplied,
@@ -526,7 +525,7 @@ def answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
     eff = ReportRequest(property_context=req.property_context, user_inputs=user_inputs, rules_output=rules_output)
 
     data = _kb(eff, clock)
-    ev = build_evidence(eff, data.items, data.sources.keys())
+    ev = build_evidence(eff, data.items, data.sources.keys(), source_urls=data.sources.urls)
     titles = {s.id: s.title or "" for s in eff.sources()} | data.sources
     if used:
         # P-V3 exception: the validated, used year is allowed only with the items it selected.

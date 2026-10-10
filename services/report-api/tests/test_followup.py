@@ -383,13 +383,23 @@ def test_call_rules_http(monkeypatch):
                     "json": {"property_context": {"a": 1}, "user_inputs": {"b": 2}}, "headers": {}}
 
 
-def test_publisher_names_are_not_links_but_other_domains_are(monkeypatch, rules_calls):
-    monkeypatch.setattr(followup, "gemini_json", fake(cls(), [ans(
-        ("Settled.govt.nz states that flood cover can be harder to get.", ["kb_flood_insurance_limit"]),
-        ("Example.govt.nz states the same.", ["kb_flood_insurance_limit"]))]))
+def test_domain_of_a_cited_source_passes(monkeypatch, rules_calls):
+    ok = [("Settled.govt.nz says flood cover can be harder to get.", ["kb_flood_insurance_limit"]),
+          ("Settled.govt.nz 指出部分房屋較難取得淹水保險。", ["kb_flood_insurance_limit"]),
+          ("依據settled.govt.nz的說明，部分房屋較難取得淹水保險。", ["kb_flood_insurance_limit"])]
+    monkeypatch.setattr(followup, "gemini_json", fake(cls(), [ans(*ok)]))
     out = post("case1", "Insurance?").json()
-    assert [s["text"] for s in out["answer"]] == ["Settled.govt.nz states that flood cover can be harder to get."]
-    assert out["dropped"] == 1
+    assert [s["text"] for s in out["answer"]] == [t for t, _ in ok] and out["dropped"] == 0
+
+
+def test_domain_without_its_source_cited_is_blocked(monkeypatch, rules_calls):
+    bad = [("Settled.govt.nz says the flood layer covers 51.2% of this parcel.", ["ac_flood_plains"]),
+           ("Settled.govt.nz 指出市議會的 Flood Plains 圖層涵蓋這塊地的 51.2%。", ["ac_flood_plains"]),
+           ("詳見evil.example，市議會的 Flood Plains 圖層涵蓋 51.2%。", ["ac_flood_plains"]),
+           ("Example.govt.nz says flood cover can be harder to get.", ["kb_flood_insurance_limit"])]
+    monkeypatch.setattr(followup, "gemini_json", fake(cls(), [ans(FLOOD_EN, *bad)]))
+    out = post("case1", "Insurance?").json()
+    assert [s["text"] for s in out["answer"]] == [FLOOD_EN[0]] and out["dropped"] == 4
 
 
 # ---- REPORT_MOCK=true -----------------------------------------------------------------------------

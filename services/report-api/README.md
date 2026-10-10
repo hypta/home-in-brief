@@ -95,8 +95,9 @@ Steps (INTERFACE_DRAFT 5 and 6.1):
    (Chinese/Japanese/Korean language or script) the 25-word limit is replaced by 60 units (CJK characters
    plus Latin words and numbers), Chinese verdict and approximation words (安全, 建議, 應該, 必須, 可能, 大約, ...)
    and English verdict words glued to CJK text are dropped, `兩` and `百分之` count as number words, and `一` is
-   masked before the validator's numeral check (it is part of ordinary words). In every language the
-   publisher names Settled.govt.nz and unittitles.govt.nz are not treated as links; any other domain is.
+   masked before the validator's numeral check (it is part of ordinary words). Domains follow the validator:
+   only the host of a source the sentence cites passes ("Settled.govt.nz says ..." citing a Settled KB item);
+   for CJK text the same check runs again with ASCII boundaries, so a domain glued to CJK characters is caught.
    Digits next to CJK characters get a space (`1997年` -> `1997 年`) so the number is read whole. One retry
    when nothing passes and time allows.
 7. Sentences citing a `kb_items_from_user_input` item get a prefix from code: `依你提供的資訊，` (zh-Hant),
