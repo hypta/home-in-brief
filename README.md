@@ -1,100 +1,152 @@
 # Home Buyer Copilot
 
-A free pre-offer report for first-time home buyers in Auckland, New Zealand. Before making an offer, a buyer gets a
-plain-English view of what a property could really cost and where the risks are: affordability under current lending
-rules (LVR and DTI limits, deposit, repayments at current bank rates), the property's title type, age and cladding,
-natural-hazard and insurance exposure, and the Council valuation (CV), which is not a market price.
+A free pre-offer report for first-time home buyers in Auckland, New Zealand. Enter an address and your loan details
+(deposit, income, debts) and get a plain-English view of what the property could really cost and where the risks
+are: council hazard layers (flood, coastal, landslide and others), affordability under current lending rules (LVR and
+DTI limits, repayments at each bank's published rate, First Home Loan), knowledge-base notes quoted from official
+sources, a short summary written with Gemini, and follow-up questions.
+
+**Live demo: https://web-380630050242.australia-southeast1.run.app**
 
 This is general information, not financial, legal or insurance advice. Verify everything with a licensed adviser,
-lawyer and insurer before you make an offer.
+lawyer and insurer before you make an offer. Submission for AI Builder Cup 2026.
 
-License: TBD by the team.
+## How it works
 
-## Status
-
-This repo is a monorepo shared by two people. **What works today** is the rules side (owner B): a deterministic rules
-and calculation API, a knowledge base with source quotes, and jobs that keep rates and knowledge-base data fresh.
-The property-data API (owner A, `services/property-api/`, port 8081) is built. The Gemini layer (summary, validator,
-follow-up questions) is owned by B and the frontend (`web`) by A; both are in progress.
-
-## Repo layout
-
-| Path | Owner | What it is |
-|---|---|---|
-| `services/property-api/` | A | Collects property data (CV, title, hazards) and calls rules-api |
-| `services/rules-api/` | B | FastAPI service: loan, LVR, DTI, repayment scenarios, which knowledge-base items apply |
-| `jobs/rates-refresh/` | B | Job that refreshes bank rates (Gemini extraction), gated by each bank's website terms |
-| `jobs/kb-refresh/` | B | Job that re-checks knowledge-base quotes against their source pages |
-| `shared/b_common/` | shared | Pydantic schemas and the data-access layer (local files or Firestore) |
-| `kb/` | shared | Knowledge-base seed items and sources, validator, `MANUAL_CHECK.md` |
-| `data/` | shared | `rates_seed.json`, the hand-maintained rates snapshot |
-| `scripts/` | B | `seed_firestore.py`, `seed_rates.py`, `smoke.py`, `validate_rates_seed.py` |
-| `openapi.json` | B | OpenAPI description of rules-api |
-
-Docs: `LOCAL.md` (run locally), `DEPLOY.md` (Cloud Run + Firestore, deployed by GitHub Actions), `RATES_UPDATE.md` (update rates by hand), `CODES.md` (codes used by the API),
-`kb/MANUAL_CHECK.md` (verify knowledge-base items by hand).
-
-## Architecture
-
-```
-                 Browser (frontend, in progress)
-                           |
-                           v
-                  property-api (A)  ---> property data sources
-                           |
-                           |  POST /v1/rules   (property_context + user_inputs)
-                           v
-        +--------------- rules-api (B, private Cloud Run) ---------------+
-        |  calc: loan, LVR, DTI, repayment scenarios, First Home Loan     |
-        |  rules: select applicable knowledge-base items                  |
-        +-----------------------------+----------------------------------+
-                                      | reads
-                                      v
-                        Firestore  (rates_latest, rates_snapshots,
-                                    kb_items, sources, job_runs)
-                                      ^ writes
-              +-----------------------+------------------------+
-              |                                                |
-     rates-refresh (Cloud Run job)                   kb-refresh (Cloud Run job, weekly)
-     fetch rates page -> Gemini extract              fetch source page -> check quote
-     (only banks whose terms allow it)               (only sources whose terms allow it)
-
-   Gemini report-writing layer (in progress): rules output + knowledge-base quotes -> written report
+```mermaid
+flowchart LR
+  U[Browser] --> W[web<br/>public Cloud Run]
+  W --> P[property-api]
+  W --> R[rules-api]
+  P -->|property context + inputs| R
+  P --> S1[(LINZ, Auckland Council<br/>open data and GeoMaps)]
+  R --> F[(Firestore<br/>rates, knowledge base)]
+  W -.->|summary, follow-up| G[report-api<br/>Gemini layer]
+  G --> R
+  J1[kb-refresh job] --> F
+  J2[rates-refresh job] --> F
 ```
 
-rules-api never calls a language model. Numbers come from code; knowledge-base claims come from human-verified quotes
-with their source and attribution.
+Data flow for one report:
 
-## Quickstart (about 5 minutes, no Docker, no cloud account)
+1. The user picks an address; **web** relays to **property-api**, which builds a `PropertyContext` from LINZ and
+   Auckland Council data. Every field has a `status` (`found` / `not_found` / `unavailable`) and a reason, so "not
+   found" is never presented as "no risk".
+2. web sends the property context and the user's inputs to **rules-api**. It calculates loan amount, LVR, DTI,
+   repayment scenarios per bank and the First Home Loan view with plain code, and selects which knowledge-base items
+   apply. rules-api never calls a language model.
+3. **report-api** takes the three documents (property context, user inputs, rules output) and produces the summary,
+   next steps and follow-up answers (next section).
+4. Two Cloud Run **jobs** keep data fresh: `kb-refresh` re-checks knowledge-base quotes against their source pages,
+   `rates-refresh` extracts bank rates with Gemini, but only from pages whose terms allow it (see Data sources).
 
-Needs Python 3.12 and [uv](https://docs.astral.sh/uv/). Run from the repo root.
+web is the only public service. property-api, rules-api and report-api are private Cloud Run services; callers use
+Google ID tokens.
+
+**Status of the web-to-report-api link:** report-api is built, tested and has its own deploy target
+(`.github/deploy/targets.json`). The relay route in `services/web/` that calls it is not in this repo yet, so the
+live page's summary and follow-up blocks depend on that wiring. TODO(team): confirm before submission.
+
+## How Gemini is used
+
+Gemini (Google AI) is used in three places, always behind code that owns the facts: report-api (summary and follow-up),
+and `jobs/rates-refresh` (extracting rates from a bank page, when a bank's terms allow it). The default model is
+`gemini-3.5-flash-lite` (`GEMINI_MODEL`). Details: `services/report-api/README.md`.
+
+**Summary: code writes the facts, Gemini only rewords them.**
+
+1. Code turns the property context, user inputs and rules output into a numbered **fact list**. Each fact has a draft
+   sentence, its source ids, and its values as placeholders such as `{{F1.flood_plain_pct}}`.
+2. Gemini rewrites the facts into 3-5 plain-language sentences. It never sees a number: digits, years, amounts and
+   title names are placeholders, and code fills in the values afterwards.
+3. A **validator** checks every sentence: it must cite known sources (taken from the facts, never from Gemini); no
+   digit outside a placeholder; numbers must match the cited source fields; no verdict, advice or prediction words; no
+   URLs; at most 25 words; qualifiers such as "may" or "only" must survive the rewrite.
+4. A sentence that fails is **dropped and replaced by the draft sentence** of its facts, so the report always shows
+   something checked. The count of blocked sentences is returned as `dropped`.
+
+**Follow-up questions.** Gemini first classifies the question (out of scope, a stated year built or cladding,
+suggested links). Code checks the extracted year or cladding value, merges it into the user's inputs without
+overriding a value the council records, **re-calls rules-api** with it, and Gemini answers from the new fact list.
+Answers go through the same validator (at most 3 sentences). Out-of-scope questions get one fixed refusal and
+links. Question history is treated as untrusted data and never becomes evidence.
+
+**English only.** The whole system uses English. A question in another language is understood and answered in
+English; any answer sentence containing CJK characters is blocked.
+
+**Why this design.** Home-buying numbers must be right and traceable. A language model is good at plain wording and
+bad at being reliably exact, so the numbers, the sources and the selection of knowledge come from code and
+human-verified quotes, and Gemini is limited to phrasing that the validator can check. Every sentence in the report
+carries the ids of the sources it relies on. The validator is lexical, not semantic: a rewrite that keeps all the
+listed words but subtly changes the relation between them can pass (documented in the report-api README).
+
+## Data sources and terms
+
+- **Property data:** LINZ Data Service (CC BY 4.0) for addresses, parcels and title type; Auckland Council open data
+  for hazard layers; Auckland Council GeoMaps for the rating valuation (GeoMaps terms: personal and business use, no
+  substantial copying). Nothing is bulk-copied; each report queries per property. Credit lines are returned in
+  `sources[].attribution`. Full table: `services/property-api/README.md`.
+- **Website terms gate automation.** Every bank in `jobs/rates-refresh/config/banks.yaml` and every source in
+  `kb/seed/sources.json` carries a `tos_status` (`allowed`, `unclear` or `prohibited`) with its terms URL and review
+  date (reviewed 2026-10-03, not legal advice). Jobs fetch only `allowed` entries, send an honest `User-Agent`,
+  honour `robots.txt`, and treat a block or bot challenge as final: no browser workaround, no bypass.
+- **Rates are updated by hand.** No bank is `allowed` for automated fetching, so `data/rates_seed.json` is a manual
+  snapshot from each bank's public rates page (`RATES_UPDATE.md`), with a `captured_at` per bank. The report shows
+  the snapshot date.
+- **Knowledge base: 31 of 31 items are `verified`.** Each item holds a word-for-word quote from an official source,
+  checked by a person against the source (`kb/MANUAL_CHECK.md`). `kb-refresh` never edits item text and downgrades an
+  item whose quote disappears. Quotes are shown with source name, URL and licence text.
+- The CV is an Auckland Council rating valuation, not a market price.
+
+## Repository layout
+
+| Path | What it is |
+|---|---|
+| `services/web/` | Public service (A): report page (plain HTML/JS, Leaflet map) and a relay to the private services |
+| `services/property-api/` | (A) Address search and `PropertyContext`: hazards, valuation, title, links, sources |
+| `services/rules-api/` | (B) FastAPI: loan, LVR, DTI, repayment scenarios, First Home Loan, applicable knowledge-base items |
+| `services/report-api/` | (B) Gemini layer: fact list, rewrite, validator, follow-up |
+| `jobs/rates-refresh/` | (B) Rates extraction job, gated by bank terms |
+| `jobs/kb-refresh/` | (B) Weekly job that re-checks knowledge-base quotes |
+| `shared/b_common/` | Pydantic schemas and data access (local files or Firestore) |
+| `kb/` | Knowledge-base seed items and sources, validator, `MANUAL_CHECK.md` |
+| `data/` | `rates_seed.json`, the hand-maintained rates snapshot |
+| `scripts/` | Seed, smoke-test and evaluation scripts |
+| `.github/` | Deploy workflow and `deploy/targets.json` |
+| `openapi.json` | OpenAPI contract for rules-api |
+
+Docs: `LOCAL.md` (run locally), `DEPLOY.md`, `RATES_UPDATE.md`, `CODES.md` (API codes and warnings).
+
+## Run locally
+
+Needs Python 3.12 and [uv](https://docs.astral.sh/uv/). From the repo root:
 
 ```bash
-git clone <this repo> && cd <repo directory>
-make setup          # uv venv --python 3.12 .venv + pip-installs each service's requirements.txt and pytest
-make test           # all unit tests
-make local-api      # rules-api on http://localhost:8080 (DATA_BACKEND=local, reads kb/seed and data/rates_seed.json)
-make smoke          # in a second shell: checks /healthz and /v1/rules (expects loan 880000, LVR 88.0, DTI 6.07)
+make setup          # venv + every service's requirements + pytest
+make local-api      # rules-api on :8080 (local files, no cloud account)
+make smoke          # second shell: /healthz and /v1/rules (expects loan 880000, LVR 88.0, DTI 6.07)
+REPORT_MOCK=true make local-report   # report-api on :8090, no Gemini key needed
 ```
 
-Without `uv`: `python3.12 -m venv .venv`, then `.venv/bin/pip install -r services/rules-api/requirements.txt -r jobs/rates-refresh/requirements.txt -r jobs/kb-refresh/requirements.txt pytest`.
-Or install one service only, for example `.venv/bin/pip install -r services/rules-api/requirements.txt pytest`.
+For the page, run property-api and web as in `services/web/README.md` (needs a free `LINZ_API_KEY` in `.env`; copy
+`.env.example`). Real Gemini calls need `GEMINI_API_KEY` in `.env`. Docker plus Firestore emulator:
+`make up`, `make seed`, `make smoke`, `make down`. More in `LOCAL.md`.
 
-### Docker plus Firestore emulator
-
-Needs a running Docker daemon.
+## Test
 
 ```bash
-make up       # build and start the Firestore emulator (127.0.0.1:8085) and rules-api (127.0.0.1:8080)
-make seed     # load kb/seed and data/rates_seed.json into the emulator (emulator data is not persisted)
-make smoke    # same check, now served from Firestore
-make kb       # run the kb-refresh job against the emulator
-make down
+make test    # runs four suites: test-b (rules-api, both jobs, kb), test-property-api, test-web, test-report-api
 ```
 
-Ports are published on `127.0.0.1` only, because the emulator and the API have no authentication. More detail in
-`LOCAL.md`. Production runs on Cloud Run: a GitHub Actions workflow (`.github/workflows/deploy.yml`) tests every push to
-`main` and deploys the changed services; the one-time GCP setup (Firestore, Workload Identity Federation, Scheduler, IAM) is in `DEPLOY.md`.
+property-api and web tests replay stored real responses and need no network or key. The report-api golden-case
+evaluation is `scripts/eval_report_api.py`.
+
+## Deploy
+
+Pushes to `main` run the tests in GitHub Actions (`.github/workflows/deploy.yml`) and then deploy changed services
+and jobs to Cloud Run, with Firestore as the database. Google Cloud login uses Workload Identity Federation, so there
+are no key files. Services and jobs are listed in `.github/deploy/targets.json`. One-time setup and details:
+`DEPLOY.md`.
 
 ## API (rules-api)
 
@@ -132,26 +184,25 @@ The CV is used only when `cv.status` is `"found"`. The response includes `loan_a
 
 In production rules-api is a private Cloud Run service; callers authenticate with a Google ID token (`DEPLOY.md`, section 11).
 
-## Data policy
-
-- **Website terms gate automation.** Every bank in `jobs/rates-refresh/config/banks.yaml` and every source in
-  `kb/seed/sources.json` carries a `tos_status` (`allowed`, `unclear` or `prohibited`) with the terms URL and review
-  date (reviewed 2026-10-03, not legal advice). Jobs fetch only `allowed` entries, send an honest `User-Agent`, honour
-  `robots.txt`, and treat a block or bot challenge as final: no retry through a browser, no bypass.
-- **No scraping of sites that disallow it.** As of the review no bank is `allowed`, so no rates page is fetched automatically.
-- **Rates are a manual snapshot.** `data/rates_seed.json` is updated by hand from each bank's public rates page
-  (`RATES_UPDATE.md`), with a `captured_at` per bank. Rates move; the report shows the snapshot date.
-- **Knowledge-base items need human verification.** Each item holds a word-for-word quote from an official source. Items
-  start as `draft`; a person checks the quote against the source and marks it `verified` (`kb/MANUAL_CHECK.md`). The job
-  never edits item text and downgrades an item whose quote disappears.
-- **Attribution.** Quotes are shown with the source's name, URL and licence/attribution text from `kb/seed/sources.json`.
-- The CV is an Auckland Council rating valuation (date shown), not a market price.
-
 ## Limitations
 
-- The Gemini report layer and the frontend are not finished yet.
-- Most seeded knowledge-base items (20+) are `draft` until a person verifies them, so a production rules-api (no
-  `INCLUDE_DRAFT`) returns none.
-- Rates cover 11 lenders from a manual snapshot and can be out of date. Non-bank lenders are not covered.
-- Calculations are simplified (for example fixed-rate owner-occupier scenarios only) and are not a lender's assessment.
-- Auckland only. Not financial, legal or insurance advice.
+- **Council property pages cannot be read from the live server** (the council site refuses it), so build era and
+  similar fields are often unavailable online; the user can enter the year built and cladding, and the report says
+  when a field could not be found. Cladding and last sale have no free licensed source and are always `unavailable`
+  from property-api.
+- Build decade is a range from the council property category, for residential and lifestyle properties only.
+- Address search is a prefix match (about 2 seconds per query). Hazard layers say what the council data shows; absence
+  is not "no hazard".
+- Rates are a manual snapshot for 11 lenders and can be out of date. Non-bank lenders are not covered.
+- Calculations are simplified (for example fixed-rate owner-occupier scenarios) and are not a lender's assessment.
+- The summary validator is lexical (see How Gemini is used); the report is information, not advice.
+- Auckland only.
+
+## Team
+
+- **A:** property-api and web.
+- **B:** rules-api, jobs, knowledge base and report-api.
+
+## License
+
+To be decided by the team.
