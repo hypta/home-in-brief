@@ -65,7 +65,7 @@
       "kind": "job",
       "dockerfile": "jobs/rates-refresh/Dockerfile",
       "paths": ["jobs/rates-refresh/", "shared/"],
-      "env": {"DATA_BACKEND": "firestore", "GEMINI_MODEL": "gemini-2.5-flash"},
+      "env": {"DATA_BACKEND": "firestore", "GEMINI_MODEL": "gemini-3.5-flash-lite"},
       "secrets": {"GEMINI_API_KEY": "GEMINI_API_KEY:latest"},
       "flags": ["--memory=2Gi", "--cpu=1", "--max-retries=1", "--task-timeout=15m"]
     }

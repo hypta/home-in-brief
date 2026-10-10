@@ -99,7 +99,11 @@ gcloud firestore databases create --location=$REGION --type=firestore-native
 
 The workflow passes no `--service-account`, so every service and job runs as `$RUNTIME_SA`. Depending on the
 organisation policy `iam.automaticIamGrantsForDefaultServiceAccounts`, a new project may or may not give this account
-the broad Editor role. Grant what it needs explicitly either way (and consider removing Editor if it has it):
+the broad Editor role. Grant what it needs explicitly either way. On our deployment the account did get Editor
+automatically; A removed it and kept only the grants listed in this section, and the services work normally, so do the
+same (find it with `gcloud projects get-iam-policy $PROJECT_ID --flatten=bindings --filter="bindings.members:$RUNTIME_SA"
+--format='table(bindings.role)'`, then `gcloud projects remove-iam-policy-binding $PROJECT_ID
+--member=serviceAccount:$RUNTIME_SA --role=roles/editor`; verify the flags):
 
 ```bash
 # Firestore: the jobs write it, rules-api reads it. One identity for all, so this is datastore.user, not viewer.
@@ -311,6 +315,11 @@ It seeds Firestore, creates all services and jobs, and adds the invoker bindings
 (nothing exists yet), but `deploy_all` makes it explicit. From the CLI:
 `gh workflow run deploy.yml --repo $GITHUB_REPO --ref main -f deploy_all=true`.
 
+**Expect temporary 403s on a brand-new project.** On the first deploy of a new project, testing right after the
+`run.invoker` bindings were added gave web 403 several times in a row; it worked after about 3 minutes (IAM change
+propagation, our reading). This only happened on the first deploy of a fresh project. If web or a private service
+returns 403 right after the first deploy, wait a few minutes and retry before changing any IAM.
+
 **Redeploy without a code change** (for example after rotating a secret): Run workflow with `deploy_all`.
 
 **Rollback, preferred**: `git revert` the bad commit and push to `main`; the workflow redeploys the affected targets.
@@ -417,7 +426,7 @@ rules-api or property-api; rerun the workflow with `deploy_all`, or add it with
 Deployed (created or updated) by the workflow, never executed by it:
 
 - **rates-refresh**: `--memory=2Gi --cpu=1 --max-retries=1 --task-timeout=15m`, `DATA_BACKEND=firestore`,
-  `GEMINI_MODEL=gemini-2.5-flash`, secret `GEMINI_API_KEY`. Created but **not scheduled** (section 10). 2Gi is only
+  `GEMINI_MODEL=gemini-3.5-flash-lite`, secret `GEMINI_API_KEY`. Created but **not scheduled** (section 10). 2Gi is only
   needed if a bank is switched to `render: browser`.
 - **kb-refresh**: `--memory=512Mi --max-retries=1 --task-timeout=15m`, `DATA_BACKEND=firestore`. It needs no Gemini
   secret (only `DATA_BACKEND` is read) and no browser. Scheduled weekly (section 10).
@@ -498,8 +507,13 @@ BILLING=$(gcloud billing projects describe $PROJECT_ID --format='value(billingAc
 gcloud billing budgets create --billing-account=$BILLING \
   --display-name="nz-buyer-report monthly" --budget-amount=50NZD \
   --filter-projects=projects/$PROJECT_ID \
-  --threshold-rule=percent=0.5 --threshold-rule=percent=0.9 --threshold-rule=percent=1.0
+  --threshold-rule=percent=0.5 --threshold-rule=percent=0.9 --threshold-rule=percent=1.0 \
+  --credit-types-treatment=exclude-all-credits
 ```
+
+`--credit-types-treatment=exclude-all-credits` is required on a trial account: by default the budget counts spend net of
+credits, so the free-trial credit offsets the cost to 0 and the alert never fires (verify the flag with
+`gcloud billing budgets create --help`).
 
 Budgets only alert, they do not stop spending. Adjust the amount (and currency to match the billing account).
 
