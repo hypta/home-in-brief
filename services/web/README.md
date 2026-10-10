@@ -9,7 +9,8 @@ browsers never call property-api or rules-api directly.
 | `GET /api/addresses`, `/api/property-context`, `/api/map` | property-api `/v1/...` |
 | `POST /api/rules`, `GET /api/rates/latest`, `/api/kb/items`, `/api/sources` | rules-api `/v1/...` |
 
-Any other `/api/` path returns 404. On Cloud Run the relay sends an ID token (DEPLOY.md section 11); a plain
+Any other `/api/` path returns 404. A council property category typed as the year built (for example `RD199B`)
+is replaced by its decade before the rules request is relayed. On Cloud Run the relay sends an ID token (DEPLOY.md section 11); a plain
 `http://` upstream gets none.
 
 ## Run locally

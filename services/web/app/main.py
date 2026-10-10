@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import time
 from pathlib import Path
 from typing import Optional
@@ -29,6 +30,9 @@ METADATA = "http://metadata.google.internal/computeMetadata/v1/instance/service-
 TIMEOUT = 30  # property-context makes several upstream calls of up to 8 s each
 MAX_BODY = 256 * 1024  # a PropertyContext is about 13 kB
 _tokens: dict[str, tuple[float, str]] = {}
+# A council property category such as RD199B: characters 3-5 are the build decade (LINZ Rating Valuations Rules
+# 2008, Table 21). 191 (before 1914), 192 (1914-1929) and XXX (mixed ages) are valid but are not a decade.
+_CATEGORY = re.compile(r"\s*(?:R[ACDFHNR]|LI)([0-9]{3}|XXX)[ABC]?\s*", re.I)
 log = logging.getLogger("web")
 
 app = FastAPI(openapi_url=None)
@@ -92,6 +96,15 @@ def _relay(method: str, path: str, request: Request, payload: Optional[dict] = N
     return Response(r.content, r.status_code, media_type=r.headers.get("content-type"))
 
 
+def _year_built(typed):
+    """What the visitor typed, or for a council property category its decade (None when it has none); rules-api
+    reads years and decades only."""
+    m = _CATEGORY.fullmatch(typed) if isinstance(typed, str) else None
+    if not m:
+        return typed
+    return f"{m[1]}0s" if "193" <= m[1] <= "209" else None
+
+
 @app.get("/config.json")
 def config() -> dict:
     """The basemap key is sent to browsers on purpose: they fetch the map tiles themselves."""
@@ -105,6 +118,10 @@ def relay_get(path: str, request: Request) -> Response:
 
 @app.post("/api/{path:path}")
 def relay_post(path: str, request: Request, payload: dict) -> Response:
+    inputs = payload.get("user_inputs") if path == "rules" else None
+    chat = inputs.get("chat_supplied") if isinstance(inputs, dict) else None
+    if isinstance(chat, dict) and "year_built" in chat:
+        chat["year_built"] = _year_built(chat["year_built"])
     return _relay("POST", path, request, payload)
 
 

@@ -62,7 +62,34 @@
 <input id="price" type="number" inputmode="decimal" min="1" step="any" aria-describedby="price-hint">
 <p id="price-hint" class="muted">Filled in with the council valuation (CV) when you choose an address. You can change it.</p>
 </div>
-<button type="submit">Update repayments</button>
+<h3 id="h-home-form">About the home (optional)</h3>
+<div class="field">
+<label for="year-built">Year or decade built, or the council property category</label>
+<input id="year-built" type="text" maxlength="8" placeholder="e.g. 1997, 1990s or RD199B" aria-describedby="year-built-hint">
+<p id="year-built-hint" class="muted">Only used when the council records do not give a build decade. Check the listing for it.</p>
+<p id="year-built-read" class="muted" role="status"></p>
+</div>
+<div class="field">
+<label for="cladding">Outside walls (cladding)</label>
+<select id="cladding" aria-describedby="cladding-hint">
+<option value="">Not sure</option>
+<option value="aluminium">Aluminium</option>
+<option value="brick">Brick</option>
+<option value="concrete">Concrete</option>
+<option value="fibrous_cement">Fibrous cement</option>
+<option value="glass">Glass</option>
+<option value="iron">Iron or steel</option>
+<option value="fabric">Fabric, bitumen or butyl rubber</option>
+<option value="plastic">Plastic</option>
+<option value="monolithic">Roughcast, stucco or texture coat</option>
+<option value="stone">Stone</option>
+<option value="tiles">Tiles</option>
+<option value="wood">Wood</option>
+<option value="mixed">Mixed or other</option>
+</select>
+<p id="cladding-hint" class="muted">Check the listing for it.</p>
+</div>
+<button type="submit">Update report</button>
 </form>
 </section>
 

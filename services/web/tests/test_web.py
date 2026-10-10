@@ -19,6 +19,7 @@ for name in ("PROPERTY_API_URL", "RULES_API_URL"):  # a shell that ran DEPLOY.md
 from app import main  # noqa: E402
 
 FIXTURES = HERE.parent / "fixtures"
+STATIC = HERE.parents[1] / "app/static"
 CONTEXT = ROOT / "services/property-api/fixtures/property_context_740_sandringham_road_extension.json"
 client = TestClient(main.app)
 
@@ -123,5 +124,22 @@ def test_config_hands_the_basemap_key_to_the_page(monkeypatch):
 def test_report_page_words_every_flag_and_warning_in_codes_md():
     codes_md = (ROOT / "CODES.md").read_text().split("## Other fields")[0]
     codes = set(re.findall(r"^\| `([a-z0-9_]+)", codes_md, re.M))
-    page = (HERE.parents[1] / "app/static/report.js").read_text()
+    page = (STATIC / "report.js").read_text()
     assert len(codes) > 25 and not {c for c in codes if c not in page}
+
+
+def test_page_asks_for_year_built_and_cladding_and_offers_what_the_knowledge_base_selects_on():
+    html, js = (STATIC / "index.html").read_text(), (STATIC / "app.js").read_text()
+    assert 'id="year-built"' in html and "chat_supplied" in js
+    offered = set(re.findall(r'<option value="([a-z_]+)"', html.split('id="cladding"')[1].split("</select>")[0]))
+    kb = json.loads((ROOT / "kb/seed/cladding.json").read_text())
+    assert {c for item in kb for c in item["applies_when"].get("cladding_in", [])} <= offered
+
+
+@pytest.mark.parametrize("typed,sent_on", [
+    ("1997", "1997"), ("1990s", "1990s"), ("RD199B", "1990s"), ("rf198a", "1980s"), (" LI202B ", "2020s"),
+    ("RD192B", None), ("RA191C", None), ("RDXXXB", None), ("rdxxxb", None), ("RD190B", None), ("RV", "RV"), ("RD\u0661\u0669\u0669B", "RD\u0661\u0669\u0669B"), (None, None), (1997, 1997)])
+def test_a_council_property_category_typed_as_the_year_built_is_sent_on_as_its_decade(sent, typed, sent_on):
+    """LINZ Rating Valuations Rules 2008, Table 21. 191 (before 1914), 192 (1914-1929) and XXX are valid but not a decade."""
+    client.post("/api/rules", json={"user_inputs": {"chat_supplied": {"year_built": typed, "cladding": None}}})
+    assert sent.call_args.kwargs["json"]["user_inputs"]["chat_supplied"] == {"year_built": sent_on, "cladding": None}

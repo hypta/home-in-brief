@@ -74,10 +74,10 @@ const WARNINGS = {
   lem_base_unverified: ["loan", id => `${bank(id)}'s rate here is approximate: the rate its low-equity margin is added to is not confirmed.`],
   title_type_unavailable: ["notes", "The title type could not be confirmed."],
   title_type_unresolved: ["notes", "LINZ lists more than one kind of title here, so no title notes are shown. The title type needs confirming on the record of title."],
-  year_built_unavailable: ["notes", "The year built could not be found. Check the listing for it."],
+  year_built_unavailable: ["notes", () => $("year-built").value.trim() ? null : "The year built could not be found. Check the listing for it, then enter it in the form above."],
   year_built_unparseable: ["notes", "The year built could not be read. Check the listing for it."],
-  cladding_unavailable: ["notes", "Cladding is not available from any free public source. Check the listing for it."],
-  chat_year_built_unparseable: ["notes", "The year you gave could not be read. Please give a four-digit year."],
+  cladding_unavailable: ["notes", () => $("cladding").value ? null : "Cladding is not available from any free public source. Check the listing for it, then choose it in the form above."],
+  chat_year_built_unparseable: ["notes", "The year built you entered could not be used. Enter a four-digit year or a decade such as 1990s."],
   kb_unavailable: ["notes", "Background notes are unavailable right now."],
 };
 
