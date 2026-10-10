@@ -120,26 +120,43 @@ function warnings({rules, inputs}, block) {
   }).filter(Boolean));
 }
 
-function hazardDetail(h, where) {
-  if (unchecked(h)) return `${missing(h)} ${NO_RISK_CAVEAT}`;
-  if (h.status === "none") return `The council does not show this layer ${where}. ${NO_RISK_CAVEAT}`;
-  const bits = [];
-  if (h.susceptibility) bits.push(`Highest class ${where}: ${esc(h.susceptibility)}`);
-  else if (h.classes.length) bits.push(`Class ${where}: ${h.classes.map(esc).join(", ")}`);
-  if (h.overlap_pct != null) bits.push(`Covers ${h.overlap_pct || "less than 0.1"}% of the parcel`);  // 0 is a sliver that rounds to 0.0
-  if (h.crosses_parcel) bits.push("Crosses the parcel");
+// How each layer is drawn on the map. The rows of the hazards section carry the same colour and line, so the list is the map's key.
+export const MAP_STYLE = {
+  flood_plain: {color:"#1f6fd1", fillOpacity:.45, weight:2}, flood_prone_area: {color:"#7b3fc4", fillOpacity:.45, weight:2, dashArray:"4 3"},
+  overland_flow_path: {color:"#0b3d91", weight:3, dashArray:"6 4", fillOpacity:0}, coastal_inundation: {color:"#0e8a7d", fillOpacity:.45, weight:2},
+  tsunami_evacuation_zone: {color:"#d9730d", fillOpacity:.35, weight:2}, coastal_erosion: {color:"#7a4a12", fillOpacity:.4, weight:2, dashArray:"1 4"}, parcel: {color:"#111", weight:3, fillOpacity:0}};
+// What the council's layer says where it is mapped. "Not mapped" and "could not be checked" are said once, by the group a layer sits in.
+function mapped(h, at) {
   const near = /^point_method_line_within_(\d+)m$/.exec(h.reason || "");
   if (near) return `Within ${near[1]} m of the address point.`;
-  return (bits.join(". ") || `Mapped ${where}`) + ".";
+  const bits = [h.susceptibility ? `Highest class ${at}: ${esc(h.susceptibility)}` : h.classes.length ? `Class ${at}: ${h.classes.map(esc).join(", ")}` : "",
+    h.overlap_pct != null ? `Covers ${h.overlap_pct || "less than 0.1"}% of the parcel` : "",  // 0 is a sliver that rounds to 0.0
+    h.crosses_parcel ? "Crosses the parcel" : ""].filter(Boolean);
+  return (bits.join(". ") || `Mapped ${at}`) + ".";
+}
+
+// One layer: its mark as on the map, its name, what was found, a bar as long as the share of the parcel it covers, its source.
+function layerRow(h, detail) {
+  const style = MAP_STYLE[h.layer];  // a layer coloured by class has no one colour: its row says the class in words, and the map's own key shows the scale
+  const mark = style ? (style.fillOpacity === 0 ? " line" : style.dashArray ? " dash" : "") : " class";
+  return `<div class="layer" style="--k:${style?.color || "transparent"}"><span class="key${mark}"></span><b>${esc(layerName(h.layer))}</b>
+    ${detail ? `<span>${detail}</span>` : ""}${h.status === "intersects" && h.overlap_pct != null ? `<span class="bar" style="width:${Number(h.overlap_pct)}%"></span>` : ""}
+    ${cite(h.source_id, [h.data_date && "Data date " + h.data_date])}</div>`;
 }
 
 function hazards(state) {
-  const {ctx} = state, byParcel = ctx.parcel.spatial_method === "parcel";
-  const rows = priority => ctx.hazards.filter(h => h.priority === priority).map(h => row(esc(layerName(h.layer)),
-    `${hazardDetail(h, where(ctx))} ${cite(h.source_id, [h.data_date && "Data date " + h.data_date])}`, h.status)).join("");
-  return `${byParcel || ctx.address.status !== "found" ? "" : `<p class="problem">No parcel was matched, so the layers were checked at the address point only and parcel coverage is not calculated.</p>`}
-    <h4>Flood layers</h4>${rows("primary") || `<p class="problem">No flood layer was checked. ${NO_RISK_CAVEAT}</p>`}
-    <h4>Other mapped hazards</h4>${rows("secondary") || `<p class="problem">No other layer was checked. ${NO_RISK_CAVEAT}</p>`}
+  const {ctx} = state, at = where(ctx), classed = h => h.status === "intersects" && (h.susceptibility || h.classes.length > 0);
+  const group = (title, said, test, detail) => {
+    const layers = ctx.hazards.filter(test);
+    return layers.length ? `<h4>${title}</h4>${said ? `<p>${said}</p>` : ""}${layers.map(h => layerRow(h, detail(h))).join("")}` : "";
+  };
+  const none = (priority, name) => ctx.hazards.some(h => h.priority === priority) ? "" : `<p class="problem">No ${name} layer was checked. ${NO_RISK_CAVEAT}</p>`;
+  return `${ctx.parcel.spatial_method === "parcel" || ctx.address.status !== "found" ? "" : `<p class="problem">No parcel was matched, so the layers were checked at the address point only and parcel coverage is not calculated.</p>`}
+    ${none("primary", "flood")}${none("secondary", "other")}
+    ${group("Could not be checked", `These layers could not be checked. ${NO_RISK_CAVEAT}`, unchecked, h => esc(REASONS[h.reason] || "") + dev(h.reason || h.status))}
+    ${group(`Mapped ${at}`, "", h => h.status === "intersects" && !classed(h), h => mapped(h, at))}
+    ${group("Region-wide layers, where the class is the finding", "", classed, h => mapped(h, at))}
+    ${group(`Not shown ${at}`, `The council does not show these layers ${at}. ${NO_RISK_CAVEAT}`, h => h.status === "none", () => "")}
     ${warnings(state, "hazards")}${notes(state, "hazards", "Notes on these hazards and insurance")}`;
 }
 

@@ -1,14 +1,11 @@
 // Leaflet map of the parcel and nearby council layers, drawn from /api/map.
-import {$, esc, layerName} from "./report.js";
+import {$, esc, layerName, MAP_STYLE} from "./report.js";
 
-const MAP_STYLE = {
-  flood_plain: {color:"#1f6fd1", fillOpacity:.45, weight:2}, flood_prone_area: {color:"#7b3fc4", fillOpacity:.45, weight:2, dashArray:"4 3"},
-  overland_flow_path: {color:"#0b3d91", weight:3, dashArray:"6 4", fillOpacity:0}, coastal_inundation: {color:"#0e8a7d", fillOpacity:.45, weight:2},
-  tsunami_evacuation_zone: {color:"#d9730d", fillOpacity:.35, weight:2}, coastal_erosion: {color:"#7a4a12", fillOpacity:.4, weight:2, dashArray:"1 4"}, parcel: {color:"#111", weight:3, fillOpacity:0}};
 // region-wide layers: coloured by class (light = lower), switched off at first
 const LANDSLIDE = {"Very Low":"#ffffb2", "Low":"#fecc5c", "Moderate":"#fd8d3c", "High":"#f03b20", "Very High":"#bd0026"};
 const CLASS_COLOURS = {landslide_shallow: LANDSLIDE, landslide_large_scale: LANDSLIDE,
   liquefaction: {"Very Low":"#ffffb2", "Unlikely":"#fecc5c", "Possible":"#f03b20"}};
+
 const NOT_NEEDED = " The results below do not depend on the map.";
 const CREDITS = " · Hazard layers: Auckland Council · Parcel: LINZ (CC BY 4.0)";
 const config = fetch("config.json").then(r => r.json()).catch(() => ({}));

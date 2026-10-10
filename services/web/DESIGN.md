@@ -47,6 +47,8 @@ red: beside a hazard they read as a verdict. The map keeps its own colours.
 - **Source control.** Every other sourced line ends with "Source" or "N sources". A card is the source's name as
   the link, then quote, dates, credit line and licence in the record voice.
 - **Next steps.** One tick list on the sheet. A note repeats its next step only when the list does not have it.
+- **Hazard layer.** The mark the layer has on the map, its name, what was found, a bar as long as the share of the
+  parcel it covers, its source. Layers are grouped by what was found, and each group says its caveat once.
 - **Could not be found.** One dashed box. A layer that could not be checked keeps its caveat sentence.
 - **Section.** A drawn number, the title, one line of digest from API values, a chevron. Closed by default; the
   hazards section is open when a flood layer is mapped on the parcel.
