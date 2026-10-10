@@ -37,11 +37,21 @@ INTERNAL_JARGON = "internal_jargon"
 LANDSLIDE_RULE = "landslide_rule"
 LENDING_WITHOUT_LOAN = "lending_without_loan"
 EMPTY_TEXT = "empty_text"
+UNSUPPORTED_ABSENCE = "unsupported_absence"
+INVALID_NUMBER_FORMAT = "invalid_number_format"
 
-_NUM_RE = re.compile(r"(?<![\w.,])(?:NZ)?\$?(\d{1,3}(?:,\d{3})+|\d+)(\.\d+)?(s\b)?")
+_NUM_RE = re.compile(r"(?<![\w.,])([-−]?)(?:NZ)?\$?(\d{1,3}(?:,\d{3})+|\d+)(\.\d+)?(s\b)?")
 _ABBREV_RE = re.compile(r"\d(?:[\d,]*\d)?(?:\.\d+)?\s?(?:k|m|bn)\b", re.I)
-_NUMBER_WORD_RE = re.compile(r"\b(?:hundred|thousand|million|billion|percent|per cent)\b", re.I)
+_NUMBER_WORD_RE = re.compile(
+    r"\b(?:zero|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|"
+    r"fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|"
+    r"eighty|ninety|hundred|thousand|million|billion|percent|per cent)\b", re.I)
 _URL_RE = re.compile(r"https?://|www\.|<\s*/?\s*[a-z!]|\]\(|\b[a-z0-9-]+(?:\.[a-z0-9-]+)+/\S", re.I)
+_DOMAIN_RE = re.compile(r"\b(?:[a-z0-9-]+\.)+[a-z]{2,}\b", re.I)
+# These are publisher names in the established report vocabulary, not navigation links.
+_PUBLISHER_RE = re.compile(
+    r"\b(?:Settled\.govt\.nz|unittitles\.govt\.nz)(?:'s)?"
+    r"(?=\s+(?:says|discusses|also|guide|guidance|in its))", re.I)
 _JARGON_RE = re.compile(r"\b[a-z]+_[a-z0-9_]+\b|\brules assessment\b|\bstandard loan scenario\b|"
                         r"\brules-api\b|\bRulesOutput\b|\bPropertyContext\b", re.I)
 # Verdicts, advice, predictions and approximations (RUBRIC 7). Words in QUOTABLE are allowed when
@@ -49,13 +59,14 @@ _JARGON_RE = re.compile(r"\b[a-z]+_[a-z0-9_]+\b|\brules assessment\b|\bstandard 
 _BANNED = [
     r"safe", r"safer", r"unsafe", r"no risk", r"risk-free", r"low risk", r"high risk", r"no hazards?",
     r"clear of", r"free of", r"recommend\w*", r"should", r"must", r"(?:good|bad|great) (?:deal|buy|investment|value|choice)",
-    r"bargain", r"avoid", r"worr(?:y|ied|ies)", r"(?:don't|do not) buy", r"buy", r"likely", r"unlikely",
+    r"wise to", r"we suggest", r"great opportunity", r"no (?:flood|landslide|coastal) risk",
+    r"ignore (?:all )?(?:previous|prior) (?:instructions|prompts)", r"bargain", r"avoid", r"worr(?:y|ied|ies)", r"(?:don't|do not) buy", r"buy", r"likely", r"unlikely",
     r"will", r"about", r"around", r"approximately", r"approx", r"roughly", r"nearly", r"almost", r"guarantee\w*",
 ]
 _BANNED_RE = [(w, re.compile(rf"\b{w}\b", re.I)) for w in _BANNED]
 QUOTABLE = {"should", "must", "will", "likely", "unlikely", "avoid"}
 _LENDING_TEXT_RE = re.compile(r"\b(?:loans?|LVR|DTI|mortgage|repayments?|lend\w*|borrow\w*|deposit|"
-                              r"loan-to-value|debt-to-income|First Home Loan)\b", re.I)
+                              r"finance|financing|credit|debt servicing|interest payments?|loan-to-value|debt-to-income|First Home Loan)\b", re.I)
 
 
 @dataclass(frozen=True)
@@ -75,6 +86,8 @@ class Evidence:
     user_kb: set[str] = field(default_factory=set)
     no_loan: bool = False
     landslide_high: bool = False
+    chat_year: bool = False
+    unavailable_hazards: set[str] = field(default_factory=set)
 
 
 # ---- number helpers -----------------------------------------------------------------------------
@@ -94,7 +107,7 @@ def numbers_in(text: str) -> list[Decimal]:
     """Numbers in text after stripping $, NZ$, thousands separators and %; "1990s" gives 1990."""
     out = []
     for m in _NUM_RE.finditer(text):
-        out.append(Decimal(m.group(1).replace(",", "") + (m.group(2) or "")))
+        out.append(Decimal(("-" if m.group(1) else "") + m.group(2).replace(",", "") + (m.group(3) or "")))
     return out
 
 
@@ -123,12 +136,15 @@ def _money_or_area(name: str) -> int:
 def build_evidence(req: ReportRequest, kb_items: dict[str, dict], rules_sources: Iterable[str]) -> Evidence:
     """Everything a summary sentence may cite or quote, for one request."""
     ev = Evidence()
+    ev.chat_year = "year_built" in req.chat_supplied()
+    ev.unavailable_hazards = {h.source_id for h in req.hazards()
+                              if h.source_id and h.status in ("not_found", "unavailable")}
     selected = [i for i in req.selected_kb_ids() if i in kb_items]
     ev.selected_kb = set(selected)
     ev.kb_claims = {i: kb_items[i].get("claim_en") or "" for i in selected}
     ev.kb_topics = {i: kb_items[i].get("topic") or "" for i in selected}
     ev.user_kb = set(req.kb_items_from_user_input())
-    ev.known_ids = {s.id for s in req.sources()} | set(rules_sources) | req.rules_source_ids() | ev.selected_kb
+    ev.known_ids = {s.id for s in req.sources()} | set(rules_sources) | ev.selected_kb
 
     allowed: dict[str, list[Allowed]] = {}
 
@@ -170,7 +186,8 @@ def build_evidence(req: ReportRequest, kb_items: dict[str, dict], rules_sources:
     ev.computed = computed_values(req)
 
     warnings = set(req.warnings())
-    ev.no_loan = any(w in warnings for w in NO_LOAN_WARNINGS)
+    loan = to_decimal(req.rules_output.get("loan_amount"))
+    ev.no_loan = any(w in warnings for w in NO_LOAN_WARNINGS) or (loan is not None and loan <= 0)
     for h in req.hazards():
         if h.layer.startswith("landslide") and h.status == "intersects":
             classes = [c.lower() for c in h.classes] + ([h.susceptibility.lower()] if h.susceptibility else [])
@@ -199,7 +216,7 @@ def computed_values(req: ReportRequest) -> set[Decimal]:
     def walk(x: Any) -> None:
         if isinstance(x, dict):
             for k, v in x.items():
-                if k in _COMPUTED_KEYS or k.startswith(("monthly", "fortnightly", "stress_monthly", "stress_delta")):
+                if k in _COMPUTED_KEYS or k.startswith(("monthly", "fortnightly", "stress_", "lmi_amount")):
                     take(v)
                 elif isinstance(v, (dict, list)):
                     walk(v)
@@ -208,9 +225,7 @@ def computed_values(req: ReportRequest) -> set[Decimal]:
                 walk(v)
 
     ro = req.rules_output
-    for k in ("loan_amount", "lvr_pct", "dti", "high_dti_threshold"):
-        take(ro.get(k))
-    walk(ro.get("scenarios") or [])
+    walk(ro)
     price = to_decimal((ro.get("price_used") or {}).get("value"))
     deposit = to_decimal(ro.get("deposit"))
     if price and deposit is not None and price > 0:
@@ -240,7 +255,9 @@ def check_sentence(s: Sentence, ev: Evidence, max_words: Optional[int] = MAX_WOR
     if not ids:
         fails.append(NO_SOURCE_IDS)
     for i in ids:
-        if i.startswith("kb_"):
+        if not i.strip():
+            fails.append(UNKNOWN_SOURCE_ID)
+        elif i.startswith("kb_"):
             if i not in ev.selected_kb:
                 fails.append(KB_NOT_SELECTED)
         elif i not in ev.known_ids:
@@ -253,6 +270,16 @@ def check_sentence(s: Sentence, ev: Evidence, max_words: Optional[int] = MAX_WOR
         fails.append(ABBREVIATED_NUMBER)
     if _NUMBER_WORD_RE.search(text):
         fails.append(NUMBER_WORD)
+    # Every numeric character must belong to a complete, canonical token. Never silently
+    # skip a glued number or parse only the first part of a malformed decimal.
+    spans = list(_NUM_RE.finditer(text))
+    covered = {i for m in spans for i in range(m.start(), m.end())}
+    if (any(c.isnumeric() and (c not in "0123456789" or i not in covered)
+            for i, c in enumerate(text))
+            or any(m.end() < len(text) and (text[m.end()].isalnum() or text[m.end()] == "_")
+                   for m in spans)
+            or re.search(r"[0-9]\s+[0-9]", text)):
+        fails.append(INVALID_NUMBER_FORMAT)
     for n in numbers_in(text):
         if _matches(n, kb_allowed):
             continue  # a number quoted from a cited KB claim is valid even if it equals a computed value
@@ -267,12 +294,15 @@ def check_sentence(s: Sentence, ev: Evidence, max_words: Optional[int] = MAX_WOR
         if m and not (word in QUOTABLE and re.search(rf"\b{word}\b", claims)):
             fails.append(BANNED_WORD)
             break
-    if _URL_RE.search(text):
+    if _URL_RE.search(text) or "@" in text or _DOMAIN_RE.search(_PUBLISHER_RE.sub("publisher", text)):
         fails.append(URL_OR_HTML)
     if _JARGON_RE.search(text):
         fails.append(INTERNAL_JARGON)
     if max_words is not None and word_count(text) > max_words:
         fails.append(TOO_LONG)
+    if (ev.unavailable_hazards.intersection(ids)
+            and re.search(r"\b(?:shows? no|does not show|do not show|no flooding|no flood hazard)\b", text, re.I)):
+        fails.append(UNSUPPORTED_ABSENCE)
     landslide = "ac_landslide" in ids or "kb_landslide_map_context" in ids or re.search(r"\blandslide", text, re.I)
     if landslide and (not ev.landslide_high or "kb_landslide_map_context" not in ids):
         fails.append(LANDSLIDE_RULE)
@@ -313,6 +343,11 @@ def relies_on_user_input(s: Sentence, ev: Evidence) -> bool:
     if any(i in ev.user_kb for i in s.source_ids):
         return True
     body = strip_prefix(s.text)
+    # A comparison may omit the user's year entirely; retain provenance when the
+    # model says it chose the council figure in a request containing a chat year.
+    if (ev.chat_year and "ac_property_page" in s.source_ids
+            and re.search(r"\b(?:uses? the council figure|council figure takes precedence)\b", body, re.I)):
+        return True
     return bool(_USER_FACT_RE.search(body) and _USER_TOPIC_RE.search(body))
 
 
