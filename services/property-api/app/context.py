@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import Callable, Optional
@@ -99,6 +100,8 @@ def _council(lat: float, lng: float, number: str, road: str):
     key = ra.get("key") if ra else None
     if ra_err:  # GeoMaps down: get the key from open data
         key, _ = _try(council.rate_account_key, lat, lng, number, road)
+    if os.environ.get("COUNCIL_PAGE", "").lower() == "off":  # the council site answers 406 to cloud hosts
+        return ra, ra_err, key, None, "council_site_refuses_this_server"
     page, page_err = _try(council.property_page, key) if key else (None, None)
     return ra, ra_err, key, page, page_err
 

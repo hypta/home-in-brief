@@ -168,6 +168,16 @@ def test_page_failure_keeps_valuation(monkeypatch):
         "unavailable", "unavailable", "service_timeout")
 
 
+def test_council_page_is_not_fetched_when_switched_off(monkeypatch):
+    monkeypatch.setenv("COUNCIL_PAGE", "off")
+    page = Mock()
+    monkeypatch.setattr(council, "property_page", page)
+    p = build(FLOODED).property
+    page.assert_not_called()
+    assert p.cv.value == 340000
+    assert (p.year_built.status, p.year_built.reason) == ("unavailable", "council_site_refuses_this_server")
+
+
 def test_geomaps_down_falls_back_to_the_council_page(monkeypatch):
     monkeypatch.setattr(council, "rate_assessment", Mock(side_effect=ConnectionError("simulated")))
     ctx = build(FLOODED)

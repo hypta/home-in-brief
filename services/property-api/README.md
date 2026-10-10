@@ -44,7 +44,7 @@ The two fixture addresses are public facilities, not private homes.
 | Landslide susceptibility, liquefaction, tsunami evacuation zone | Auckland Council open data (CC BY 4.0) | Same; reported as secondary layers |
 | Coastal erosion (ASCIE 2130, RCP8.5+) | Auckland Council GeoMaps server (GeoMaps terms: personal and business use, no substantial copying) | Same; secondary layer |
 | Capital value, land value, value of improvements, annual rates, rateability, improvement description, land use, land area, legal description, record of title | Auckland Council GeoMaps "Rate Assessment" layer (GeoMaps terms: personal and business use, no substantial copying) | One ArcGIS query per request |
-| Build decade, floor area, building site coverage, local board | Auckland Council property page | One page fetch per request, parsed |
+| Build decade, floor area, building site coverage, local board | Auckland Council property page | One page fetch per request, parsed. Not fetched when `COUNCIL_PAGE=off` |
 
 Credit lines to display are returned in `sources[].attribution`.
 
