@@ -355,7 +355,7 @@ def compute_with_raw(
     ctx: PropertyContext, ui: UserInputs, snap: Optional[RatesSnapshot],
     now: Optional[datetime] = None,
 ) -> tuple[RulesOutput, Raw, Normalized]:
-    now = now or datetime.now(timezone.utc)
+    now = (now or datetime.now(timezone.utc)).astimezone(NZ_TZ)  # NZ time for outward timestamps (team decision 10/04)
     warnings: list[str] = []
     flags: list[Flag] = []
     raw = Raw()

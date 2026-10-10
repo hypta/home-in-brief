@@ -1450,7 +1450,8 @@
           },
           "generated_at": {
             "type": "string",
-            "title": "Generated At"
+            "title": "Generated At",
+            "description": "ISO 8601 timestamp in New Zealand time (Pacific/Auckland, e.g. +13:00)"
           },
           "price_used": {
             "$ref": "#/components/schemas/PriceUsed"

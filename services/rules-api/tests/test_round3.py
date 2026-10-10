@@ -411,3 +411,9 @@ def test_hazard_layer_intersects_malformed(bad, caplog):
     with caplog.at_level("WARNING", logger="rules-api.select"):
         assert not matches({"hazard_layer_intersects": bad}, ctx)
     assert "malformed applies_when" in caplog.text
+
+
+def test_generated_at_is_new_zealand_time():
+    out = run()  # NOW is 2026-10-04 00:00 UTC -> 13:00 NZDT the same day
+    assert out.generated_at == "2026-10-04T13:00:00+13:00"
+    assert datetime.fromisoformat(calc.compute(PropertyContext(), UserInputs(), SNAP).generated_at).utcoffset().total_seconds() in (12 * 3600, 13 * 3600)

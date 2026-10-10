@@ -304,7 +304,7 @@ class HazardGap(BaseModel):
 
 class RulesOutput(BaseModel):
     schema_version: str = SCHEMA_VERSION
-    generated_at: str
+    generated_at: str = Field(description="ISO 8601 timestamp in New Zealand time (Pacific/Auckland, e.g. +13:00)")
     price_used: PriceUsed
     deposit: Optional[float] = None
     loan_amount: Optional[float] = None
