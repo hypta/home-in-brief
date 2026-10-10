@@ -51,7 +51,7 @@ MAX_ANSWER = 3
 REFUSAL_EN = ("This question is outside what this property report covers; the original sources linked below "
               "may help you look it up.")
 # Chinese refusal written by code (zh-Hans via _zh); other languages get a restricted translation of REFUSAL_EN.
-REFUSAL_ZH = "這個問題超出本報告涵蓋的範圍；下方的原始連結或許能幫你查詢。"
+REFUSAL_ZH = "這個問題超出本報告涵蓋的範圍；下方的原始連結可供你查詢。"
 PREFIX_EN = "Based on what you told us, "
 PREFIXES = {"zh-Hant": "依你提供的資訊，", "zh-Hans": "根据你提供的信息，"}
 LANGUAGE_MISMATCH = "language_mismatch"  # the sentence is not in the language it is meant to be in
@@ -322,16 +322,19 @@ _CJK_NUM_SPACE = [(re.compile(r"(\d)(?=[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]
                   (re.compile(r"(?<=[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af])(?=[$\d])"), " ")]
 _ASCII_CJK_GAP = re.compile(r"(?<=[A-Za-z0-9])(?=[\u3000-\u303f\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af\uff00-\uffef])|"
                             r"(?<=[\u3000-\u303f\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af\uff00-\uffef])(?=[A-Za-z0-9])")
-# Verdict, advice and approximation words (6.1). Chinese "may" is 或許, never 可能 (also "possible").
+# Verdict, advice and approximation words (6.1). 可能/或許/也許 are the Chinese "may": allowed only when a cited
+# source's English has may/might/can/could (hedged_source); never as the model's own guess.
 _BANNED_BY_LANG = {
     "zh": re.compile(r"安全|危險|危险|無風險|无风险|沒有風險|没有风险|低風險|低风险|高風險|高风险|風險低|风险低|風險高|风险高|"
-                     r"建議|建议|推薦|推荐|應該|应该|應當|应当|必須|必须|務必|务必|一定要|將會|将会|一定會|一定会|可能|大約|"
+                     r"建議|建议|推薦|推荐|應該|应该|應當|应当|必須|必须|務必|务必|一定要|將會|将会|一定會|一定会|大約|"
                      r"大约|大概|左右|將近|将近|幾乎|几乎|保證|保证|划算|值得|便宜|別買|别买|不要買|不要买|該買|该买|可以買|"
                      r"可以买|擔心|担心|放心|沒有災害|没有灾害|沒有淹水|没有淹水|不會淹水|不会淹水"),
     "ja": re.compile(r"安全|危険|推奨|お勧め|おすすめ|オススメ|すべき|べきです|べきだ|必ず|保証|およそ|大体|だいたい|多分|"
                      r"たぶん|恐らく|おそらく|心配|安心|割安|お得|リスクが低|リスクが高|リスクはありません"),
     "ko": re.compile(r"안전|추천|권장|해야 합니다|해야 한다|해야 해|반드시|보장|아마|대략|걱정|안심|위험이 낮|위험이 높"),
 }
+_ZH_MAY = re.compile(r"可能|或許|或许|也許|也许")  # banned unless the cited English has a may-type word
+_MAY_EN = re.compile(r"\b(?:may|might|can|could)\b", re.I)
 _ZH_NUMBER = re.compile(r"[兩两零]|百分之|ゼロ")
 # English verdict words glued to CJK text, where \b in the validator does not fire ("很safe").
 _EN_GLUED = re.compile(r"(?<![A-Za-z])(?:safe|unsafe|risk-free|no risk|recommend\w*|should|must|guarantee\w*|"
@@ -407,7 +410,15 @@ def script_matches(text: str, language: str) -> bool:
     return not _CJK_RE.search(text)
 
 
-def check_answer(s: Sentence, ev: Evidence, language: str = "en", base: Optional[BaseCheck] = None) -> list[str]:
+def hedged_source(s: Sentence, ev: Evidence, extra_en: str = "") -> bool:
+    """A source the sentence cites (kb claim_en, a fact's English text, or `extra_en` = the English being
+    translated) says may/might/can/could, so a Chinese 可能/或許 is a retelling, not a guess."""
+    texts = [extra_en, *(ev.kb_claims.get(i, "") for i in s.source_ids), *(ev.fact_text.get(i, "") for i in s.source_ids)]
+    return any(_MAY_EN.search(t) for t in texts if t)
+
+
+def check_answer(s: Sentence, ev: Evidence, language: str = "en", base: Optional[BaseCheck] = None,
+                 source_en: str = "") -> list[str]:
     """validator.check_sentence rules (or `base`), plus the rules of the sentence's language:
 
     - the sentence must be written in `language` (LANGUAGE_MISMATCH; English sentences with any CJK script fail);
@@ -429,7 +440,10 @@ def check_answer(s: Sentence, ev: Evidence, language: str = "en", base: Optional
     fails += base(probe, None)
     if cjk_units(s.text) > fp.CJK_MAX_UNITS_BY_LANG[language.lower()[:2]]:
         fails.append(TOO_LONG)
-    if _BANNED_BY_LANG[language.lower()[:2]].search(s.text) or _EN_GLUED.search(s.text):
+    banned = _BANNED_BY_LANG[language.lower()[:2]].search(s.text) or _EN_GLUED.search(s.text)
+    if is_zh(language) and not banned and _ZH_MAY.search(s.text) and not hedged_source(s, ev, source_en):
+        banned = True
+    if banned:
         fails.append(BANNED_WORD)
     if _ZH_NUMBER.search(s.text):
         fails.append(NUMBER_WORD)
@@ -675,7 +689,7 @@ def check_translation(orig: Sentence, text: str, language: str, ev: Evidence,
         fails.append(TRANSLATION_CHANGED)
     if is_cjk(language) and negations(orig.text) and not _CJK_NEG_RE.search(t):
         fails.append(TRANSLATION_CHANGED)
-    fails += check_answer(Sentence(text=t, source_ids=orig.source_ids), ev, language, base)
+    fails += check_answer(Sentence(text=t, source_ids=orig.source_ids), ev, language, base, orig.text)
     return list(dict.fromkeys(fails))
 
 
@@ -892,6 +906,9 @@ def answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
     else:
         fs = facts_prompt.followup_facts(eff, ev, data.items, used)
         ev.latin_terms |= latin_terms(eff, fs)
+        for f in fs:
+            for sid in f.source_ids:
+                ev.fact_text[sid] = f"{ev.fact_text.get(sid, '')} {f.text}"
         debug["facts"] = [{"id": f.id, "text": f.text, "draft": f.draft(), "user": f.user,
                            "source_ids": f.source_ids} for f in fs]
         debug["attempts"] = []

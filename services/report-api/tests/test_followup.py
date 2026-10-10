@@ -800,3 +800,48 @@ def test_cladding_value_needs_its_keyword_in_the_question(monkeypatch, rules_cal
     _mock_rules(monkeypatch, seen, [])
     monkeypatch.setattr(followup, "gemini_json", fake(cls(cladding="wood"), [ans(FLOOD_EN)]))
     assert post("case1", "The walls are weatherboard.").json()["user_supplied"] == {"cladding": "wood"}
+
+
+# ---- Chinese 可能/或許 only when a cited English source has a may-type word ------------------------------
+def _ev_case1():
+    req = ReportRequest.model_validate(body("case1"))
+    data = kb.load(req.selected_kb_ids())
+    return build_evidence(req, data.items, data.sources.keys(), source_urls=data.sources.urls)
+
+
+def test_chinese_may_is_allowed_when_the_cited_kb_claim_says_may():
+    ev = _ev_case1()
+    assert "may" in ev.kb_claims["kb_flood_insurance_limit"]
+    for text in ("Settled.govt.nz 指出保險公司可能會限制淹水保障。", "Settled.govt.nz 指出保險公司或許會限制淹水保障。"):
+        s = followup.Sentence(text=text, source_ids=["kb_flood_insurance_limit"])
+        assert followup.check_answer(s, ev, "zh-Hant") == []
+
+
+def test_chinese_may_is_blocked_without_a_may_in_the_cited_source():
+    ev = _ev_case1()
+    for text in ("市議會資料顯示這塊地可能淹水。", "市議會資料顯示這塊地或許淹水。", "市議會資料顯示這塊地也許淹水。"):
+        assert V_BANNED in followup.check_answer(followup.Sentence(text=text, source_ids=["ac_flood_plains"]), ev, "zh-Hant")
+    # a may in a fact's English text counts for the source it cites
+    ev.fact_text["ac_flood_plains"] = "The council says the flood layer may change."
+    assert followup.check_answer(followup.Sentence(text="市議會表示淹水圖層可能變動。", source_ids=["ac_flood_plains"]),
+                                 ev, "zh-Hant") == []
+    # other banned words stay banned next to an allowed 可能
+    s = followup.Sentence(text="Settled.govt.nz 指出保險公司可能限制保障，建議你確認。", source_ids=["kb_flood_insurance_limit"])
+    assert V_BANNED in followup.check_answer(s, ev, "zh-Hant")
+
+
+def test_japanese_may_is_fine_and_its_banned_words_stay():
+    ev = _ev_case1()
+    ok = followup.Sentence(text="Settled.govt.nz によると、保険会社が洪水被害の補償を制限することがあります。",
+                           source_ids=["kb_flood_insurance_limit"])
+    assert followup.check_answer(ok, ev, "ja") == []
+    bad = followup.Sentence(text="Settled.govt.nz によると、保険会社は多分補償を制限します。", source_ids=["kb_flood_insurance_limit"])
+    assert V_BANNED in followup.check_answer(bad, ev, "ja")
+
+
+def test_translation_may_follows_the_english_sentence():
+    ev = _ev_case1()
+    en = followup.Sentence(text="An insurer may limit flood cover.", source_ids=["ac_flood_plains"])
+    assert followup.check_translation(en, "保險公司可能限制淹水保障。", "zh-Hant", ev) == []
+    no_may = followup.Sentence(text="An insurer limits flood cover.", source_ids=["ac_flood_plains"])
+    assert V_BANNED in followup.check_translation(no_may, "保險公司可能限制淹水保障。", "zh-Hant", ev)

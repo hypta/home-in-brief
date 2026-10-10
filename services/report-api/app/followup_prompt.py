@@ -103,7 +103,7 @@ def answer_prompt(req: ReportRequest, ev: Evidence, kb_items: dict[str, dict], t
                  "has exactly as many not/no/never words as its facts; never add a cause ('so', 'because', "
                  "'making') or a 'says'/'states' the facts do not have." if english else
                  "keep each 'keep' phrase's meaning with a plain equivalent in your language (in Chinese: could not "
-                 "-> 無法, may -> 或許, only -> 只, at least -> 至少, unknown -> 未知, if -> 如果), keep every negation, "
+                 "-> 無法, may -> 可能, only -> 只, at least -> 至少, unknown -> 未知, if -> 如果), keep every negation, "
                  "never add a cause or a 'says' the facts do not have, and keep the English terms and publisher names "
                  "listed above in English.")
     if english:
@@ -135,8 +135,8 @@ How to answer:
 - If no fact answers the question, say what the facts do show, or use a fact saying the information could not
   be checked.
 - No advice or verdicts. Never call anything safe or risk-free, never recommend, never say should/must/will/likely.
-  In Chinese never use: 安全, 風險低, 風險高, 無風險, 建議, 推薦, 應該, 必須, 務必, 將會, 可能, 大約, 大概, 左右, 幾乎,
-  保證, 划算, 值得 (write "may" as 或許). In Japanese never use: 安全, 推奨, おすすめ, べき, 必ず, 保証, およそ, 多分.
+  In Chinese never use: 安全, 風險低, 風險高, 無風險, 建議, 推薦, 應該, 必須, 務必, 將會, 大約, 大概, 左右, 幾乎,
+  保證, 划算, 值得. Use 可能/或許/也許 only when retelling a fact whose text has may/might/can/could: write that "may" as 可能, never as your own guess. In Japanese never use: 安全, 推奨, おすすめ, べき, 必ず, 保証, およそ, 多分.
   In Korean never use: 안전, 추천, 권장, 해야, 반드시, 보장, 아마, 대략.
 - Never write an id or any word with an underscore in the text. No URLs, no other domain names, no HTML.
 - Facts with "user": true rely on what the user told us (unverified): give each its own sentence, never merged
@@ -204,7 +204,7 @@ Rules:
   1990년대), never a century form.
 - Keep these English terms exactly as written: {", ".join(KEEP_ENGLISH)}; keep names of layers, organisations and
   the values in the TEXT (e.g. Flood Plains, Weatherboard, RESERVE LAND) as written.
-- No URLs and no other domain names; no advice words. In Chinese write "may" as 或許 (never 可能) and never use
+- No URLs and no other domain names; no advice words. In Chinese write a fact's "may" as 可能 (only then; never add 可能/或許/也許 of your own) and never use
   建議, 應該, 安全, 大約; in Japanese never use おすすめ, べき, 安全, 多分.
 - Chinese: use {"Traditional" if "hant" in language.lower() else "Simplified"} characters.
 

@@ -100,6 +100,8 @@ class Evidence:
     cited_hosts: dict[str, set[str]] = field(default_factory=dict)
     # follow-up only: English names and values a Chinese/Japanese/Korean answer may contain (followup.latin_terms)
     latin_terms: set[str] = field(default_factory=set)
+    # follow-up only: source id -> English text of the facts citing it (a Chinese 可能 needs a may in here or in kb_claims)
+    fact_text: dict[str, str] = field(default_factory=dict)
 
 
 # ---- number helpers -----------------------------------------------------------------------------
@@ -413,7 +415,7 @@ ADDED_CAUSE = "added_cause"
 # (follow-up answers in Chinese, Japanese or Korean) may use any of the listed equivalents instead. Negations are
 # counted separately.
 QUALIFIERS: dict[str, tuple[str, ...]] = {
-    "may": ("或許", "或许", "可", "かもしれ", "ことがあ", "場合があ", "수 있", "있을 수"),
+    "may": ("可能", "或許", "或许", "也許", "也许", "可", "かもしれ", "ことがあ", "場合があ", "수 있", "있을 수"),
     "can": ("可", "能", "でき", "得る", "수 있"),
     "could not": ("無法", "无法", "未能", "不能", "できなかった", "できません", "できず", "できない", "수 없", "못했"),
     "only": ("只", "僅", "仅", "のみ", "だけ", "에만", "뿐", "만 "),
