@@ -8,12 +8,12 @@ from typing import Callable
 
 from pydantic import BaseModel, ValidationError
 
-from b_common.report_schemas import Sentence
+from .facts import RewriteSentence
 
 log = logging.getLogger("report-api.gemini")
 
 DEFAULT_MODEL = "gemini-3.5-flash-lite"  # same default as jobs/rates-refresh; override with GEMINI_MODEL
-TEMPERATURE = 0.0  # the drafts are finished sentences; the model only copies and smooths them
+TEMPERATURE = 0.0  # values are placeholders filled by code; a fixed temperature keeps eval runs comparable
 SEED = 20261010    # fixed seed: same prompt, same answer as far as the API allows
 
 
@@ -26,7 +26,8 @@ class ModelOutputInvalid(Exception):
 
 
 class SummaryOut(BaseModel):
-    summary: list[Sentence]
+    """The rewrite: sentences with placeholders and the fact ids they use (validator.check_rewrite)."""
+    summary: list[RewriteSentence]
 
 
 # (prompt, timeout_s) -> raw JSON text. Replaced in tests.
@@ -67,7 +68,7 @@ def gemini_generate(prompt: str, timeout_s: float) -> str:
     return text
 
 
-def parse(raw: str) -> list[Sentence]:
+def parse(raw: str) -> list[RewriteSentence]:
     try:
         return SummaryOut.model_validate(json.loads(raw)).summary
     except (ValueError, ValidationError) as e:

@@ -23,10 +23,14 @@ def test_topics_cite_known_ids_and_stay_within_five(case):
         assert t["cite"] and all(i in ev.known_ids for i in t["cite"]), t
 
 
-def test_case1_prompt_lists_allowed_and_forbidden_numbers():
+def test_case1_prompt_has_placeholders_and_no_values():
     text, tops = build("case1")
-    assert '"ac_flood_plains": ["2026", "51.2"]' in text
-    assert "720000" in text.split("FORBIDDEN NUMBERS:")[-1]
+    facts_part = text.split("CASE DATA")[-1]
+    assert "{{F1.flood_plain_pct}}" in facts_part and "{{F2.lvr_threshold}}" in facts_part
+    import re
+    values_part = re.sub(r'F\d+|"(?:words|negations)": \d+', "", facts_part)
+    assert not any(c.isdigit() for c in values_part)
+    assert "RESERVE LAND" not in text and "Freehold" not in facts_part
     assert tops[0]["cite"][:3] == ["ac_flood_plains", "ac_flood_prone", "ac_overland_flow"]
     assert any("RESERVE LAND" in t["say"] for t in tops)  # non-residential use
 

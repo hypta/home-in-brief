@@ -387,3 +387,223 @@ def with_prefix(s: Sentence) -> Sentence:
     if len(body) > 1 and not body[1].isupper():  # keep acronyms such as "LINZ"
         body = body[:1].lower() + body[1:]
     return Sentence(text=PREFIX + body, source_ids=s.source_ids)
+
+
+# ---- rewrite checks (fact list + placeholders) ----------------------------------------------------
+# Gemini rewrites a list of code-built facts (facts.Fact). A rewrite names the facts it uses (fact_ids) and writes
+# every value as a placeholder; code derives the source_ids from the facts and fills the values in.
+NO_FACT_IDS = "no_fact_ids"
+UNKNOWN_FACT_ID = "unknown_fact_id"
+FOREIGN_PLACEHOLDER = "placeholder_not_in_fact_ids"
+MALFORMED_PLACEHOLDER = "malformed_placeholder"
+BARE_NUMBER = "bare_number"
+RAW_FIELD_VALUE = "raw_field_value"
+SLOT_CONTEXT = "slot_context"
+MISSING_QUALIFIER = "missing_qualifier"
+QUALIFIER_ORDER = "qualifier_order"
+NEGATION_CHANGED = "negation_changed"
+MISSING_ATTRIBUTION = "missing_attribution"
+MIXED_USER_FACTS = "mixed_user_facts"
+ADDED_ATTRIBUTION = "added_attribution"
+ADDED_CAUSE = "added_cause"
+
+# Semantic guard (simple): a phrase of this list in a fact's text must also be in the rewrite. CJK rewrites
+# (follow-up answers) may use any of the listed equivalents instead. Negations are counted separately.
+QUALIFIERS: dict[str, tuple[str, ...]] = {
+    "may": ("或許", "或许", "可"), "can": ("可", "能"), "could not": ("無法", "无法", "未能", "不能"),
+    "only": ("只", "僅", "仅"), "limited": ("限",), "limits": ("限",), "at least": ("至少",),
+    "generally": ("一般", "通常"), "exempt": ("不受", "豁免", "不適用", "不适用"), "unknown": ("未知", "不明", "無法得知"),
+    "on individual properties": ("個別", "个别", "單一", "单一"), "differs": ("不同", "不一致"),
+    "same decade": ("同一個年代", "同一年代", "相同年代", "同一个年代"), "assumes": ("假設", "假设", "視為", "视为"),
+    "within": ("以內", "之內", "以内", "之内", "未超過", "未超过"), "above": ("超過", "超过", "高於", "高于"),
+    "if": ("如果", "若", "假如", "一旦"),  # a condition dropped turns "can ... if blocked" into a general claim
+}
+# Terms a fact uses that a rewrite must keep as written (dropping "LVR" from "exempt from Reserve Bank LVR limits"
+# widens the claim). CJK rewrites keep them in English too.
+TERMS = ("LVR", "DTI", "First Home Loan", "body corporate", "leaky")
+TERMS_CJK = ("LVR", "DTI", "First Home Loan")  # kept in English in Chinese answers too
+# Attribution: a publisher a fact names must be named in the rewrite too (CJK equivalents allowed).
+PUBLISHERS: dict[str, tuple[str, ...]] = {
+    "Auckland Council": ("Auckland Council", "council", "市議會", "市议会", "奧克蘭", "奥克兰"),
+    "Settled.govt.nz": ("Settled.govt.nz",),
+    "Reserve Bank": ("Reserve Bank", "RBNZ", "儲備銀行", "储备银行"),
+    "Kāinga Ora": ("Kāinga Ora", "Kainga Ora"),
+    "LINZ": ("LINZ",),
+    "unittitles.govt.nz": ("unittitles.govt.nz",),
+    "Natural Hazards Commission": ("Natural Hazards Commission", "NHC", "自然災害委員會", "自然灾害委员会"),
+}
+_NEG_RE = re.compile(r"\b(?:not|no|never|neither|nor|without|cannot)\b|n't\b", re.I)
+# A rewrite may not add a "says" (a gap in our data is not something the council "states") or a causal link
+# ("your income is within the cap, making it exempt") that its facts do not have.
+_SAY_RE = re.compile(r"\b(?:says?|said|states?|stated|stating|notes?|noted|noting|explains?|explained|describes?|"
+                     r"described|discusses|discussed|according to|reports?|reported|warns?|advises?)\b", re.I)
+_CAUSE_RE = re.compile(r"\b(?:because|so|therefore|thus|hence|since|making|makes|means?|meaning|as a result|due to|"
+                       r"leads? to|results? in)\b", re.I)
+_CJK_NEG_RE = re.compile(r"[不沒没未無无非否]")
+_CJK_RE = re.compile(r"[぀-ヿ㐀-鿿가-힯]")
+
+
+@dataclass
+class Rewrite:
+    """check_rewrite result: the filled sentence (source_ids derived from the facts) when it passes."""
+    sentence: Optional[Sentence]
+    fact_ids: list[str]           # the named ids that exist in the fact list
+    fails: list[str]
+    filled: str = ""              # the text with values filled in (also for blocked sentences, for logs)
+
+
+def _phrase_re(p: str) -> re.Pattern:
+    # ASCII boundaries, so a phrase glued to CJK text ("依據settled.govt.nz的說明") is still found
+    return re.compile(rf"(?<![A-Za-z0-9_-]){re.escape(p)}(?![A-Za-z0-9_-])", re.I)
+
+
+def qualifiers_in(text: str) -> list[str]:
+    """QUALIFIERS phrases a fact's text uses (what a rewrite must keep)."""
+    words = re.sub(r"\{\{[^}]*\}\}", " ", text)
+    return [q for q in QUALIFIERS if _phrase_re(q).search(words)]
+
+
+def terms_in(text: str) -> list[str]:
+    words = re.sub(r"\{\{[^}]*\}\}", " ", text)
+    return [t for t in TERMS if re.search(rf"(?<![A-Za-z]){re.escape(t)}", words, re.I)]
+
+
+def publishers_in(text: str) -> list[str]:
+    return [p for p, alts in PUBLISHERS.items() if _phrase_re(alts[0]).search(text)
+            or (p == "Auckland Council" and re.search(r"\bcouncil\b", text, re.I))]
+
+
+def negations(text: str) -> int:
+    return len(_NEG_RE.findall(re.sub(r"\{\{[^}]*\}\}", " ", text)))
+
+
+def check_rewrite(s: Any, facts: Any, ev: Evidence, max_words: Optional[int] = MAX_WORDS,
+                  final: Optional[Any] = None) -> Rewrite:
+    """Check one rewritten sentence ({text, fact_ids}) against the fact list, fill in its placeholders, and run
+    the sentence rules on the result (check_sentence, or `final(sentence)` for follow-up answers).
+
+    Blocks: unknown or missing fact ids; a placeholder of a fact the sentence does not name, or a slot that fact
+    does not have; leftover braces; any digit outside a placeholder; a strict string value (a title name, the
+    council's land-use words) written without its placeholder; a placeholder away from its words (slot label,
+    before/after context); a fact's qualifier, term (LVR, DTI, ...), publisher or number of negations not kept; user facts mixed with
+    other facts. The prefix "Based on what you told us" is removed: code adds it for user facts."""
+    from .facts import PLACEHOLDER_RE, TITLE_WORDS, fill, template_words
+
+    fmap = facts if isinstance(facts, dict) else {f.id: f for f in facts}
+    text = strip_prefix((getattr(s, "text", None) if not isinstance(s, dict) else s.get("text")) or "").strip()
+    named = list(dict.fromkeys((getattr(s, "fact_ids", None) if not isinstance(s, dict) else s.get("fact_ids")) or []))
+    ids = [i for i in named if i in fmap]
+    fails: list[str] = []
+    if not text:
+        return Rewrite(None, ids, [EMPTY_TEXT])
+    if not named:
+        fails.append(NO_FACT_IDS)
+    if len(ids) < len(named):
+        fails.append(UNKNOWN_FACT_ID)
+    cited = [fmap[i] for i in ids]
+    cjk = bool(_CJK_RE.search(text))
+
+    marks = list(PLACEHOLDER_RE.finditer(text))
+    for m in marks:
+        if m.group(1) not in ids or m.group(2) not in fmap[m.group(1)].slots:
+            fails.append(FOREIGN_PLACEHOLDER)
+    rest = PLACEHOLDER_RE.sub(" ", text)
+    if "{" in rest or "}" in rest:
+        fails.append(MALFORMED_PLACEHOLDER)
+    if any(c.isnumeric() for c in rest.replace("一", "")):  # "一" is part of ordinary words (一般, 之一)
+        fails.append(BARE_NUMBER)
+
+    # strict string values (and every title name) may appear only through a placeholder, unless a cited fact's
+    # own words contain them
+    own = " ".join(template_words(f.text) for f in cited)
+    strict = set(TITLE_WORDS) | {str(sl.value) for f in fmap.values() for sl in f.slots.values()
+                                 if sl.strict and isinstance(sl.value, str)}
+    for value in strict:
+        rx = _phrase_re(value)
+        if rx.search(rest) and not rx.search(own):
+            fails.append(RAW_FIELD_VALUE)
+            break
+
+    # each placeholder stays next to its words
+    labelled = [sl for f in cited for sl in f.slots.values() if sl.label]
+    for m in marks:
+        f = fmap.get(m.group(1))
+        sl = f.slots.get(m.group(2)) if f and m.group(1) in ids else None
+        if sl is None:
+            continue
+        before, after = PLACEHOLDER_RE.sub("X", text[:m.start()]), text[m.end():]
+        if sl.before and not re.search(rf"(?:{sl.before})\s*$", before, re.I):
+            fails.append(SLOT_CONTEXT)
+        if sl.after and not re.match(rf"\s*(?:{sl.after})", after, re.I):
+            fails.append(SLOT_CONTEXT)
+        if sl.label:
+            hits = [(h.start(), h.end(), o.label.lower()) for o in labelled
+                    for h in _phrase_re(o.label).finditer(text)]
+            prior = [h for h in hits if h[1] <= m.start()]
+            near = max(prior, key=lambda h: h[1]) if prior else min(
+                (h for h in hits if h[0] >= m.end()), key=lambda h: h[0], default=None)
+            if near is None or near[2] != sl.label.lower():
+                fails.append(SLOT_CONTEXT)
+
+    # meaning: qualifiers, attribution and negations of the facts are kept
+    for f in cited:
+        for q in qualifiers_in(f.text):
+            if not (_phrase_re(q).search(rest) or (cjk and any(a in rest for a in QUALIFIERS[q]))):
+                fails.append(MISSING_QUALIFIER)
+                break
+        if not cjk:
+            # the fact's qualifiers and keep phrases, all present and in the fact's order ("shown because your
+            # income ... exempt" must not become "exempt ... because your income")
+            own_words = template_words(f.text)
+            phrases = set(qualifiers_in(f.text) + list(f.keep))
+            phrases = {p for p in phrases if not any(p != o and p.lower() in o.lower() for o in phrases)}
+            req = sorted(phrases,
+                         key=lambda p: (m.start() if (m := _phrase_re(p).search(own_words)) else -1))
+            pos = 0
+            for p in req:
+                m = _phrase_re(p).search(rest, pos)
+                if m:
+                    pos = m.end()
+                elif _phrase_re(p).search(rest):
+                    fails.append(QUALIFIER_ORDER)
+                    break
+                else:
+                    fails.append(MISSING_QUALIFIER)
+                    break
+        for t in terms_in(f.text):
+            if cjk and t not in TERMS_CJK:
+                continue
+            if not re.search(rf"(?<![A-Za-z]){re.escape(t)}", rest, re.I):
+                fails.append(MISSING_QUALIFIER)
+                break
+        for p in publishers_in(template_words(f.text)):
+            if not any((_phrase_re(a).search(rest) if a.isascii() else a in rest) for a in PUBLISHERS[p]):
+                fails.append(MISSING_ATTRIBUTION)
+                break
+    need = sum(negations(f.text) for f in cited)
+    if cjk:
+        if need and not (_CJK_NEG_RE.search(rest) or negations(rest)):
+            fails.append(NEGATION_CHANGED)
+    elif negations(rest) != need:
+        fails.append(NEGATION_CHANGED)
+    if len({f.user for f in cited}) > 1:
+        fails.append(MIXED_USER_FACTS)
+    # a publisher the facts do not name may not be named ("The council records ..." for a fact about a KB item)
+    own_all = " ".join(template_words(f.text) for f in cited)
+    for p, alts in PUBLISHERS.items():
+        if (any((_phrase_re(a).search(rest) if a.isascii() else a in rest) for a in alts)
+                and p not in publishers_in(own_all)):
+            fails.append(ADDED_ATTRIBUTION)
+            break
+    if not cjk:
+        if len(_SAY_RE.findall(rest)) > len(_SAY_RE.findall(own_all)):
+            fails.append(ADDED_ATTRIBUTION)
+        if len(_CAUSE_RE.findall(rest)) > len(_CAUSE_RE.findall(own_all)):
+            fails.append(ADDED_CAUSE)
+
+    filled = fill(text, {f.id: f for f in cited})
+    sids = list(dict.fromkeys(i for f in cited for i in f.source_ids))
+    sentence = Sentence(text=filled, source_ids=sids)
+    fails += final(sentence) if final else check_sentence(sentence, ev, max_words)
+    fails = list(dict.fromkeys(fails))
+    return Rewrite(None if fails else sentence, ids, fails, filled)

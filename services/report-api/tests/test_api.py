@@ -25,13 +25,27 @@ def fake(*answers):
     return gen
 
 
+# Gemini rewrites the case1 fact list (F1 hazards, F2 lending, F3 First Home Loan, F4 household (optional),
+# F5 title, F6 non-residential use); values are placeholders that code fills in.
 GOOD = [
-    {"text": "The council's Flood Plains layer covers 51.2% of this parcel.", "source_ids": ["ac_flood_plains"]},
-    {"text": "Your loan counts as high-LVR lending, which the Reserve Bank lets banks offer only in limited amounts.",
-     "source_ids": ["rbnz_lvr", "kb_rbnz_lvr"]},
-    {"text": "LINZ records the title as Freehold.", "source_ids": ["linz_titles", "kb_title_freehold"]},
-    {"text": "Your loan would be $720,000.", "source_ids": ["rbnz_lvr"]},
+    {"text": "Council maps show Flood Plains covering {{F1.flood_plain_pct}} of this parcel, Flood Prone Areas "
+             "{{F1.flood_prone_area_pct}}, and an overland flow path crossing it.", "fact_ids": ["F1"]},
+    {"text": "Your loan counts as high-LVR lending (borrowing over {{F2.lvr_threshold}} of the price), which the "
+             "Reserve Bank lets banks offer only in limited amounts.", "fact_ids": ["F2"]},
+    {"text": "LINZ records the title as {{F5.title_type}}; Settled.govt.nz says you own the land and generally "
+             "anything built on it.", "fact_ids": ["F5"]},
+    {"text": "Your loan would be $720,000.", "fact_ids": ["F2"]},
 ]
+GOOD_FILLED = [
+    "Council maps show Flood Plains covering 51.2% of this parcel, Flood Prone Areas 50.8%, and an overland flow "
+    "path crossing it.",
+    "Your loan counts as high-LVR lending (borrowing over 80% of the price), which the Reserve Bank lets banks "
+    "offer only in limited amounts.",
+    "LINZ records the title as Freehold; Settled.govt.nz says you own the land and generally anything built on it.",
+]
+CASE1_FHL = "A First Home Loan is shown because your income is within Kāinga Ora's cap; it is exempt from Reserve Bank LVR limits."
+CASE1_USE = ("The council valuation describes the improvements as RESERVE LAND and the land use as Recreational - "
+             "vacant; the year built could not be checked.")
 
 
 def test_health():
@@ -53,15 +67,18 @@ def test_report_with_model(monkeypatch):
     assert r.status_code == 200, r.text
     rep = r.json()
     assert rep["model"] == "gemini-test" and rep["schema_version"] == "0.1"
-    assert [s["text"] for s in rep["summary"]] == [s["text"] for s in GOOD[:3]]
+    # rewrites kept, the blocked one (a bare number) dropped, the uncovered must facts added as drafts, in fact order
+    assert [s["text"] for s in rep["summary"]] == GOOD_FILLED[:2] + [CASE1_FHL, GOOD_FILLED[2], CASE1_USE]
+    assert rep["summary"][0]["source_ids"] == ["ac_flood_plains", "ac_flood_prone", "ac_overland_flow"]
     assert rep["dropped"] == 1
     assert rep["next_steps"][0]["kb_item"] == "kb_rbnz_lvr"  # cited in the summary first
     assert rep["warnings"] == ["year_built_unavailable", "cladding_unavailable"]
     assert rep["generated_at"].endswith(("+13:00", "+12:00"))
     prompt, timeout = gen.calls[0]
     assert timeout <= 20
-    assert "720000" in prompt and "51.2" in prompt and "kb_rbnz_lvr" in prompt  # forbidden and allowed numbers listed
-    assert "Freehold" in prompt
+    # the prompt carries placeholders, never the values
+    assert "{{F1.flood_plain_pct}}" in prompt and "{{F5.title_type}}" in prompt
+    assert "51.2" not in prompt and "720000" not in prompt and "RESERVE LAND" not in prompt
 
 
 def test_retry_after_invalid_json_then_success(monkeypatch):
@@ -77,13 +94,15 @@ def test_invalid_json_twice_is_502(monkeypatch):
     assert r.status_code == 502 and r.json()["error"]["code"] == "model_output_invalid"
 
 
-def test_zero_passing_sentences_retries_then_502(monkeypatch):
-    bad = [{"text": "Your loan would be $720,000.", "source_ids": ["rbnz_lvr"]}]
+def test_zero_passing_sentences_retries_then_falls_back_to_drafts(monkeypatch):
+    bad = [{"text": "Your loan would be $720,000.", "fact_ids": ["F2"]}]
     gen = fake(bad, bad)
     monkeypatch.setattr(gemini, "gemini_generate", gen)
     r = client.post("/v1/report", json=body("case1"))
-    assert r.status_code == 502 and r.json()["error"]["code"] == "validation_failed"
-    assert len(gen.calls) == 2 and "computed_value" in gen.calls[1][0]
+    assert r.status_code == 200
+    assert len(gen.calls) == 2 and "bare_number" in gen.calls[1][0]
+    rep = r.json()
+    assert rep["dropped"] == 1 and len(rep["summary"]) == 5 and rep["summary"][2]["text"] == CASE1_FHL
 
 
 def test_model_unavailable_is_503(monkeypatch):
@@ -155,26 +174,34 @@ def test_kb_from_rules_api(monkeypatch):
 
 
 def test_user_input_prefix_added_by_code(monkeypatch):
-    answer = [{"text": "The cladding is monolithic, a system Settled.govt.nz discusses in its leaky-building guidance.",
-               "source_ids": ["kb_monolithic_cladding"]},
-              {"text": "LINZ records the title as Unit Title.", "source_ids": ["linz_titles"]}]
+    answer = [{"text": "LINZ records a {{F3.title_type}} title; Settled.govt.nz says owners automatically become "
+                       "members of the body corporate.", "fact_ids": ["F3"]},
+              {"text": "Your year falls in the same decade, and the cladding is monolithic, which Settled.govt.nz "
+                       "discusses in its leaky-building guidance.", "fact_ids": ["F5"]}]
     monkeypatch.setattr(gemini, "gemini_generate", fake(answer))
     rep = client.post("/v1/report", json=body("case5")).json()
-    assert rep["summary"][0]["text"].startswith("Based on what you told us, the cladding is monolithic")
-    assert not rep["summary"][1]["text"].startswith("Based on")
+    texts = [s["text"] for s in rep["summary"]]
+    assert texts[2] == ("LINZ records a Unit Title title; Settled.govt.nz says owners automatically become members "
+                        "of the body corporate.")
+    assert texts[4].startswith("Based on what you told us, your year falls in the same decade")
+    assert sum(t.startswith("Based on") for t in texts) == 1
 
 
 def test_no_loan_case_appends_fixed_sentence_and_drops_lending(monkeypatch):
-    answer = [{"text": "A mapped overland flow path crosses this parcel.", "source_ids": ["ac_overland_flow"]},
-              {"text": "No loan is needed for this purchase.", "source_ids": ["linz_titles"]}]
+    answer = [{"text": "A mapped overland flow path crosses this parcel, and Auckland Council says water can build up "
+                       "and enter homes if the path is blocked.", "fact_ids": ["F1"]},
+              {"text": "No loan is needed for this purchase.", "fact_ids": ["F3"]}]
     monkeypatch.setattr(gemini, "gemini_generate", fake(answer))
     rep = client.post("/v1/report", json=body("edge2")).json()
-    assert [s["text"] for s in rep["summary"]] == [answer[0]["text"], assemble.NO_LOAN_SENTENCES["deposit_exceeds_price"]]
+    texts = [s["text"] for s in rep["summary"]]
+    assert texts[0] == answer[0]["text"] and texts[-1] == assemble.NO_LOAN_SENTENCES["deposit_exceeds_price"]
+    assert len(texts) == 5 and not any("loan" in t.lower() for t in texts[:-1])  # F2-F4 drafts in between
     assert rep["summary"][-1]["source_ids"] == [] and rep["dropped"] == 1
 
 
 def test_summary_capped_at_five(monkeypatch):
-    many = [{"text": "LINZ records the title as Freehold.", "source_ids": ["linz_titles"]}] * 7
+    many = [{"text": "LINZ records the title as {{F5.title_type}}; Settled.govt.nz says you own the land and "
+                     "generally anything built on it.", "fact_ids": ["F5"]}] * 7
     monkeypatch.setattr(gemini, "gemini_generate", fake(many))
     assert len(client.post("/v1/report", json=body("case1")).json()["summary"]) == 5
 

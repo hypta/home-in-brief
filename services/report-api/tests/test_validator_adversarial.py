@@ -167,3 +167,71 @@ def test_domain_must_belong_to_the_cited_source_not_to_a_request_field():
     assert V.URL_OR_HTML not in V.check_sentence(s, ev)
     s = Sentence(text='Unittitles.govt.nz says an auction sale is unconditional.', source_ids=['src_settled_leaky'])
     assert V.URL_OR_HTML in V.check_sentence(s, ev)
+
+
+# ---- the same six semantic attacks on the rewrite path (fact ids + placeholders) -------------------------
+# test_semantic_attacks above keeps the xfails: check_sentence alone still cannot tell these apart. In the rewrite
+# path each one is either blocked by check_rewrite or cannot be written at all.
+from app import prompt as _prompt  # noqa: E402
+
+
+def _rw(case, text, ids):
+    req, data, ev = evidence(case)
+    fs = _prompt.followup_facts(req, ev, data.items)
+    return V.check_rewrite({"text": text, "fact_ids": ids}, fs, ev), fs
+
+
+def _fid(case, needle):
+    req, data, ev = evidence(case)
+    return next(f.id for f in _prompt.followup_facts(req, ev, data.items) if needle in f.text)
+
+
+def test_rewrite_number_bound_to_another_field_of_the_same_source():
+    cv, land = _fid('case1', 'valuation (CV)'), _fid('case1', 'land value')
+    assert V.BARE_NUMBER in _rw('case1', 'The council land value is $340,000.', [land])[0].fails
+    # the CV placeholder next to the words "land value" is blocked: the nearest label is the other field's
+    r, _ = _rw('case1', 'The council land value is {{%s.cv}}.' % cv, [cv, land])
+    assert V.SLOT_CONTEXT in r.fails
+    r, _ = _rw('case1', 'The council land value is {{%s.land_value}}.' % land, [land])
+    assert r.fails == [] and r.sentence.text == 'The council land value is $290,000.'
+
+
+def test_rewrite_valuation_year_cannot_become_a_build_year():
+    assert V.BARE_NUMBER in _rw('case1', 'The building was built in 2024.', ['F1'])[0].fails
+    _, fs = _rw('case1', 'x', ['F1'])
+    # no fact offers the valuation date as a value; year and decade slots exist only on the property page facts
+    assert not any(str(sl.value).startswith('2024') for f in fs for sl in f.slots.values())
+    assert all(sl.source_id == 'ac_property_page' for f in fs for sl in f.slots.values()
+               if sl.kind in ('year', 'decade'))
+
+
+def test_rewrite_wrong_title_is_blocked_and_the_title_comes_from_the_record():
+    r, _ = _rw('case1', 'LINZ records the title as Leasehold; Settled.govt.nz says you own the land and generally '
+                        'anything built on it.', ['F5'])
+    assert V.RAW_FIELD_VALUE in r.fails
+    r, _ = _rw('case1', 'LINZ records the title as {{F5.title_type}}; Settled.govt.nz says you own the land and '
+                        'generally anything built on it.', ['F5'])
+    assert r.fails == [] and 'as Freehold;' in r.sentence.text
+
+
+def test_rewrite_sources_come_from_the_facts_not_from_the_model():
+    flood = _fid('case1', 'Flood Plains over')
+    r, _ = _rw('case1', 'The property is {{F5.title_type}}.', [flood])
+    assert V.FOREIGN_PLACEHOLDER in r.fails
+    r, fs = _rw('case1', 'LINZ records the title as {{F5.title_type}}, and Settled.govt.nz says you own the land and '
+                         'generally anything built on it.', ['F5'])
+    assert r.sentence.source_ids == ['linz_titles', 'kb_title_freehold']  # never ac_flood_plains
+
+
+def test_rewrite_threshold_cannot_become_a_personal_ratio():
+    assert V.BARE_NUMBER in _rw('case1', 'Your LVR is 80%.', ['F2'])[0].fails
+    r, _ = _rw('case1', 'Your loan has an LVR of {{F2.lvr_threshold}}, which the Reserve Bank lets banks offer only '
+                        'in limited amounts.', ['F2'])
+    assert V.SLOT_CONTEXT in r.fails  # the threshold must follow "over"/"above"
+
+
+def test_rewrite_reversed_meaning_is_blocked():
+    fid = _fid('case1', 'will not provide funding')
+    r, fs = _rw('case1', 'Kāinga Ora states that after {{%s.n1}} July {{%s.n2}} the Government will provide funding to '
+                         'cover part of the First Home Loan premium.' % (fid, fid), [fid])
+    assert V.NEGATION_CHANGED in r.fails
