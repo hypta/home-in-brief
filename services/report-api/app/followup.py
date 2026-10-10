@@ -1,8 +1,10 @@
 """POST /v1/followup: answer one question in the asker's language, validated like the summary (INTERFACE_DRAFT 5, 6.1).
 
 Flow: classify (Gemini: language, out-of-scope, stated year/cladding) -> code checks user_supplied ->
-optional rules-api re-run with the merged chat_supplied -> answer (Gemini) -> validator + language checks ->
-code-added prefix. Out of scope: a fixed refusal chosen by code, translated by Gemini.
+optional rules-api re-run with the merged chat_supplied -> fact list (prompt.followup_facts, rebuilt from the
+re-run RulesOutput) -> answer (Gemini rewrites facts, values as placeholders) -> validator.check_rewrite with the
+language checks -> blocked sentences fall back to their facts' drafts -> code-added prefix. Out of scope: a fixed
+refusal chosen by code, translated by Gemini.
 
 question and history are untrusted: they never enter the evidence. The one exception (P-V3) is a validated
 year_built that was used for the re-run; it is allowed only in sentences citing kb_items_from_user_input.
@@ -24,11 +26,13 @@ from pydantic import BaseModel, Field, ValidationError
 
 from b_common.report_schemas import FieldView, ReportRequest, Sentence
 
-from . import gemini, kb
+from . import gemini, kb, rewrite
 from . import followup_prompt as fp
+from . import prompt as facts_prompt
+from .facts import RewriteSentence
 from .service import ReportError, _env_float, mock_enabled
 from .validator import (MAX_WORDS, NUMBER_WORD, TOO_LONG, BANNED_WORD, URL_OR_HTML, Allowed, Evidence,
-                        build_evidence, strip_prefix, to_decimal, validate)
+                        build_evidence, check_rewrite, strip_prefix, to_decimal, validate)
 
 log = logging.getLogger("report-api.followup")
 MAX_ANSWER = 3
@@ -72,7 +76,7 @@ class ClassifyOut(BaseModel):
 
 
 class AnswerOut(BaseModel):
-    answer: list[Sentence]
+    answer: list[RewriteSentence]
     links: list[str] = Field(default_factory=list)
 
 
@@ -265,7 +269,11 @@ def check_answer(s: Sentence, ev: Evidence) -> list[str]:
     if not cjk:
         v = validate([s], ev, MAX_WORDS)
         return v.rejected[0][1] if v.rejected else []
-    probe = Sentence(text=s.text.replace("一", "某"), source_ids=s.source_ids)
+    # "某" masks 一; a space between ASCII and CJK keeps the validator's \b checks from cutting a glued domain
+    # ("Settled.govt.nz的指引" read as the domain "settled.govt")
+    probe_text = re.sub(r"(?<=[A-Za-z0-9])(?=[　-〿぀-ヿ㐀-鿿가-힯＀-￯])|(?<=[　-〿぀-ヿ㐀-鿿가-힯＀-￯])(?=[A-Za-z0-9])",
+                        " ", s.text.replace("一", "某"))
+    probe = Sentence(text=probe_text, source_ids=s.source_ids)
     v = validate([probe], ev, max_words=None)
     fails = list(v.rejected[0][1]) if v.rejected else []
     if cjk_units(s.text) > fp.CJK_MAX_UNITS:
@@ -446,8 +454,10 @@ _PLAIN_RE = re.compile(r"\d|https?://|www\.|<|\n")
 
 # ---- main flow ----------------------------------------------------------------------------------
 def answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
-                    generate: Optional[JsonGenerator] = None) -> FollowupResponse:
+                    generate: Optional[JsonGenerator] = None, debug: Optional[dict] = None) -> FollowupResponse:
+    """`debug`, when given, receives the fact list, the checked attempts and the composed answer (for eval)."""
     generate = generate or gemini_json
+    debug = debug if debug is not None else {}
     mock = mock_enabled()
     clock = _Clock()
     history = [t.model_dump() for t in req.history]
@@ -505,8 +515,8 @@ def answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
         if f is not None and f.status == "found" and f.value is not None:
             compared.append((key, value, f))
             notes.append(f"The program already states how the user's {key.replace('_', ' ')} compares with the "
-                         f"record ({f.source_id}); the record is used. Do not repeat that comparison and do not "
-                         f"write the user's value.")
+                         f"record; the record is used. Do not repeat that comparison and do not write the user's "
+                         f"value.")
         else:
             used[key] = value
     user_inputs = dict(req.user_inputs)
@@ -528,18 +538,13 @@ def answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
     ev = build_evidence(eff, data.items, data.sources.keys(), source_urls=data.sources.urls)
     titles = {s.id: s.title or "" for s in eff.sources()} | data.sources
     if used:
-        # P-V3 exception: the validated, used year is allowed only with the items it selected.
-        years = [Decimal(y) for y in _year_numbers(used.get("year_built"))]
-        for i in ev.user_kb:
-            ev.allowed.setdefault(i, []).extend(Allowed(y) for y in years)
-        items = sorted(ev.user_kb)
-        what = ", ".join(f"{k.replace('_', ' ')} {v}" for k, v in used.items())
-        notes.append(f"The user said: {what}. This is unverified and is used for this answer. "
-                     + (f"Items it selected: {items}; cite them for anything that depends on it"
-                        + (" (the year may be written only in a sentence citing one of them)." if years else ".")
-                        if items else "It selected no extra KB item; do not write the user's value."))
+        allow_user_year(ev, used)
+        what = ", ".join(k.replace("_", " ") for k in used)
+        notes.append(f"The user just told us the {what}. This is unverified and is used for this answer: the facts "
+                     "with \"user\": true depend on it" + ("." if ev.user_kb else
+                                                         "; it selected no extra fact, so do not write the value."))
     elif ev.user_kb:
-        notes.append(f"Items {sorted(ev.user_kb)} were selected from what the user told us earlier (unverified).")
+        notes.append("Facts with \"user\": true depend on what the user told us earlier (unverified).")
 
     # Program sentences comparing the user's value with the property value (both values, cited).
     fixed = []
@@ -551,18 +556,33 @@ def answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
         else:
             fixed.append(s)
 
-    # 4. answer, validate; one retry when nothing passes and time allows
+    # 4. answer from the fact list; check each rewrite; one retry when none passes and time allows; blocked
+    #    sentences fall back to their facts' drafts
     passed: list[Sentence] = []
     dropped, out_links = 0, []
     last: Optional[ReportError] = None
+    limit = max(0, MAX_ANSWER - len(fixed))
     if mock:
         passed, dropped = mock_answer(ev, data.items, used, language)
         if fixed and not used:
             passed = []  # the comparison is the answer; no filler sentence
+        passed = passed[:limit]
+        if any(set(s.source_ids) & ev.user_kb for s in passed):
+            prefix = prefix_for(language, translate)
+            passed = [add_prefix(s, prefix) if set(s.source_ids) & ev.user_kb else s for s in passed]
     else:
+        fs = facts_prompt.followup_facts(eff, ev, data.items, used)
+        debug["facts"] = [{"id": f.id, "text": f.text, "draft": f.draft(), "user": f.user,
+                           "source_ids": f.source_ids} for f in fs]
+        debug["attempts"] = []
+
+        def final(s: Sentence) -> list[str]:
+            return check_answer(Sentence(text=tidy(s.text), source_ids=s.source_ids), ev)
+
         base = fp.answer_prompt(eff, ev, data.items, titles, req.question, history, language, notes,
-                                is_cjk(language))
+                                is_cjk(language), fs)
         prompt = base
+        best: Optional[list] = None
         for attempt in range(2):
             if attempt and clock.left() < 6.0:
                 break
@@ -574,30 +594,51 @@ def answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
                 last = e
                 prompt = base
                 continue
-            rejected = []
-            for s in out.answer:
-                s = Sentence(text=tidy(s.text), source_ids=list(dict.fromkeys(s.source_ids)))
-                fails = check_answer(s, ev)
-                (rejected.append((s, fails)) if fails else passed.append(s))
-            for s, f in rejected:
-                log.info("dropped answer sentence: %s", ",".join(f))
-            dropped = len(rejected)
+            checked = [check_rewrite(s, fs, ev, final=final) for s in out.answer]
+            debug["attempts"].append([{"text": s.text, "fact_ids": s.fact_ids, "filled": r.filled, "fails": r.fails}
+                                      for s, r in zip(out.answer, checked)])
+            for r in checked:
+                if r.fails:
+                    log.info("dropped answer sentence: %s", ",".join(r.fails))
             out_links = out.links
-            if passed:
+            if best is None or sum(r.sentence is not None for r in checked) > sum(r.sentence is not None for r in best):
+                best = checked
+            if any(r.sentence is not None for r in checked):
                 break
             last = ReportError(502, "validation_failed", "No answer sentence passed validation.")
             prompt = base + ("\nYour previous answer could not be used (" +
-                             ", ".join(sorted({r for _, f in rejected for r in f})) + "). Follow every rule exactly.\n")
+                             ", ".join(sorted({f for r in checked for f in r.fails} or {"no sentences"})) +
+                             "). Follow every rule exactly.\n")
+        items = rewrite.compose(best or [], fs, limit, add_musts=False, sort=False,
+                                check_draft=lambda s: check_answer(s, ev)) if limit else []
+        dropped = sum(r.sentence is None for r in best or [])
+        debug["composed"] = [{"text": it.sentence.text, "fact_ids": it.fact_ids, "kind": it.kind} for it in items]
+        debug["rewrite"] = rewrite.stats(items, best or [])
+        prefix = None
+        for it in items:
+            s = it.sentence
+            if it.kind == rewrite.REWRITE:
+                s = Sentence(text=tidy(s.text), source_ids=s.source_ids)
+            if it.user or set(s.source_ids) & ev.user_kb:
+                if it.kind == rewrite.REWRITE:
+                    prefix = prefix or prefix_for(language, translate)
+                    s = add_prefix(s, prefix)
+                else:
+                    s = add_prefix(s, PREFIX_EN)  # drafts are English
+            passed.append(s)
     if not passed and not fixed:
         raise last or ReportError(502, "validation_failed", "No answer sentence passed validation.")
 
-    passed = passed[:max(0, MAX_ANSWER - len(fixed))]
-    if any(set(s.source_ids) & ev.user_kb for s in passed):
-        prefix = prefix_for(language, translate)
-        passed = [add_prefix(s, prefix) if set(s.source_ids) & ev.user_kb else s for s in passed]
     links = [i for i in dict.fromkeys(out_links + links) if i in link_ids][:3]
     return FollowupResponse(language=language, answer=fixed + passed, out_of_scope=False, user_supplied=supplied,
                             links=links, dropped=dropped, warnings=warnings)
+
+
+def allow_user_year(ev: Evidence, used: dict[str, Any]) -> None:
+    """P-V3 exception: the validated, used year is allowed only with the items it selected."""
+    years = [Decimal(y) for y in _year_numbers(used.get("year_built"))]
+    for i in ev.user_kb:
+        ev.allowed.setdefault(i, []).extend(Allowed(y) for y in years)
 
 
 def _kb(req: ReportRequest, clock: _Clock):
