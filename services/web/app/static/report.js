@@ -11,7 +11,6 @@ const LAYERS = {flood_plain:"Flood plains", flood_prone_area:"Flood prone areas"
   tsunami_evacuation_zone:"Tsunami evacuation zone", coastal_erosion:"Coastal erosion (ASCIE 2130, RCP8.5+)"};
 export const layerName = id => LAYERS[id] || id;
 
-const STATUS = {intersects:"mapped here", none:"not mapped here", unavailable:"could not check", not_found:"not found", found:"found"};
 const BASIS = {standard:"standard rate", special:"special rate", "special+lem":"special rate plus low-equity margin", unknown:"not published"};
 const TOPIC_BLOCK = {hazard:"hazards", insurance:"hazards", lending:"loan", valuation:"loan"};  // any other topic: "notes"
 const NO_RISK_CAVEAT = "This is not a statement that there is no risk.";
@@ -41,7 +40,8 @@ const missing = f => gone(f) + dev(f.reason || f.status);
 const span = (r, fmt) => !r ? "not available" : r[0] === r[1] ? fmt(r[0]) : `${fmt(r[0])} to ${fmt(r[1])}`;
 const or = (v, fmt) => v == null ? "not published" : fmt(v);
 const list = items => items.length ? `<ul class="plain">${items.map(i => `<li>${i}</li>`).join("")}</ul>` : "";
-const row = (name, detail, tag) => `<div class="row"><b>${name}</b>${tag ? `<span class="tag ${tag}">${esc(STATUS[tag] || tag)}</span>` : ""}<div class="detail">${detail}</div></div>`;
+const row = (name, detail) => `<div class="row"><b>${name}</b><div class="detail">${detail}</div></div>`;
+const fold = (title, inside) => inside ? `<details class="more"><summary>${title}</summary>${inside}</details>` : "";
 const where = ctx => ctx.parcel.spatial_method === "parcel" ? "on this parcel" : "at the address point";
 const unchecked = h => h.status === "unavailable" || h.status === "not_found";
 export const floodMapped = ctx => ctx.hazards.filter(h => h.priority === "primary" && h.status === "intersects");
@@ -70,12 +70,16 @@ const kbCite = k => control([kbCard(k)]);
 
 function notes({rules, kb}, block, heading) {
   const mine = (kb || []).filter(k => (TOPIC_BLOCK[k.topic] || "notes") === block), told = new Set(rules?.kb_items_from_user_input);
-  if (!mine.length) return "";
-  return `<h4>${heading}</h4>` + mine.map(k => `<div class="note">${esc(k.claim_en)} ${kbCite(k)}
-      ${k.source_type === "secondary" ? `<span class="tag none">secondary source</span>` : ""}
+  const note = k => `<div class="note">${esc(k.claim_en)} ${kbCite(k)}
+      ${k.source_type === "secondary" ? `<span class="tag">secondary source</span>` : ""}
       ${k.status === "verified" ? "" : `<span class="tag draft">draft, not yet checked</span>`}
       ${told.has(k.id) ? `<div class="muted">Based on what you told us.</div>` : ""}
-      ${k.next_step_en ? `<div data-step="${esc(k.next_step_en)}"><b>Next step:</b> ${esc(k.next_step_en)}</div>` : ""}</div>`).join("");
+      ${k.next_step_en ? `<div data-step="${esc(k.next_step_en)}"><b>Next step:</b> ${esc(k.next_step_en)}</div>` : ""}</div>`;
+  // A note about this property stays in view. Notes that are the same for every home, and the two long lists of lending rules, are folded with a count.
+  const FOLDS = {always: "Background for any Auckland home", fhl_eligible: "First Home Loan rules", lvr_over: "Low-deposit lending rules"};
+  const foldOf = k => Object.keys(FOLDS).find(rule => rule in (k.applies_when || {})), open = mine.filter(k => !foldOf(k));
+  return (open.length ? `<h4>${heading}</h4>${open.map(note).join("")}` : "")
+    + Object.entries(FOLDS).map(([rule, title]) => { const inside = mine.filter(k => foldOf(k) === rule); return fold(`${title} (${count(inside.length, "note")})`, inside.map(note).join("")); }).join("");
 }
 
 // code: [block, text]. A code may carry a layer or bank id after a colon. CODES.md marks the hidden ones as not user-facing.
@@ -161,26 +165,26 @@ function hazards(state) {
 }
 
 function facts({ctx}) {
-  const p = ctx.property, council = ctx.links.find(l => l.id === "council_valuation"), rows = [];
+  const p = ctx.property, council = ctx.links.find(l => l.id === "council_valuation"), main = [], rest = [], lacking = [];
   const listings = ctx.links.filter(l => l.id === "homes" || l.id === "oneroof").map(l => link(l.url, l.label)).join(" or ");
   const onListings = [p.year_built, p.cladding, p.last_sale];  // facts the listing sites show: a missing one points to them
-  const add = (name, f, text) => rows.push(row(name, (text || missing(f)
+  // a value the records have goes to `to`; one they lack is listed with the reason and where to look
+  const add = (to, name, f, text) => text ? to.push(row(name, `${text} ${cite(f.source_id)}`)) : lacking.push(row(name, missing(f)
     + (council && (f.source_id || "").startsWith("ac_") ? ` ${link(council.url, "Check the council property search")}.` : "")
-    + (listings && onListings.includes(f) ? ` Look for it on ${listings}.` : ""))
-    + " " + cite(f.source_id), text ? "found" : f.status));
-  const fact = (name, f, fmt = esc) => add(name, f, f.status === "found" ? fmt(f.value) : null);
-  add("Capital value (CV)", p.cv, p.cv.status === "found" ? `${money(p.cv.value)} as at ${esc(p.cv.valuation_date)}. A council rating valuation, not a market value.` : null);
-  add("Annual rates", p.annual_rates, ratesText(p.annual_rates));
-  add("Title type", p.title_type, p.title_type.value ? esc(p.title_type.value) : (p.title_type.linz_types || []).length ? `LINZ records: ${p.title_type.linz_types.map(esc).join(", ")}${dev(p.title_type.reason)}` : null);
+    + (listings && onListings.includes(f) ? ` Look for it on ${listings}.` : "") + " " + cite(f.source_id)));
+  const fact = (to, name, f, fmt = esc) => add(to, name, f, f.status === "found" ? fmt(f.value) : null);
+  add(main, "Capital value (CV)", p.cv, p.cv.status === "found" ? `${money(p.cv.value)} as at ${esc(p.cv.valuation_date)}. A council rating valuation, not a market value.` : null);
+  add(main, "Annual rates", p.annual_rates, ratesText(p.annual_rates));
+  add(main, "Title type", p.title_type, p.title_type.value ? esc(p.title_type.value) : (p.title_type.linz_types || []).length ? `LINZ records: ${p.title_type.linz_types.map(esc).join(", ")}${dev(p.title_type.reason)}` : null);
   const r = p.year_built.decade_range;
-  add("Decade built", p.year_built, r ? (r[0] ? `${r[0]}-${r[1]}` : `Before ${r[1] + 1}`) + " (from the council property category)" : null);
-  fact("Land value", p.land_value, money); fact("Value of improvements", p.improvements_value, money);
-  fact("Rateability", p.rateability); fact("Improvements", p.improvement_description);
-  fact("Land use", p.land_use); fact("Land area", p.land_area_m2, m2); fact("Total floor area", p.floor_area_m2, m2);
-  fact("Building site coverage", p.building_site_coverage_m2, m2); fact("Legal description", p.legal_description, code);
-  fact("Record of title", p.record_of_title, code); fact("Valuation number", p.valuation_number, code); fact("Local board", p.local_board);
-  fact("Cladding", p.cladding); add("Last sale", p.last_sale);
-  return rows.join("");
+  add(main, "Decade built", p.year_built, r ? (r[0] ? `${r[0]}-${r[1]}` : `Before ${r[1] + 1}`) + " (from the council property category)" : null);
+  fact(main, "Land area", p.land_area_m2, m2); fact(main, "Total floor area", p.floor_area_m2, m2); fact(main, "Cladding", p.cladding); add(main, "Last sale", p.last_sale);
+  fact(rest, "Land value", p.land_value, money); fact(rest, "Value of improvements", p.improvements_value, money);
+  fact(rest, "Rateability", p.rateability); fact(rest, "Improvements", p.improvement_description); fact(rest, "Land use", p.land_use);
+  fact(rest, "Building site coverage", p.building_site_coverage_m2, m2); fact(rest, "Legal description", p.legal_description, code);
+  fact(rest, "Record of title", p.record_of_title, code); fact(rest, "Valuation number", p.valuation_number, code); fact(rest, "Local board", p.local_board);
+  return (main.length ? `<h4>Main facts</h4>${main.join("")}` : "") + (lacking.length ? `<h4>Not in the records we checked</h4>${lacking.join("")}` : "")
+    + fold(`More from the council record (${rest.length})`, rest.join(""));
 }
 
 const FLAGS = {
@@ -193,23 +197,27 @@ const FLAGS = {
 
 const stressRow = (r, detail) => row(`If rates were ${r.stress_add_pp} percentage points higher`, detail + " An illustration, not any bank's test rate.");
 const table = (head, rows) => `<div class="scroll"><table><tr>${head.map(h => `<th>${h}</th>`).join("")}</tr>${rows.map(cells => `<tr>${cells.map(c => `<td>${c}</td>`).join("")}</tr>`).join("")}</table></div>`;
+// The monthly figure of each scenario, which leads the section: [amount, what it is]
+const MONTHLY = {bank_standard: s => [span(s.monthly_range, money), "a month at the banks' published 1-year rates"],
+  first_home_loan: s => [span(s.monthly_range, money), "a month with a First Home Loan"],
+  user_rate: s => [money(s.monthly), `a month at ${pct(s.rate_pct)}, the rate in your details`]};
 const SCENARIOS = {
   bank_standard: (s, r) => `<h4>Bank loan at published 1-year rates</h4>
     <div class="note">Rates of ${span(s.rate_range_pct, pct)} across ${s.per_bank.length} banks${s.low_equity_margin_pct ? `, including a low-equity margin of ${span(s.low_equity_margin_pct, String)} percentage points where a bank charges one` : ""}. ${cite(s.source_ids)}</div>
-    ${row("Monthly repayment", span(s.monthly_range, money))}${row("Fortnightly repayment", span(s.fortnightly_range, money))}
+    ${row("Fortnightly repayment", span(s.fortnightly_range, money))}
     ${stressRow(r, `${money(s.stress_monthly)} per month at the highest of these rates (${money(s.stress_delta_monthly)} more).`)}
-    <details class="more"><summary>Rate used for each bank</summary>${table(["Bank", "Rate", "Basis", "Collected"],
-      s.per_bank.map(b => [esc(bank(b.bank_id)), pct(b.rate_pct), esc(BASIS[b.basis] || b.basis), esc((b.captured_at || "not recorded").slice(0, 10))]))}</details>`,
+    ${fold("Rate used for each bank", table(["Bank", "Rate", "Basis", "Collected"],
+      s.per_bank.map(b => [esc(bank(b.bank_id)), pct(b.rate_pct), esc(BASIS[b.basis] || b.basis), esc((b.captured_at || "not recorded").slice(0, 10))])))}`,
   first_home_loan: (s, r) => `<h4>First Home Loan</h4>
     ${s.eligibility === "conditional" ? `<div class="problem">${esc(s.eligibility_note)}</div>` : ""}
     <div class="note">${esc(s.lmi_note)} ${cite(s.source_ids)}</div>
-    ${row("Monthly repayment", span(s.monthly_range, money))}${row("Fortnightly repayment", span(s.fortnightly_range, money))}
+    ${row("Fortnightly repayment", span(s.fortnightly_range, money))}
     ${stressRow(r, `${span(s.stress_monthly_range, money)} per month.`)}
     ${row("Insurance premium at the full rate", money(s.lmi_amount) + (s.full_premium_assumed_for.length ? `. The full premium is assumed for ${s.full_premium_assumed_for.map(id => esc(bank(id))).join(", ")}.` : ""))}
-    <details class="more"><summary>Figures for each lender</summary>${table(["Lender", "Rate", "Basis", "Premium passed on", "Monthly", "Fortnightly", `Monthly at +${r.stress_add_pp} points`],
-      s.lenders.map(l => [esc(l.name), or(l.rate_pct, pct), esc(BASIS[l.rate_basis] || l.rate_basis), or(l.lmi_passthrough_pct, pct), or(l.monthly, money), or(l.fortnightly, money), or(l.stress_monthly, money)]))}</details>`,
+    ${fold("Figures for each lender", table(["Lender", "Rate", "Basis", "Premium passed on", "Monthly", "Fortnightly", `Monthly at +${r.stress_add_pp} points`],
+      s.lenders.map(l => [esc(l.name), or(l.rate_pct, pct), esc(BASIS[l.rate_basis] || l.rate_basis), or(l.lmi_passthrough_pct, pct), or(l.monthly, money), or(l.fortnightly, money), or(l.stress_monthly, money)])))}`,
   user_rate: (s, r) => `<h4>At the interest rate in your details (${pct(s.rate_pct)})</h4>
-    ${row("Monthly repayment", money(s.monthly))}${row("Fortnightly repayment", money(s.fortnightly))}
+    ${row("Fortnightly repayment", money(s.fortnightly))}
     ${stressRow(r, `${money(s.stress_monthly)} per month (${money(s.stress_delta_monthly)} more).`)}`,
 };
 
@@ -218,6 +226,7 @@ function loan(state) {
   if (err) return `<div class="problem">The repayment figures could not be calculated: ${esc(err.message)}${list(err.fields.map(f => `${esc(words(f.field.replace("user_inputs.", "")))}: ${esc(f.message)}`))}</div>`;
   if (!r) return `<p class="muted">Calculating…</p>`;
   const price = r.price_used, rates = ctx.property.annual_rates, out = [];
+  out.push(`<div class="figs">${r.scenarios.filter(s => MONTHLY[s.id]).map(s => MONTHLY[s.id](s)).map(([amount, what]) => `<p class="fig"><b>${amount}</b>${what}</p>`).join("")}</div>`);
   out.push(row("Price used", price.basis === "cv" ? `${money(price.value)}, the council valuation (CV) as at ${esc(price.valuation_date)}. Not a market value.`
     : price.basis === "user" ? `${money(price.value)}, your own figure.` : "No price to calculate with."));
   if (r.loan_amount) out.push(row("Loan amount", `${money(r.loan_amount)} (the price less a deposit of ${money(r.deposit)})`));

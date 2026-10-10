@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-<style>path { stroke: #1b45b4 } @media (prefers-color-scheme: dark) { path { stroke: #9db9ff } }</style>
-<rect x="5" y="17.5" width="22" height="9" rx="3.5" fill="#ffe45c"/>
+<style>path { stroke: #1b45b4 } rect { fill: #eaa800 } @media (prefers-color-scheme: dark) { path { stroke: #9db9ff } rect { fill: #ffe45c } }</style>
+<rect x="5" y="17.5" width="22" height="9" rx="3.5"/>
 <path d="M4.5 14.8 16 5l11.5 9.5" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

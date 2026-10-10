@@ -49,6 +49,9 @@ red: beside a hazard they read as a verdict. The map keeps its own colours.
 - **Next steps.** One tick list on the sheet. A note repeats its next step only when the list does not have it.
 - **Hazard layer.** The mark the layer has on the map, its name, what was found, a bar as long as the share of the
   parcel it covers, its source. Layers are grouped by what was found, and each group says its caveat once.
+- **Lead figure.** The figure a section opens with, large, with a few words saying what it is; said once.
+- **Fold.** A row that names what is inside and how many: "First Home Loan rules (8 notes)". Notes that are the
+  same for every home, long rule lists and the rest of the council record are folded; a note about this property is not.
 - **Could not be found.** One dashed box. A layer that could not be checked keeps its caveat sentence.
 - **Section.** A drawn number, the title, one line of digest from API values, a chevron. Closed by default; the
   hazards section is open when a flood layer is mapped on the parcel.
