@@ -623,10 +623,41 @@ def test_bad_history_role_is_422(rules_calls):
     assert r.status_code == 422
 
 
-def test_gemini_timeout_is_503(monkeypatch, rules_calls):
-    monkeypatch.setattr(followup, "gemini_json", fake(gemini.ModelUnavailable("ReadTimeout")))
+def test_gemini_timeout_falls_back_to_program_facts(monkeypatch, rules_calls):
+    # F01 (spec change): classify and answer both fail -> 200 with the must-mention facts' drafts, not 503
+    t = gemini.ModelUnavailable("ReadTimeout", "timeout")
+    gen = fake(t, [t])
+    monkeypatch.setattr(followup, "gemini_json", gen)
     r = post("case1", "Anything else?")
-    assert r.status_code == 503 and r.json()["error"]["code"] == "model_unavailable"
+    assert r.status_code == 200, r.text
+    out = r.json()
+    assert out["answer"] and out["answer"][0]["text"].startswith("Council maps show")
+    assert out["user_supplied"] == {} and out["out_of_scope"] is False and "web" not in out
+    assert len(gen.calls["answer"]) == 2  # a timeout is retried once
+
+
+def test_classify_failure_still_answers_without_values_or_search(monkeypatch, rules_calls):
+    def no_search(prompt, timeout_s):
+        raise AssertionError("no search after a failed classify")
+
+    monkeypatch.setattr(followup, "gemini_search", no_search)
+    gen = fake(gemini.ModelOutputInvalid("bad"), [ans(FLOOD_EN)])
+    monkeypatch.setattr(followup, "gemini_json", gen)
+    r = post("case1", "It was built in 1997. When was it built?")
+    assert r.status_code == 200, r.text
+    out = r.json()
+    assert out["user_supplied"] == {} and "web" not in out
+    assert out["answer"][0] == FLOOD_EN_OUT
+
+
+def test_quota_stops_further_calls(monkeypatch, rules_calls):
+    q = gemini.ModelUnavailable("429 RESOURCE_EXHAUSTED", "quota")
+    gen = fake(q, [q])
+    monkeypatch.setattr(followup, "gemini_json", gen)
+    r = post("case1", "這間房子的淹水風險是什麼？")
+    assert r.status_code == 200, r.text
+    assert gen.calls["answer"] == [] and gen.calls["translate"] == []
+    assert r.json()["answer"]
 
 
 def test_rules_rerun_failure_is_503(monkeypatch):

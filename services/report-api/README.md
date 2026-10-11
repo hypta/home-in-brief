@@ -39,8 +39,8 @@ Same shape as rules-api: `{"error": {"code", "message", "fields": [{"field", "me
 | Code | HTTP | Meaning |
 |---|---|---|
 | `validation_error` | 422 | Body missing a key, or a key is not a JSON object |
-| `model_unavailable` | 503 | Gemini timed out, hit quota, returned an error, or `GEMINI_API_KEY` is not set |
-| `model_output_invalid` | 502 | Gemini's answer did not match the response schema (after the retry) |
+| `model_unavailable` | 503 | Gemini failed (timeout, quota, error, no `GEMINI_API_KEY`) **and** no draft passed; otherwise the checked drafts answer with 200 (no retry after quota or a missing key) |
+| `model_output_invalid` | 502 | Gemini's answer did not match the schema after the retry **and** no draft passed |
 | `validation_failed` | 502 | Report: no sentence at all could be shown (cannot happen while the drafts pass); follow-up: see below |
 | `kb_unavailable` | 503 | KB items or sources could not be read from rules-api |
 | `rules_unavailable` | 503 | Follow-up only: the rules-api re-run with a supplied year or cladding failed |

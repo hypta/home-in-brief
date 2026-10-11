@@ -74,7 +74,20 @@ def timeout_ms(timeout_s: float) -> int:
 
 
 class ModelUnavailable(Exception):
-    """Timeout, quota, 5xx or any failure to get an answer."""
+    """Timeout, quota, 5xx or any failure to get an answer. `category`: obs.classify's error category."""
+
+    def __init__(self, message: str = "", category: str = obs.OTHER):
+        super().__init__(message)
+        self.category = category
+
+
+# No immediate retry after these: exhausted quota (429) or no key cannot succeed a second later.
+NO_RETRY = frozenset({obs.QUOTA, obs.CONFIG})
+
+
+def no_key() -> ModelUnavailable:
+    obs.note_error(obs.CONFIG)
+    return ModelUnavailable("GEMINI_API_KEY is not set", obs.CONFIG)
 
 
 class ModelOutputInvalid(Exception):
@@ -100,7 +113,7 @@ def gemini_generate(prompt: str, timeout_s: float) -> str:
 
     key = os.environ.get("GEMINI_API_KEY")
     if not key:
-        raise ModelUnavailable("GEMINI_API_KEY is not set")
+        raise no_key()
     obs.note_call()
     try:
         client = genai.Client(api_key=key, http_options=types.HttpOptions(timeout=timeout_ms(timeout_s)))
@@ -116,8 +129,8 @@ def gemini_generate(prompt: str, timeout_s: float) -> str:
             ),
         )
     except Exception as e:  # httpx timeouts, google.genai.errors.APIError (429, 5xx, bad key), network
-        msg = obs.gemini_failed(log, "gemini call", e, key)
-        raise ModelUnavailable(f"{type(e).__name__}: {msg}") from e
+        msg, category = obs.gemini_failed(log, "gemini call", e, key)
+        raise ModelUnavailable(f"{type(e).__name__}: {msg}", category) from e
     text = resp.text
     if not text:
         obs.note_error(obs.SCHEMA)

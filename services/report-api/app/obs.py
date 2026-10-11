@@ -22,6 +22,7 @@ log = logging.getLogger("report-api")
 ENDPOINTS = {"/v1/report": "report", "/v1/followup": "followup"}
 # error categories (worst last wins in the record only by order of occurrence: the last failure is kept)
 TIMEOUT, QUOTA, HTTP_4XX, HTTP_5XX, SCHEMA, OTHER, NONE = "timeout", "quota", "http_4xx", "http_5xx", "schema", "other", "none"
+CONFIG = "config"  # GEMINI_API_KEY is not set
 
 
 class JsonFormatter(logging.Formatter):
@@ -126,15 +127,15 @@ def classify(exc: BaseException) -> str:
     return OTHER
 
 
-def gemini_failed(logger: logging.Logger, what: str, exc: BaseException, key: str) -> str:
+def gemini_failed(logger: logging.Logger, what: str, exc: BaseException, key: str) -> tuple[str, str]:
     """Records and logs (WARNING, with the category) a failed Gemini call. Returns the error text with the key
-    masked, at most 300 characters, for the exception the caller raises."""
+    masked, at most 300 characters, and the category, for the exception the caller raises."""
     category = classify(exc)
     note_error(category)
     msg = (str(exc).replace(key, "***") if key else str(exc))[:300]
     logger.warning("%s failed: %s: %s", what, type(exc).__name__, msg,
                    extra={"json_fields": {"error": category, "exception": type(exc).__name__}})
-    return msg
+    return msg, category
 
 
 # ---- the completion record ---------------------------------------------------------------------------------

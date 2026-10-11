@@ -90,8 +90,8 @@ def test_gemini_failure_warning_has_category_and_no_key(caplog, exc, category):
     key = "AIzaSECRETKEY123"
     exc.args = (f"{exc.args[0]} key={key}",)
     with caplog.at_level(logging.WARNING):
-        msg = obs.gemini_failed(logging.getLogger("report-api.gemini"), "gemini call", exc, key)
-    assert key not in msg
+        msg, got = obs.gemini_failed(logging.getLogger("report-api.gemini"), "gemini call", exc, key)
+    assert key not in msg and got == category
     [rec] = caplog.records
     assert rec.levelname == "WARNING" and rec.json_fields["error"] == category
     assert key not in obs.JsonFormatter().format(rec)
@@ -100,3 +100,18 @@ def test_gemini_failure_warning_has_category_and_no_key(caplog, exc, category):
 def test_hooks_are_noops_outside_a_request():
     obs.note_call(), obs.note_error("schema"), obs.track_budget(object())
     assert obs.current() is None and obs.attach({"x": 1}) == {"x": 1}
+
+
+def test_model_failure_is_logged_as_drafts(monkeypatch, caplog):
+    caplog.set_level(logging.INFO)
+
+    def quota(prompt, timeout_s):
+        obs.note_call()
+        obs.note_error(obs.QUOTA)  # what gemini_generate records through obs.gemini_failed
+        raise gemini.ModelUnavailable("429", obs.QUOTA)
+
+    monkeypatch.setattr(gemini, "gemini_generate", quota)
+    assert client.post("/v1/report", json=body("case1")).status_code == 200
+    f = records(caplog)[0].json_fields
+    assert f["mode"] == "drafts" and f["error"] == "quota" and f["gemini_calls"] == 1
+    assert f["sentences"]["passed"] == 0 and f["sentences"]["drafts"] >= 1

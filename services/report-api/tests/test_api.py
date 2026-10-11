@@ -88,10 +88,15 @@ def test_retry_after_invalid_json_then_success(monkeypatch):
     assert r.status_code == 200 and len(gen.calls) == 2
 
 
-def test_invalid_json_twice_is_502(monkeypatch):
-    monkeypatch.setattr(gemini, "gemini_generate", fake("{}", "[1]"))
+def test_invalid_json_twice_falls_back_to_drafts(monkeypatch):
+    # F01 (spec change): a model failure no longer removes the summary; the checked drafts answer with 200
+    gen = fake("{}", "[1]")
+    monkeypatch.setattr(gemini, "gemini_generate", gen)
     r = client.post("/v1/report", json=body("case1"))
-    assert r.status_code == 502 and r.json()["error"]["code"] == "model_output_invalid"
+    assert r.status_code == 200 and len(gen.calls) == 2
+    rep = r.json()
+    assert rep["summary"][0]["text"].startswith("Council maps show") and rep["dropped"] == 0
+    assert CASE1_FHL in [s["text"] for s in rep["summary"]]
 
 
 def test_zero_passing_sentences_retries_then_falls_back_to_drafts(monkeypatch):
@@ -105,15 +110,26 @@ def test_zero_passing_sentences_retries_then_falls_back_to_drafts(monkeypatch):
     assert rep["dropped"] == 1 and len(rep["summary"]) == 5 and rep["summary"][2]["text"] == CASE1_FHL
 
 
-def test_model_unavailable_is_503(monkeypatch):
-    monkeypatch.setattr(gemini, "gemini_generate", fake(gemini.ModelUnavailable("timeout")))
+def test_model_unavailable_falls_back_to_drafts(monkeypatch):
+    gen = fake(gemini.ModelUnavailable("timeout", "timeout"))
+    monkeypatch.setattr(gemini, "gemini_generate", gen)
     r = client.post("/v1/report", json=body("case1"))
-    assert r.status_code == 503 and r.json()["error"]["code"] == "model_unavailable"
+    assert r.status_code == 200 and len(gen.calls) == 2  # one retry after a timeout
+    assert r.json()["summary"][0]["text"].startswith("Council maps show")
 
 
-def test_missing_key_is_model_unavailable():
+def test_quota_is_not_retried(monkeypatch):
+    gen = fake(gemini.ModelUnavailable("429 RESOURCE_EXHAUSTED", "quota"))
+    monkeypatch.setattr(gemini, "gemini_generate", gen)
     r = client.post("/v1/report", json=body("case1"))
-    assert r.status_code == 503 and r.json()["error"]["code"] == "model_unavailable"
+    assert r.status_code == 200 and len(gen.calls) == 1
+    assert r.json()["summary"]
+
+
+def test_missing_key_falls_back_to_drafts():
+    r = client.post("/v1/report", json=body("case1"))
+    assert r.status_code == 200
+    assert r.json()["summary"][0]["text"].startswith("Council maps show")
 
 
 def test_no_call_without_time_uses_the_drafts(monkeypatch):

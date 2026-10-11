@@ -156,7 +156,7 @@ def gemini_json(prompt: str, schema: type, timeout_s: float) -> str:
 
     key = os.environ.get("GEMINI_API_KEY")
     if not key:
-        raise gemini.ModelUnavailable("GEMINI_API_KEY is not set")
+        raise gemini.no_key()
     obs.note_call()
     try:
         client = genai.Client(api_key=key, http_options=types.HttpOptions(timeout=gemini.timeout_ms(timeout_s)))
@@ -166,8 +166,8 @@ def gemini_json(prompt: str, schema: type, timeout_s: float) -> str:
                 response_mime_type="application/json", response_schema=schema, temperature=gemini.TEMPERATURE,
                 automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True)))
     except Exception as e:  # timeouts, APIError (429, 5xx, bad key), network
-        msg = obs.gemini_failed(log, "gemini call", e, key)
-        raise gemini.ModelUnavailable(f"{type(e).__name__}: {msg}") from e
+        msg, category = obs.gemini_failed(log, "gemini call", e, key)
+        raise gemini.ModelUnavailable(f"{type(e).__name__}: {msg}", category) from e
     if not resp.text:
         obs.note_error(obs.SCHEMA)
         raise gemini.ModelOutputInvalid("empty response")
@@ -181,7 +181,7 @@ def gemini_search(prompt: str, timeout_s: float) -> Optional[WebAnswer]:
 
     key = os.environ.get("GEMINI_API_KEY")
     if not key:
-        raise gemini.ModelUnavailable("GEMINI_API_KEY is not set")
+        raise gemini.no_key()
     obs.note_call(search=True)
     try:
         client = genai.Client(api_key=key, http_options=types.HttpOptions(timeout=gemini.timeout_ms(timeout_s)))
@@ -193,8 +193,8 @@ def gemini_search(prompt: str, timeout_s: float) -> Optional[WebAnswer]:
         meta = resp.candidates[0].grounding_metadata if resp.candidates else None
         text = resp.text or ""  # shown as returned: strip() only tests for an empty answer
     except Exception as e:  # timeouts, APIError (429, 5xx, bad key), network
-        msg = obs.gemini_failed(log, "gemini search call", e, key)
-        raise gemini.ModelUnavailable(f"{type(e).__name__}: {msg}") from e
+        msg, category = obs.gemini_failed(log, "gemini search call", e, key)
+        raise gemini.ModelUnavailable(f"{type(e).__name__}: {msg}", category) from e
     pages = {c.web.uri: c.web.title or "" for c in (meta and meta.grounding_chunks) or [] if c.web and c.web.uri}
     if not (text.strip() and pages):
         return None
@@ -229,8 +229,8 @@ def _search(prompt: str, clock: _Clock, share: float) -> Optional[WebAnswer]:
 def _call(generate: JsonGenerator, prompt: str, schema: type, timeout: float):
     try:
         return _parse(generate(prompt, schema, timeout), schema)
-    except gemini.ModelUnavailable:
-        raise ReportError(503, "model_unavailable", "The language model did not answer.")
+    except gemini.ModelUnavailable as e:
+        raise ReportError(503, "model_unavailable", "The language model did not answer.", e.category)
     except gemini.ModelOutputInvalid:
         raise ReportError(502, "model_output_invalid", "The language model's answer did not match the schema.")
 
@@ -1030,11 +1030,12 @@ def answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
     history = [t.model_dump() for t in req.history]
     link_ids = [link.id for link in req.links()]
     warnings: list[str] = []
+    classify_failed = stopped = False  # stopped: quota or no key, no further Gemini call (gemini.NO_RETRY)
 
     def translate(texts: list[str], copy: Optional[list[str]] = None) -> Optional[list[str]]:
         """Sees only the fixed sentences, the language code and (on the retry) the words to copy, which come from
         those sentences (fp.translate_prompt)."""
-        if mock or not clock.can_call():
+        if mock or stopped or not clock.can_call():
             return None
         try:
             return _call(generate, fp.translate_prompt(texts, language, copy), TranslateOut,
@@ -1053,9 +1054,14 @@ def answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
     elif mock:
         c = mock_classify(question)
     elif clock.can_call():
-        c = _call(generate, fp.classify_prompt(question, history, [{"id": link.id, "label": link.label}
-                                                                    for link in req.links()]),
-                  ClassifyOut, clock.timeout(0.4))
+        try:
+            c = _call(generate, fp.classify_prompt(question, history, [{"id": link.id, "label": link.label}
+                                                                        for link in req.links()]),
+                      ClassifyOut, clock.timeout(0.4))
+        except ReportError as e:  # F01: answered from the program's facts; no extracted values, no search
+            log.warning("classify failed (%s); answer from the facts, no values, no search", e.code)
+            c, classify_failed = ClassifyOut(language=normalize_language("en", question)), True
+            stopped = e.category in gemini.NO_RETRY
     else:  # no time for classify: the language by script, no values, no search; program drafts answer
         c = ClassifyOut(language=normalize_language("en", question))
     language = c.language if button else normalize_language(c.language, question)
@@ -1071,6 +1077,7 @@ def answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
                  skip: frozenset = frozenset()) -> FollowupResponse:
         """Steps 3-4 for an in-scope question. `sources`: "web_search" for values extracted from a search answer;
         `skip`: the fields a web search answered (their fixed program sentences are left out)."""
+        nonlocal stopped
         # 3. merge user_supplied; property values with status "found" win; re-run rules when something new is used
         pf = req.property_fields()
         chat = dict(req.chat_supplied())
@@ -1175,6 +1182,8 @@ def answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
             named: list[str] = []
             out_of_time = False  # no time for a (further) call: the program's drafts answer
             for attempt in range(2):
+                if stopped:
+                    break
                 if not clock.can_call():
                     out_of_time = True
                     break
@@ -1183,6 +1192,9 @@ def answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
                 except ReportError as e:
                     last = e
                     prompt = base
+                    if e.category in gemini.NO_RETRY:
+                        stopped = True
+                        break
                     continue
                 # a sentence naming a program fact is replaced by that fact's draft (program_sentences)
                 prog_named = [i for s in out.answer for i in s.fact_ids if i in prog_ids]
@@ -1208,8 +1220,9 @@ def answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
             debug["program"] = [p.sentence.text for p in prog]
             passed.extend(prog)
             limit -= len(prog)
-            # out of time with no answer and no fixed sentence: the must-mention facts' drafts
-            musts = out_of_time and best is None and not prog and not fixed
+            # no model answer (out of time, or every call failed: F01) and no fixed sentence: the must-mention facts'
+            # drafts
+            musts = best is None and not prog and not fixed
             items = rewrite.compose(best or [], fs, limit, add_musts=musts, sort=False,
                                     check_draft=lambda s: check_answer(s, ev, "en")) if limit else []
             dropped = sum(r.sentence is None for r in best or [])
@@ -1242,7 +1255,7 @@ def answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
         fields = [button] if missing_field(req, button) else []
     else:
         fields = fields_to_search(question, req, supplied)
-    if fields and web_search and refusal_mode == "exempt":
+    if fields and web_search and refusal_mode == "exempt" and not classify_failed:
         web = field_search(req, fields, question, history, generate, clock, mock, debug,
                            language if button and not req.question.strip() else "")
         if web:

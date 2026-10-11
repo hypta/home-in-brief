@@ -20,9 +20,10 @@ MAX_SUMMARY = 5
 
 
 class ReportError(Exception):
-    def __init__(self, status: int, code: str, message: str):
+    def __init__(self, status: int, code: str, message: str, category: str = ""):
         super().__init__(message)
         self.status, self.code, self.message = status, code, message
+        self.category = category  # a model failure's obs category (gemini.NO_RETRY: no immediate retry)
 
 
 @dataclass
@@ -112,8 +113,9 @@ def _gemini_summary(req, ev, kb_items, titles, generate, budget: gemini.Budget, 
     """Gemini rewrites the fact list; each rewrite is checked (validator.check_rewrite) and blocked ones fall back
     to their facts' drafts (rewrite.compose). One retry when no rewrite passes and time allows. A call is made only
     with gemini.ADMIT_S left (and sent with at least gemini.MIN_CALL_S); when there is no time for a first call, or
-    for another after a failed one, the summary is the facts' drafts. Returns the composed items and the number of
-    blocked model sentences."""
+    for another after a failed one, the summary is the facts' drafts. The drafts also answer when every call failed
+    (model unavailable or invalid JSON; no retry after quota or a missing key, gemini.NO_RETRY): an error only when
+    not even a draft passes. Returns the composed items and the number of blocked model sentences."""
     fs = prompt.fact_list(req, ev, kb_items)
     debug.facts = [{"id": f.id, "text": f.text, "draft": f.draft(), "must": f.must, "user": f.user,
                     "source_ids": f.source_ids} for f in fs]
@@ -122,7 +124,7 @@ def _gemini_summary(req, ev, kb_items, titles, generate, budget: gemini.Budget, 
     last_error: Optional[ReportError] = None
     last_seconds = 0.0
     best: Optional[list] = None
-    out_of_time = False
+    out_of_time = stop = False
     for attempt in range(2):
         if not budget.can_call() or (attempt and budget.left() < last_seconds + 1.0):
             out_of_time = True  # not enough time left for a (full second) call
@@ -137,6 +139,7 @@ def _gemini_summary(req, ev, kb_items, titles, generate, budget: gemini.Budget, 
             rec.error = f"model_unavailable: {e}"
             last_error = ReportError(503, "model_unavailable", "The language model did not answer.")
             text = base
+            stop = e.category in gemini.NO_RETRY
         except gemini.ModelOutputInvalid as e:
             rec.error = f"model_output_invalid: {e}"
             last_error = ReportError(502, "model_output_invalid", "The language model's answer did not match the schema.")
@@ -158,15 +161,17 @@ def _gemini_summary(req, ev, kb_items, titles, generate, budget: gemini.Budget, 
             text = base + prompt.retry_note([f for r in checked for f in r.fails] or ["no sentences"])
             continue
         rec.seconds = last_seconds = gemini.clock() - t0
-    if best is None and out_of_time:
+        if stop:
+            break
+    if best is None and out_of_time and last_error is None:
         log.info("no time for a model call; summary from the drafts")
-        best = []
-    if best is None:
-        raise last_error or ReportError(503, "model_unavailable", "The language model did not answer in time.")
+    elif best is None:
+        log.warning("no usable model answer (%s); summary from the drafts", last_error.code if last_error else "none")
+    best = best if best is not None else []
     items = rewrite.compose(best, fs, MAX_SUMMARY, add_musts=True,
                             check_draft=lambda s: check_sentence(s, ev, MAX_WORDS))
     if not items:
-        raise ReportError(502, "validation_failed", "No summary sentence passed validation.")
+        raise last_error or ReportError(502, "validation_failed", "No summary sentence passed validation.")
     debug.composed = [{"text": it.sentence.text, "fact_ids": it.fact_ids, "kind": it.kind} for it in items]
     debug.rewrite = rewrite.stats(items, best)
     return items, sum(r.sentence is None for r in best)
