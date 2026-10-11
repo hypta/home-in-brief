@@ -78,6 +78,35 @@ PRIMARY_ORDER = ("flood_plain", "flood_prone_area", "overland_flow_path", "coast
 HOUSEHOLD = {"single": "a single buyer", "single_with_dependants": "a single buyer with dependants",
              "multiple": "multiple buyers"}
 MISSING = ("not_found", "unavailable")
+
+# Where a chat-supplied value came from (user_inputs.chat_supplied_source, set by web from the follow-up's
+# user_supplied_source). "web_search": extracted by code from a Google Search answer (team decision 10/11, plan C);
+# facts then say "found online" instead of "you gave", and the prefix names the web search.
+USER, WEB_SEARCH = "user", "web_search"
+_TOPIC_FIELD = {"build_era": "year_built", "cladding": "cladding"}
+
+
+def chat_sources(req: ReportRequest) -> dict[str, str]:
+    """{field: "user" | "web_search"} for the chat-supplied values; a value without a source is "user"."""
+    raw = req.user_inputs.get("chat_supplied_source")
+    raw = raw if isinstance(raw, dict) else {}
+    return {k: (WEB_SEARCH if raw.get(k) == WEB_SEARCH else USER) for k in req.chat_supplied()}
+
+
+def from_web(source_ids: list[str], req: ReportRequest, ev: Evidence, kb_items: dict[str, dict]) -> bool:
+    """True when a user-dependent sentence relies only on values found by a web search: the fields of the
+    user-input KB items it cites, else every chat-supplied year built / cladding."""
+    src = chat_sources(req)
+    if WEB_SEARCH not in src.values():
+        return False
+    keys = {_TOPIC_FIELD.get((kb_items.get(i) or {}).get("topic")) for i in source_ids if i in ev.user_kb} - {None}
+    keys = keys or {k for k in src if k in ("year_built", "cladding")}
+    return bool(keys) and all(src.get(k) == WEB_SEARCH for k in keys)
+
+
+def _gave(req: ReportRequest, key: str) -> str:
+    """ "you gave", or "found online" for a value a web search found."""
+    return "found online" if chat_sources(req).get(key) == WEB_SEARCH else "you gave"
 COUNCIL_REFUSED = "council_site_refuses_this_server"  # property-api reason: council page not read from the cloud
 from .assemble import SOURCE_UNAVAILABLE, page_unreadable  # noqa: E402  live reason for any read failure
 _DRAFT_RE = re.compile(r"\{\{\$\.([A-Za-z0-9_]+)\}\}")
@@ -362,6 +391,7 @@ def _topics(req: ReportRequest, ev: Evidence, kb_items: dict[str, dict]) -> list
     clad = chat.get("cladding")
     clad_ok = isinstance(clad, str) and "monolithic" in clad.lower() and "kb_monolithic_cladding" in sel
     user_leaky = {i for i in LEAKY_KB if i in sel and i in ev.user_kb}
+    yg = _gave(req, "year_built")
     year_user = None  # (clause, slots) for the user-year sentence, when there is one
     if yb_found:
         is_decade = (isinstance(decade, list) and len(decade) == 2 and all(isinstance(x, int) for x in decade)
@@ -379,7 +409,7 @@ def _topics(req: ReportRequest, ev: Evidence, kb_items: dict[str, dict]) -> list
                             "ac_property_page"))
         if uy is not None and not inside:
             u = _Topic(O_USER, P_ERA, "user_year", user=True)
-            year_user = (u, "the year you gave differs from the council's property category, which gives "
+            year_user = (u, f"the year {yg} differs from the council's property category, which gives "
                          + u.slot("council_year", yb.value, "year", "the year built the council's property "
                                   "category gives", "ac_property_page") + "; this report uses the council figure")
         else:
@@ -387,22 +417,22 @@ def _topics(req: ReportRequest, ev: Evidence, kb_items: dict[str, dict]) -> list
                 say += ", a period covered by Settled.govt.nz's guidance on leaky buildings"
             out.append(t.set(say + ".", ["ac_property_page"] + (["kb_leaky_build_era"] if leaky else [])))
             if inside:
-                year_user = (_Topic(O_USER, P_ERA, "user_year", user=True), "the year you gave falls in the same decade")
+                year_user = (_Topic(O_USER, P_ERA, "user_year", user=True), f"the year {yg} falls in the same decade")
     elif uy is not None:
         u = _Topic(O_USER, P_ERA, "user_year", user=True)
         if "kb_leaky_build_era" in user_leaky and clad_ok:
             # both leaky-building items from what the user told us: one sentence names both (RUBRIC 3, user facts)
-            out.append(u.set("The year you gave and the monolithic cladding are both discussed in Settled.govt.nz's "
+            out.append(u.set(f"The year {yg} and the monolithic cladding are both discussed in Settled.govt.nz's "
                              "guidance on leaky buildings; public data could not confirm them.",
                              ["ac_property_page", "kb_leaky_build_era", "kb_monolithic_cladding"],
                              keep=["monolithic cladding", "leaky buildings", "could not confirm them"]))
             u.topic, clad_ok = "user_year_cladding", False
         elif "kb_leaky_build_era" in user_leaky:
-            out.append(u.set("The year you gave falls in a period covered by Settled.govt.nz's guidance on leaky "
+            out.append(u.set(f"The year {yg} falls in a period covered by Settled.govt.nz's guidance on leaky "
                              "buildings; council records could not confirm it.",
                              ["ac_property_page", "kb_leaky_build_era"], keep=["leaky buildings", "could not confirm it"]))
         else:
-            year_user = (u, "the year you gave could not be checked against council records")
+            year_user = (u, f"the year {yg} could not be checked against council records")
     clad_text = "the cladding is monolithic, which Settled.govt.nz discusses in its leaky-building guidance"
     if year_user:
         u, clause = year_user
@@ -636,13 +666,14 @@ def followup_facts(req: ReportRequest, ev: Evidence, kb_items: dict[str, dict],
             y = used["year_built"]
             m = re.fullmatch(r"(\d{3}0)s", str(y))
             v = t.slot("user_year", int(m.group(1)) if m else y, "decade" if m else "year",
-                       "the year built the user told us (unverified)", user_kb[0])
-            extra.append(t.set(f"The year built you gave is {'the ' if m else ''}{v}.", user_kb))
+                       "the year built " + ("a web search found" if _gave(req, "year_built") != "you gave" else
+                                           "the user told us") + " (unverified)", user_kb[0])
+            extra.append(t.set(f"The year built {_gave(req, 'year_built')} is {'the ' if m else ''}{v}.", user_kb))
         if used.get("cladding"):
             t = _Topic(94, P_EXTRA, "user_said", user=True)
-            v = t.slot("user_cladding", cladding_table.label(str(used["cladding"])), "text", "the cladding the user told us (unverified)",
-                       user_kb[0])
-            extra.append(t.set(f"The cladding you gave is {v}.", user_kb))
+            v = t.slot("user_cladding", cladding_table.label(str(used["cladding"])), "text", "the cladding " + ("a web search found" if _gave(req, "cladding") != "you gave" else
+                                         "the user told us") + " (unverified)", user_kb[0])
+            extra.append(t.set(f"The cladding {_gave(req, 'cladding')} is {v}.", user_kb))
     out = list(base)
     for t in extra:
         # an extra whose wording breaks a rule other than length (a landslide claim without a High rating, a
@@ -683,25 +714,25 @@ def _program_topics(req: ReportRequest, ev: Evidence, kb_items: dict[str, dict],
             v = t.slot("user_year", int(m.group(1)) if m else given, "decade" if m else "year",
                        "the year built the user entered (unverified)", f.source_id or "ac_property_page")
             if "kb_leaky_build_era" in user_kb["build_era"]:  # rules-api matched the year to the leaky era
-                say = (f"The year built you gave is {'the ' if m else ''}{v}, a period Settled.govt.nz's guidance on "
+                say = (f"The year built {_gave(req, 'year_built')} is {'the ' if m else ''}{v}, a period Settled.govt.nz's guidance on "
                        "leaky buildings covers; council records could not confirm it.")
             else:
                 why = {COUNCIL_REFUSED: "council records could not be read from our server to confirm it",
                        SOURCE_UNAVAILABLE: "council records could not be retrieved to confirm it"
                        }.get(f.reason, "council records could not confirm it")
-                say = f"The year built you gave is {'the ' if m else ''}{v}; {why}."
+                say = f"The year built {_gave(req, 'year_built')} is {'the ' if m else ''}{v}; {why}."
             out.append(t.set(say, [f.source_id or "ac_property_page"] + user_kb["build_era"]))
         elif name == "cladding" and given is not None:
             if "kb_monolithic_cladding" in user_kb["cladding"]:
                 v = t.slot("user_cladding", "monolithic", "text", "the cladding the user entered (unverified)",
                            "kb_monolithic_cladding")
-                say = (f"The cladding you gave is {v}, which Settled.govt.nz discusses in its guidance on leaky "
+                say = (f"The cladding {_gave(req, 'cladding')} is {v}, which Settled.govt.nz discusses in its guidance on leaky "
                        "buildings; public data could not confirm it.")
             else:
                 label = cladding_table.label(str(given)) or str(given)
                 v = t.slot("user_cladding", label.lower(), "text", "the cladding the user entered (unverified)",
                            (user_kb["cladding"] or [""])[0])
-                say = (f"The cladding you gave is {v}; no free public source records the cladding, so public data "
+                say = (f"The cladding {_gave(req, 'cladding')} is {v}; no free public source records the cladding, so public data "
                        "could not confirm it.")
             out.append(t.set(say, user_kb["cladding"]))
         elif not f.source_id and name in NO_SOURCE_TEXT and name not in used:  # a value just given: user_said

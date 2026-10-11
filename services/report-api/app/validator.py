@@ -18,7 +18,10 @@ NO_LOAN_WARNINGS = ("deposit_exceeds_price", "cash_purchase_no_loan", "price_mis
 LENDING_SOURCES = {"rbnz_lvr", "rbnz_dti", "kainga_ora_fhl", "kainga_ora_fhl_brochure", "bank_rates_snapshot"}
 HIGH_CLASSES = {"high", "very high"}
 PREFIX = "Based on what you told us, "
-PREFIX_RE = re.compile(r"^\s*based on what you (?:told|gave) us\s*,?\s*", re.I)
+# A value code extracted from a Google Search answer (team decision 10/11, plan C) is not something the user told us.
+WEB_PREFIX = "Based on a web search (not checked by this service), "
+PREFIX_RE = re.compile(r"^\s*based on (?:what you (?:told|gave) us|a web search(?: \(not checked by this service\))?)"
+                       r"\s*,?\s*", re.I)
 
 # Display precision per kind of field (R1): percent 1 decimal, money and areas whole units, rates 2 decimals.
 P_PCT, P_MONEY, P_RATE = 1, 0, 2
@@ -386,11 +389,11 @@ def relies_on_user_input(s: Sentence, ev: Evidence) -> bool:
     return bool(_USER_FACT_RE.search(body) and _USER_TOPIC_RE.search(body))
 
 
-def with_prefix(s: Sentence) -> Sentence:
+def with_prefix(s: Sentence, prefix: str = PREFIX) -> Sentence:
     body = strip_prefix(s.text).strip()
     if len(body) > 1 and not body[1].isupper():  # keep acronyms such as "LINZ"
         body = body[:1].lower() + body[1:]
-    return Sentence(text=PREFIX + body, source_ids=s.source_ids)
+    return Sentence(text=prefix + body, source_ids=s.source_ids)
 
 
 # ---- rewrite checks (fact list + placeholders) ----------------------------------------------------

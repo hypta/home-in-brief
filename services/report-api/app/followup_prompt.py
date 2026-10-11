@@ -9,6 +9,10 @@ Four small tasks, each with its own prompt:
               language; sees only those sentences and the language code, never the question or history
   web       - a short answer to an out-of-scope question from a Google Search (no schema; the sources come from
               the search, not from the text)
+  fields    - a Google Search for this property's year built, cladding or last sale when the records do not have
+              them (team decision 10/11, plan C); shown as returned, code extracts the values (web_fields)
+  extract   - structured extraction of a year built / cladding from that search answer's text only, when code could
+              not find one (code keeps a value only when it is written in the text)
 
 The question and history are always passed as quoted, untrusted data.
 """
@@ -33,6 +37,8 @@ TASK_CLASSIFY = "TASK: classify"
 TASK_ANSWER = "TASK: answer"
 TASK_WEB = "TASK: web answer"
 TASK_TRANSLATE = "TASK: translate"
+TASK_FIELDS = "TASK: web search for property records"
+TASK_EXTRACT = "TASK: extract"
 
 CJK_MAX_UNITS = 60  # Chinese sentence limit: CJK characters plus Latin words and numbers
 # Japanese (kana) and Korean (Hangul syllables) need more characters for the same sentence.
@@ -183,6 +189,61 @@ How to answer:
 
 HISTORY: {_history(history)}
 QUESTION: {json.dumps(question, ensure_ascii=False)}
+"""
+
+
+FIELD_ASKS = {
+    "year_built": ("the year (or decade) this building was built", "built in 1987"),
+    "cladding": ("the material of this building's exterior walls (its cladding)", "the exterior walls are weatherboard"),
+    "last_sale": ("when this property was last sold and the sale price", "last sold in March 2019 for $850,000"),
+}
+
+
+def field_search_prompt(address: str, fields: list[str], question: str, history: list[dict]) -> str:
+    """Google Search for property facts the public records do not give (year built, cladding, last sale). The
+    answer is shown as returned; code extracts the values from it, so the prompt asks for plain wording."""
+    asks = "\n".join(f"- {FIELD_ASKS[f][0]}; write it like \"{FIELD_ASKS[f][1]}\"" for f in fields)
+    q = question.strip() or "(none: the buyer pressed a button to search for the items above)"
+    return f"""{TASK_FIELDS}
+You are the assistant in a property report tool for first-home buyers in Auckland, New Zealand. The buyer is
+looking at {json.dumps(address, ensure_ascii=False)}. The council records this tool reads do not give the items
+below. Find them for this exact address using Google Search.
+{_UNTRUSTED} HISTORY is the conversation so far; use it only to see what the QUESTION refers to.
+
+Find:
+{asks}
+
+How to answer:
+- Always run a Google Search with the full address. Never answer without search results.
+- Say only what pages about this exact address say. Never use figures for the street, the suburb or other homes.
+- Give each item in one plain sentence with the figure as the page gives it. If pages give different figures, say
+  so and give each. If no page gives an item for this address, say so in one sentence.
+- Name the website or organisation each figure comes from. No URLs in the text; the program lists the sources.
+- Language: answer in the language the QUESTION is written in (English when there is no QUESTION). Proper names
+  stay as the page writes them.
+- 1 to 4 sentences, plain text: no lists, headings, markdown or greeting.
+- No advice, verdicts or predictions: never say whether to buy, what the home is worth or what will happen.
+
+HISTORY: {_history(history)}
+QUESTION: {json.dumps(question, ensure_ascii=False)}
+""".replace("QUESTION: \"\"", "QUESTION: " + json.dumps(q))
+
+
+def extract_prompt(text: str, fields: list[str]) -> str:
+    """Structured extraction from a search answer's text only (no question, no history). Code keeps a value only
+    when it is written in the text (web_fields.check_model_values)."""
+    return f"""{TASK_EXTRACT}
+Read TEXT, an answer about one building, and return JSON with these keys (null when TEXT does not say):
+- "year_built": the year ("1987") or decade ("1980s") TEXT says this building was built, copied as written; null
+  if TEXT gives only an estimate or a renovation, sale or consent year.
+- "year_built_quote": the exact words of TEXT that give that year.
+- "cladding": only when asked for below: one of {list(CLADDING_VALUES)} for the material of this building's
+  exterior walls ({_CLADDING_LABELS}); never a roof, floor or fence material.
+- "cladding_quote": the exact words of TEXT that name that material.
+- "ambiguous": true when TEXT gives different years or different wall materials for the asked fields.
+Fields asked: {json.dumps(fields)}. Copy quotes exactly; never guess.
+
+TEXT: {json.dumps(text, ensure_ascii=False)}
 """
 
 

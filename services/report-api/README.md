@@ -47,7 +47,7 @@ Same shape as rules-api: `{"error": {"code", "message", "fields": [{"field", "me
 | `not_found`, `method_not_allowed` | 404, 405 | Unknown path or method |
 | `internal_error` | 500 | Anything else; no details |
 
-For `/v1/followup`, `validation_error` also covers a missing `question`, a bad `history` entry and an unknown
+For `/v1/followup`, `validation_error` also covers a missing `question` (when there is no `search_field`), a bad `history` entry and an unknown
 `refusal_mode`, and `validation_failed` means no answer sentence passed.
 
 These codes are deliberately not in CODES.md (web's tests require page text for every code listed there).
@@ -105,10 +105,13 @@ Unit Title, Freehold, Leasehold, NHC, LINZ, Settled.govt.nz, ...; plus layer nam
 report (`/v1/report`) stays English. An answer from a Google Search (step 3) also follows the question's language.
 Request: the three documents plus `question` (1-1000 characters) and `history` (at most 6 entries of
 `{role: "user"|"assistant", text}`, text at most 2000 characters; web sends the last 3 turns). No server state.
-Query `refusal_mode`: `exempt` (default) or `strict`.
+Query `refusal_mode`: `exempt` (default) or `strict`. Optional `search_field`: `"year_built"`, `"cladding"` or
+`"last_sale"` (the "Search the web for this" button; `question` may then be empty; see "Fields the records do not
+have" below).
 
 Response 200: `{language, answer: [{text, source_ids}], out_of_scope, user_supplied, links, dropped, warnings}`,
-plus `web` when an out-of-scope question was answered from a Google Search (step 3; `answer` is then `[]`).
+plus `web` when an out-of-scope question was answered from a Google Search (step 3; `answer` is then `[]`) or a
+field was searched for (below), plus `user_supplied_source` when a `user_supplied` value came from a web search.
 `language` is the detected language of the question (BCP 47: `en`, `zh-Hant`, `zh-Hans`, `ja`, `ko`, ...). A
 sentence whose translation failed its checks (step 7) is in English even when `language` is not.
 `warnings` is `[]` except `rules_rerun_unavailable` (mock mode answered from the input RulesOutput).
@@ -198,7 +201,7 @@ Steps (INTERFACE_DRAFT 5 and 6.1):
    hand-written copies would drift from the English the validator and tests pin; Chinese is written by code only
    for the closed set of the comparison sentence, the refusal and the prefix.
 8. Sentences citing a `kb_items_from_user_input` item (and program facts stating what the user entered) get a
-   prefix from code in the language the sentence ended up in: `依你提供的資訊，` (zh-Hant), `根据你提供的信息，`
+   prefix from code (a value found by a web search gets the web prefix instead, see below) in the language the sentence ended up in: `依你提供的資訊，` (zh-Hant), `根据你提供的信息，`
    (zh-Hans), "Based on what you told us, " (English, and any English fallback sentence); other languages translate
    the English phrase in the same call (checked: no digits, URL or domain, at most 40 characters, right script),
    falling back to the English prefix.
@@ -216,6 +219,55 @@ Steps (INTERFACE_DRAFT 5 and 6.1):
    `not_found_notes` and no-loan sentences are). Fields the council page could not be read for (floor area,
    local board, building site coverage) get ordinary cited facts ("Council records could not be read from our
    server, so the floor area is unknown.").
+
+### Fields the records do not have: web search (team decision 10/11, plan C)
+
+Ting reversed "no Gemini help for data the first-hand sources do not have" on 10/11 (the risk is recorded; the team
+chose plan C). For `year_built`, `cladding` and `last_sale` (`app/web_fields.py`, `followup.field_search`):
+
+- **Triggers.** (1) A question about one of them (`followup._FIELD_Q`, any wording that asks: a question mark or a
+  question word) when PropertyContext has it as `not_found` / `unavailable` (or lacks it), the user has not given
+  it (in this question or earlier in `chat_supplied`), and, for the year, the question has no year in it. A field
+  PropertyContext has (`found`) is answered from the program's facts as before, with no search. (2) The button:
+  `search_field` searches for that one field with no classify call (`question` is optional and only sets the
+  language; empty means English).
+- **Search.** One Gemini call with the Google Search tool (`followup_prompt.field_search_prompt`: the matched
+  address and the fields; it asks for plain sentences such as "built in 1987"), a second only when the first names
+  no source and at least 8 s are left. Sources are not filtered by domain (team decision). No answer, no source, a
+  failed call, `strict` mode or no `web_search` (eval): the usual steps run (fixed program sentences and links).
+- **Shown as returned.** `web: {text, sources, search_suggestions, fields, extracted}`: `text`, `sources` and
+  `search_suggestions` as for step 3, never edited or mixed with anything. `fields`: the fields searched for.
+  `extracted`: what code took from `text`, e.g. `{"year_built": 1987, "cladding": "wood", "last_sale": {"date":
+  "March 2019", "price": "$850,000"}}` (each key only when found).
+- **Extraction** (`web_fields.extract`, by code first): a year 1800..this year, or a decade (`1990s`, `1990 年代`),
+  whose nearest keyword is a build word (built, constructed, 建於, 興建, ...; not renovated, sold, 改建, 售出, ...);
+  the cladding words of `b_common.cladding` in a sentence about the walls (not a roof, floor or fence), giving one
+  of the 13 shared values; for the last sale one date and one price in sale sentences. Sentences with a negation or
+  an uncertainty word (not, unknown, may, estimated, 無法, 可能, ...) are skipped. Two different values for a field:
+  nothing (ambiguous). A field code found nothing for may be asked once of Gemini (`followup_prompt.extract_prompt`:
+  the search text only, no question; `web_fields.check_model_values`): kept only when the year is written in the
+  text and in the model's quote from the text, or the cladding is named in that quote.
+- **Merge.** `year_built` and `cladding` go into `user_supplied` with `user_supplied_source: {"year_built":
+  "web_search", ...}` (one entry per `user_supplied` key, `"user"` for values from the question; the key is absent
+  when no value came from a search). `last_sale` never goes into `user_supplied` (rules-api has no such input); it
+  is only in `web.extracted`. The usual merge applies: values only add; a property value with status `found` wins
+  and code writes the comparison ("A web search gave the year built as 1985; the council records the 1960s
+  (1960–1969), and this answer uses the council's record." / `網路搜尋找到的建造年份是 1985 年；...`). A new value
+  re-runs rules-api with `user_inputs.chat_supplied_source` added (rules-api ignores unknown keys), and the answer
+  comes from the new facts ("The year built found online is 1987."). The fixed program sentence of a searched field
+  is left out next to the search answer. The button with nothing to fill in (last sale, ambiguous, none found), or
+  less than 6 s left, or an answer step that fails: `answer: []` and `web` only.
+- **Prefix.** A sentence that depends on a value found online gets "Based on a web search (not checked by this
+  service), " / `依網路搜尋結果（未經本系統核對），` / `依网络搜索结果（未经本系统核对），`; other languages translate the
+  English phrase (at most 70 characters). The source of a sentence is the field of the user-input KB items it cites
+  (`build_era` -> year built, `cladding` -> cladding), else every chat-supplied year/cladding; all from the web
+  gives the web prefix, otherwise "Based on what you told us, ".
+- **`/v1/report`.** web sends the source back as `user_inputs.chat_supplied_source: {"year_built": "web_search"}`
+  next to `chat_supplied` (a missing key or any other value means `"user"`). The summary then says "found online"
+  instead of "you gave" and uses the web prefix by the same rule (`prompt.chat_sources`, `prompt.from_web`).
+- **Mock** (`REPORT_MOCK=true`): no search; `web` is `followup.MOCK_WEB` (text starting "MOCK web search answer",
+  source `example.com`), and extraction by code gives `year_built: 1985`, `cladding: "wood"`, `last_sale: {date:
+  "March 2019", price: "$850,000"}` (only the fields asked for).
 
 Time: one budget, `REQUEST_DEADLINE_S`; each Gemini call gets at most `GEMINI_TIMEOUT_S` and what is left;
 the rules re-run at most 5 s.
@@ -240,6 +292,10 @@ URLs, length, kept terms and values, one negation and the validator rules, not f
 ```
 curl -s 'localhost:8090/v1/followup?refusal_mode=exempt' -H 'content-type: application/json' \
   -d "$(jq '{property_context, user_inputs, rules_output} + {question: "這間是 1997 年蓋的，要注意什麼？", history: []}' \
+        services/report-api/fixtures/inputs/case1.json)"
+# the "Search the web for this" button next to a field the records do not have
+curl -s 'localhost:8090/v1/followup' -H 'content-type: application/json' \
+  -d "$(jq '{property_context, user_inputs, rules_output} + {search_field: "year_built"}' \
         services/report-api/fixtures/inputs/case1.json)"
 ```
 

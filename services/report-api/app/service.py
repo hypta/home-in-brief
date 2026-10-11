@@ -12,7 +12,8 @@ from zoneinfo import ZoneInfo
 from b_common.report_schemas import Report, ReportRequest, Sentence
 
 from . import assemble, gemini, kb, mock, prompt, rewrite
-from .validator import MAX_WORDS, build_evidence, check_rewrite, check_sentence, relies_on_user_input, validate, with_prefix
+from .validator import (MAX_WORDS, PREFIX, WEB_PREFIX, build_evidence, check_rewrite, check_sentence, relies_on_user_input,
+                        validate, with_prefix)
 
 log = logging.getLogger("report-api")
 NZ = ZoneInfo("Pacific/Auckland")
@@ -88,7 +89,9 @@ def build_report(req: ReportRequest, generate: Optional[gemini.Generator] = None
         passed, user_flags = [it.sentence for it in items], [it.user for it in items]
 
     user_flags += [False] * (len(passed) - len(user_flags))
-    summary = [with_prefix(s) if user or relies_on_user_input(s, ev) else s
+    # The prefix names where the value came from: the user, or a web search (user_inputs.chat_supplied_source).
+    summary = [with_prefix(s, WEB_PREFIX if prompt.from_web(s.source_ids, req, ev, kbd.items) else PREFIX)
+               if user or relies_on_user_input(s, ev) else s
                for s, user in list(zip(passed, user_flags))[:MAX_SUMMARY]]
     fixed = assemble.no_loan_sentence(req)
     if fixed:

@@ -15,6 +15,13 @@ prefix in the language of the sentence. Out of scope: an answer from a Google Se
 can answer it (`web`, in the language of the question, shown whole with its sources and never run through the
 validator), else a fixed refusal chosen by code.
 
+Property fields the records do not have (team decision 10/11, Ting; plan C): year_built, cladding and last_sale
+may be looked up with a Google Search (`field_search`): when the question asks about one whose status is
+not_found/unavailable, or when web's "Search the web for this" button sends `search_field`. The search answer is
+shown as returned (`web`); code extracts the year built and cladding from it (web_fields) into user_supplied, marked
+"web_search" in user_supplied_source, and re-runs the rules with them. Sentences that depend on such a value get
+the prefix "Based on a web search (not checked by this service), " instead of "Based on what you told us, ".
+
 question and history are untrusted: they never enter the evidence or the translation prompt. The one exception
 (P-V3) is a validated year_built that was used for the re-run; it is allowed only in sentences citing
 kb_items_from_user_input.
@@ -32,17 +39,17 @@ from decimal import Decimal
 from typing import Any, Callable, Literal, Optional
 
 import requests
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, model_validator
 
 from b_common import cladding as cladding_table
 from b_common.report_schemas import FieldView, ReportRequest, Sentence
 
-from . import gemini, kb, rewrite
+from . import gemini, kb, rewrite, web_fields
 from . import followup_prompt as fp
 from . import prompt as facts_prompt
 from .facts import TITLE_WORDS, RewriteSentence
 from .service import ReportError, _env_float, mock_enabled
-from .validator import (BANNED_WORD, MAX_WORDS, NUMBER_WORD, TOO_LONG, URL_OR_HTML, Allowed, Evidence,
+from .validator import (BANNED_WORD, MAX_WORDS, NUMBER_WORD, TOO_LONG, URL_OR_HTML, WEB_PREFIX, Allowed, Evidence,
                         build_evidence, check_rewrite, check_sentence, strip_prefix, to_decimal)
 
 log = logging.getLogger("report-api.followup")
@@ -54,6 +61,10 @@ REFUSAL_EN = ("This question is outside what this property report covers; the or
 REFUSAL_ZH = "這個問題超出本報告涵蓋的範圍；下方的原始連結可供你查詢。"
 PREFIX_EN = "Based on what you told us, "
 PREFIXES = {"zh-Hant": "依你提供的資訊，", "zh-Hans": "根据你提供的信息，"}
+# A value code extracted from a Google Search answer (team decision 10/11, plan C); other languages translate it.
+WEB_PREFIX_EN = WEB_PREFIX
+WEB_PREFIXES = {"zh-Hant": "依網路搜尋結果（未經本系統核對），", "zh-Hans": "依网络搜索结果（未经本系统核对），"}
+USER, WEB_SEARCH = facts_prompt.USER, facts_prompt.WEB_SEARCH
 LANGUAGE_MISMATCH = "language_mismatch"  # the sentence is not in the language it is meant to be in
 MIXED_LANGUAGE = "mixed_language"  # a CJK sentence with English words that are not a kept term, name or value
 
@@ -65,8 +76,16 @@ class Turn(BaseModel):
 
 
 class FollowupRequest(ReportRequest):
-    question: str = Field(min_length=1, max_length=1000)
+    question: str = Field(default="", max_length=1000)
     history: list[Turn] = Field(default_factory=list, max_length=6)
+    # web's "Search the web for this" button: search for this one field, no classify step (question optional).
+    search_field: Optional[Literal["year_built", "cladding", "last_sale"]] = None
+
+    @model_validator(mode="after")
+    def _question_or_field(self):
+        if not self.question.strip() and not self.search_field:
+            raise ValueError("question is required unless search_field is set")
+        return self
 
 
 class WebSource(BaseModel):
@@ -79,6 +98,11 @@ class WebAnswer(BaseModel):
     text: str
     sources: list[WebSource]
     search_suggestions: str  # Google's HTML widget
+    # Field searches only (team decision 10/11, plan C): the fields searched for, and the values code extracted
+    # from `text` ({"year_built": 1987, "cladding": "wood", "last_sale": {"date": "March 2019", "price": "$850,000"}}).
+    # `text` itself is never changed.
+    fields: list[str] = Field(default_factory=list)
+    extracted: dict[str, Any] = Field(default_factory=dict)
 
 
 class FollowupResponse(BaseModel):
@@ -86,10 +110,14 @@ class FollowupResponse(BaseModel):
     answer: list[Sentence]
     out_of_scope: bool
     user_supplied: dict[str, Any]
+    # Only when a user_supplied value came from a web search: {field: "user" | "web_search"} for each user_supplied
+    # key ("web_search": code extracted it from the search answer in `web`). Absent: every value is the user's.
+    # web sends it back as user_inputs.chat_supplied_source.
+    user_supplied_source: Optional[dict[str, str]] = None
     links: list[str]
     dropped: int
     warnings: list[str] = Field(default_factory=list)  # e.g. rules_rerun_unavailable (mock mode only)
-    web: Optional[WebAnswer] = None  # set, with an empty `answer`, when an out-of-scope question was answered from a search
+    web: Optional[WebAnswer] = None  # a Google Search answer: out of scope (with an empty `answer`) or a field search
 
 
 # ---- Gemini (own wrapper: gemini.gemini_generate is fixed to the summary schema) ---------------
@@ -188,6 +216,17 @@ class _Clock:
         if left <= 0.5:
             raise ReportError(504, "deadline_exceeded", "The request ran out of time.")
         return max(0.5, min(self.call_limit, left * share))
+
+    def call_budget(self, share: float = 1.0) -> float:
+        """For an optional call: at least MIN_CALL_S (the Gemini API refuses a shorter deadline with 400 "Minimum
+        allowed deadline is 10s"); callers check can_call() first."""
+        return max(MIN_CALL_S, self.budget(share))
+
+    def can_call(self) -> bool:
+        return self.left() >= MIN_CALL_S + 1.0
+
+
+MIN_CALL_S = 10.0
 
 
 def _call(generate: JsonGenerator, prompt: str, schema: type, timeout: float):
@@ -307,8 +346,8 @@ def is_zh(language: str) -> bool:
     return language.lower().startswith("zh")
 
 
-_TO_HANS = str.maketrans("議會資記錄說為內準與牆這個問題蓋範圍連結許幫詢調錯與據時間準鍵戶稱開關東區層單樣嗎實際處筆價貸額屬權產圖齡庫訊標準舊歲牠",
-                         "议会资记录说为内准与墙这个问题盖范围连结许帮询调错与据时间准键户称开关东区层单样吗实际处笔价贷额属权产图龄库讯标准旧岁它")
+_TO_HANS = str.maketrans("議會資記錄說為內準與牆這個問題蓋範圍連結許幫詢調錯與據時間準鍵戶稱開關東區層單樣嗎實際處筆價貸額屬權產圖齡庫訊標準舊歲牠網尋",
+                         "议会资记录说为内准与墙这个问题盖范围连结许帮询调错与据时间准键户称开关东区层单样吗实际处笔价贷额属权产图龄库讯标准旧岁它网寻")
 
 
 def _zh(text: str, language: str) -> str:
@@ -457,26 +496,29 @@ def check_answer(s: Sentence, ev: Evidence, language: str = "en", base: Optional
 
 
 _PROPER_START = re.compile(r"^(?:\S*\.\S|[A-Z]\S*[A-Z]|Auckland\b|Kāinga\b|Kainga\b|Settled\b)")
-_ANY_PREFIX = re.compile(r"^\s*(?:依你提供的資訊|依你提供的资讯|根据你提供的信息|根據你提供的資訊)\s*[，,、]?\s*")
+_ANY_PREFIX = re.compile(r"^\s*(?:依你提供的資訊|依你提供的资讯|根据你提供的信息|根據你提供的資訊|"
+                         r"(?:依|根據|根据)網路搜尋結果(?:（未經本系統核對）)?|(?:依|根據|根据)网络搜索结果(?:（未经本系统核对）)?)"
+                         r"\s*[，,、]?\s*")
 
 
 def add_prefix(s: Sentence, prefix: str = PREFIX_EN) -> Sentence:
     """Code-added prefix. English: lower-case the first letter unless it starts a name ("Settled.govt.nz",
     "LINZ"). A prefix the model wrote itself is removed first."""
     body = _ANY_PREFIX.sub("", strip_prefix(s.text)).strip()
-    if prefix == PREFIX_EN and body and not _PROPER_START.match(body):
+    if prefix in (PREFIX_EN, WEB_PREFIX_EN) and body and not _PROPER_START.match(body):
         body = body[:1].lower() + body[1:]
     return Sentence(text=prefix + body, source_ids=s.source_ids)
 
 
 # ---- user value vs. property value (5.3; user decision 10/10: show both) -------------------------
-def comparison_sentence(key: str, value: Any, f: FieldView, language: str = "en") -> Optional[Sentence]:
+def comparison_sentence(key: str, value: Any, f: FieldView, language: str = "en",
+                        web: bool = False) -> Optional[Sentence]:
     """A code-written sentence comparing the user's value with the property field (status found).
 
     It names both values and cites the field's source_id. It is a program sentence: the user's value is
     allowed in it (and only in it); the validator still checks it (see check_comparison). Chinese wording is
     written here (zh-Hant, zh-Hans by _zh); for other languages the English sentence is translated later
-    (translate_parts) or kept.
+    (translate_parts) or kept. `web`: the value came from a web search, not from the user.
     """
     zh = is_zh(language)
     council = (f.source_id or "").startswith("ac_")
@@ -504,6 +546,13 @@ def comparison_sentence(key: str, value: Any, f: FieldView, language: str = "en"
             en_t = (f"The year you gave, {u_en}, falls within {src_en}'s recorded decade, {c_en}."
                     if decade is not None and u_int is not None
                     else f"The year you gave, {u_en}, matches {src_en}'s record, {c_en}.")
+            if web:
+                zh_t = zh_t.replace("你提供的", "網路搜尋找到的")
+                en_t = en_t.replace("The year you gave", "The year found online")
+        elif web:
+            zh_t = f"網路搜尋找到的建造年份是 {u_zh}；{src_zh}記錄為 {c_zh}。以下說明以{src_zh}為準。"
+            en_t = (f"A web search gave the year built as {u_en}; {src_en} records {c_en}, and this answer uses "
+                    f"{src_en}'s record.")
         else:
             zh_t = f"你提供的建造年份是 {u_zh}；{src_zh}記錄為 {c_zh}。以下說明以{src_zh}為準。"
             en_t = f"You gave the year built as {u_en}; {src_en} records {c_en}, and this answer uses {src_en}'s record."
@@ -514,6 +563,12 @@ def comparison_sentence(key: str, value: Any, f: FieldView, language: str = "en"
         if same:
             zh_t = f"你提供的外牆 {shown} 和{src_zh}記錄的 {cv} 一致。"
             en_t = f"The cladding you gave, {shown}, matches {src_en}'s record, {cv}."
+            if web:
+                zh_t = zh_t.replace("你提供的", "網路搜尋找到的")
+                en_t = en_t.replace("The cladding you gave", "The cladding found online")
+        elif web:
+            zh_t = f"網路搜尋找到的外牆是 {shown}；{src_zh}記錄為 {cv}。以下說明以{src_zh}為準。"
+            en_t = f"A web search gave the cladding as {shown}; {src_en} records {cv}, and this answer uses {src_en}'s record."
         else:
             zh_t = f"你提供的外牆是 {shown}；{src_zh}記錄為 {cv}。以下說明以{src_zh}為準。"
             en_t = f"You gave the cladding as {shown}; {src_en} records {cv}, and this answer uses {src_en}'s record."
@@ -612,8 +667,9 @@ _FIELD_Q = {
     "cladding": re.compile(r"cladding|exterior|outside walls?|\bwalls?\b|weatherboard|stucco|plaster|monolithic|"
                            r"roughcast|brick|leaky|外牆|外墙|牆|墙|漏水|外壁|雨漏り", re.I),
     "year_built": re.compile(r"\bbuilt\b|\bbuild\b|year built|how old|\bage\b|decade|建造|屋齡|屋龄|哪一年蓋|哪一年盖|"
-                             r"幾年蓋|几年盖|築年|建築年|建てられ", re.I),
-    "last_sale": re.compile(r"last sale|last sold|sale price|sold for|成交|売却|販売価格", re.I),
+                             r"幾年蓋|几年盖|哪年|蓋的|盖的|蓋好|盖好|建成|落成|築年|建築年|建てられ", re.I),
+    "last_sale": re.compile(r"last sale|last sold|\bsold\b|sale price|sale history|purchase price|bought for|成交|"
+                            r"賣出|卖出|售出|上次.{0,4}[賣卖售]|買賣紀錄|买卖记录|売却|販売価格", re.I),
 }
 
 
@@ -629,11 +685,13 @@ class Part:
     keep: tuple[str, ...] = ()  # values a translation must copy as written (a title, the cladding, land-use words)
 
 
-def program_sentences(fs: list, named: list[str], question: str, ev: Evidence) -> list[Part]:
+def program_sentences(fs: list, named: list[str], question: str, ev: Evidence,
+                      skip: frozenset = frozenset()) -> list[Part]:
     """The drafts of the program facts the model named, plus (safety net) the program fact of a field the
     question asks about; each checked by prompt.check_program. English: translated later for other languages;
-    prefixed later when it states what the user entered."""
-    by_id = {f.id: f for f in fs if f.program}
+    prefixed later when it states what the user entered. `skip`: fields a web search answered (its answer is shown
+    instead of the fixed sentence)."""
+    by_id = {f.id: f for f in fs if f.program and f.topic.removeprefix("program:") not in skip}
     ids = [i for i in named if i in by_id]
     for f in by_id.values():
         field = f.topic.removeprefix("program:")
@@ -696,23 +754,25 @@ def check_translation(orig: Sentence, text: str, language: str, ev: Evidence,
 EMPTY_TRANSLATION = "empty_translation"
 
 
-def check_prefix(text: str, language: str) -> bool:
+def check_prefix(text: str, language: str, max_len: int = 40) -> bool:
     t = (text or "").strip().rstrip(" ,，、")
-    return bool(t) and len(t) <= 40 and not re.search(r"\d|https?:|www\.|<|@|\.[a-z]{2,}", t, re.I) \
+    return bool(t) and len(t) <= max_len and not re.search(r"\d|https?:|www\.|<|@|\.[a-z]{2,}", t, re.I) \
         and script_matches(t, language)
 
 
 def finish(parts: list[Part], language: str, ev: Evidence,
-           translate: Callable[..., Optional[list[str]]], debug: dict) -> list[Sentence]:
+           translate: Callable[..., Optional[list[str]]], debug: dict,
+           web_part: Callable[[Part], bool] = lambda p: False) -> list[Sentence]:
     """The language step: English parts are translated (one restricted call for all of them, plus the prefix
     for languages other than Chinese); sentences whose translation fails check_translation are sent once more
     with the words to copy; a second failure leaves the whole sentence in English. The prefix is added in the
-    language the sentence ends up in."""
+    language the sentence ends up in. `web_part`: the user part depends on a value from a web search (web prefix)."""
+    english_prefix = {False: PREFIX_EN, True: WEB_PREFIX_EN}
     if is_english(language):
-        return [add_prefix(p.sentence) if p.user else p.sentence for p in parts]
+        return [add_prefix(p.sentence, english_prefix[web_part(p)]) if p.user else p.sentence for p in parts]
     english = [p for p in parts if not p.native]
-    want_prefix = any(p.user for p in parts) and not is_zh(language)
-    texts = [strip_prefix(p.sentence.text) for p in english] + ([PREFIX_EN.strip().rstrip(",")] if want_prefix else [])
+    kinds = [] if is_zh(language) else sorted({web_part(p) for p in parts if p.user})
+    texts = [strip_prefix(p.sentence.text) for p in english] + [english_prefix[k].strip().rstrip(",") for k in kinds]
     got = translate(texts) if texts else None
     if got is not None and len(got) != len(texts):
         log.info("translation returned %d texts for %d; using English", len(got), len(texts))
@@ -741,12 +801,15 @@ def finish(parts: list[Part], language: str, ev: Evidence,
             if not fails:
                 done[id(p)] = Sentence(text=tidy(again[n], language), source_ids=p.sentence.source_ids)
     if is_zh(language):
-        prefix = PREFIXES.get(language, PREFIXES["zh-Hant"])
+        prefix = {False: PREFIXES.get(language, PREFIXES["zh-Hant"]),
+                  True: WEB_PREFIXES.get(language, WEB_PREFIXES["zh-Hant"])}
     else:
-        t = got[-1] if (got and want_prefix) else None
+        prefix = {}
         joiner = "、" if language.lower().startswith("ja") else ", "
-        prefix = (t.strip().rstrip(" ,，、") + joiner) if t and check_prefix(t, language) else None
-        debug["prefix"] = prefix
+        for j, k in enumerate(kinds):
+            t = got[len(english) + j] if got else None
+            prefix[k] = (t.strip().rstrip(" ,，、") + joiner) if t and check_prefix(t, language, 70 if k else 40) else None
+        debug["prefix"] = prefix.get(False) if list(prefix) == [False] else prefix
     out = []
     for p in parts:
         s = done.get(id(p))
@@ -755,9 +818,94 @@ def finish(parts: list[Part], language: str, ev: Evidence,
         if p.native:
             s = Sentence(text=tidy(s.text, language), source_ids=s.source_ids)
         if p.user:
-            s = add_prefix(s, prefix) if (in_language and prefix) else add_prefix(s)
+            k = web_part(p)
+            s = add_prefix(s, prefix[k]) if (in_language and prefix.get(k)) else add_prefix(s, english_prefix[k])
         out.append(s)
     return out
+
+
+# ---- web search for property fields the records do not have (team decision 10/11, plan C) --------
+# Ting 10/11 reversed "no Gemini help for data the first-hand sources do not have": year_built, cladding and
+# last_sale may be looked up with Google Search. The search answer (`web`) is shown as returned, never edited or
+# mixed with other text; values code extracts from it go in user_supplied / web.extracted. Sources are not filtered
+# by domain (team decision). At most 2 search calls per request, within the request deadline.
+BUTTON_QUESTIONS = {"year_built": "When was this home built?",
+                    "cladding": "What is this home's exterior cladding?",
+                    "last_sale": "When was this home last sold, and for how much?"}
+_ASKING = re.compile(r"[?？]|\b(?:when|what|which|how|is|was|were|does|did|do|has|any|tell)\b|哪|幾|几|什麼|什么|多少|多久|"
+                     r"嗎|吗|是否|呢|何|いつ|ですか", re.I)
+_YEAR_IN_Q = re.compile(r"(?<!\d)(?:1[89]\d\d|20\d\d)(?!\d)")
+MOCK_WEB = WebAnswer(
+    text=("MOCK web search answer for testing the page; no search was run. Listing pages describe this home as built "
+          "in 1985 with weatherboard cladding. It last sold in March 2019 for $850,000."),
+    sources=[WebSource(title="example.com", url="https://example.com/mock-web-search")], search_suggestions="")
+
+
+def fields_to_search(question: str, req: ReportRequest, supplied: dict[str, Any]) -> list[str]:
+    """Fields the question asks about whose status is not_found/unavailable (or that PropertyContext lacks), and
+    that the user has not given (in this question or earlier, chat_supplied). A year written in the question means
+    the user states or supposes one: no year search."""
+    if not _ASKING.search(question):
+        return []
+    pf, chat = req.property_fields(), req.chat_supplied()
+    out = []
+    for name in web_fields.FIELDS:
+        f = pf.get(name)
+        if f is not None and f.status not in facts_prompt.MISSING:
+            continue  # found: answered from the program's facts, no search
+        if name in supplied or name in chat or not _FIELD_Q[name].search(question):
+            continue
+        if name == "year_built" and _YEAR_IN_Q.search(question):
+            continue
+        out.append(name)
+    return out
+
+
+def field_search(req: ReportRequest, fields: list[str], question: str, history: list[dict],
+                 generate: JsonGenerator, clock: _Clock, mock: bool, debug: dict) -> Optional[WebAnswer]:
+    """One Google Search for the fields (a second only when the first names no source and time allows), then the
+    values code extracts from its text (web_fields.extract; a field code found nothing for may be asked once of
+    Gemini, from the text only, and is kept only when written in the text). Mock mode: MOCK_WEB, no call."""
+    info: dict[str, Any] = {"fields": list(fields), "searches": 0}
+    debug["field_search"] = info
+    address = str((req.property_context.get("address") or {}).get("matched") or "")
+    if mock:
+        web: Optional[WebAnswer] = MOCK_WEB.model_copy(deep=True)
+    elif not address:
+        return None
+    else:
+        prompt = fp.field_search_prompt(address, fields, req.question.strip(), history)
+        try:
+            info["searches"] = 1
+            web = gemini_search(prompt, clock.call_budget(0.5))
+            if not web and clock.can_call():
+                info["searches"] = 2
+                web = gemini_search(prompt, clock.call_budget(0.5))
+        except (gemini.ModelUnavailable, ReportError) as e:
+            log.warning("field search unavailable: %s", type(e).__name__)
+            web = None
+    info["web"] = bool(web)
+    if not web:
+        return None
+    found, ambiguous, missing = web_fields.extract(web.text, list(fields))
+    info.update(by_code=sorted(found), ambiguous=sorted(ambiguous))
+    if missing and not mock and clock.can_call():
+        try:
+            out = _call(generate, fp.extract_prompt(web.text, sorted(missing)), web_fields.ExtractOut,
+                        clock.call_budget(0.25))
+            got = web_fields.check_model_values(out, web.text, missing)
+            info["by_model"] = sorted(got)
+            found.update(got)
+        except ReportError as e:
+            log.info("extraction call failed (%s)", e.code)
+    info["extracted"] = found
+    return web.model_copy(update={"fields": list(fields), "extracted": found})
+
+
+def _sources_out(supplied: dict[str, Any], sources: dict[str, str]) -> Optional[dict[str, str]]:
+    """user_supplied_source: only when a value came from a web search."""
+    out = {k: sources.get(k, USER) for k in supplied}
+    return out if WEB_SEARCH in out.values() else None
 
 
 # ---- main flow ----------------------------------------------------------------------------------
@@ -765,8 +913,9 @@ def answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
                     generate: Optional[JsonGenerator] = None, debug: Optional[dict] = None,
                     web_search: bool = False) -> FollowupResponse:
     """`debug`, when given, receives the fact list, the checked attempts and the composed answer (for eval).
-    `web_search` lets an out-of-scope question be answered from a Google Search. The route turns it on; eval runs
-    leave it off, because the Gemini API terms do not allow storing such answers."""
+    `web_search` lets an out-of-scope question, or a property field the records do not have (`search_field`, or a
+    question about it), be answered from a Google Search. The route turns it on; eval runs leave it off, because the
+    Gemini API terms do not allow storing such answers."""
     generate = generate or gemini_json
     debug = debug if debug is not None else {}
     mock = mock_enabled()
@@ -778,38 +927,229 @@ def answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
     def translate(texts: list[str], copy: Optional[list[str]] = None) -> Optional[list[str]]:
         """Sees only the fixed sentences, the language code and (on the retry) the words to copy, which come from
         those sentences (fp.translate_prompt)."""
-        if mock or clock.left() < 1.5:
+        if mock or not clock.can_call():
             return None
         try:
             return _call(generate, fp.translate_prompt(texts, language, copy), TranslateOut,
-                         clock.budget(0.5)).texts
+                         clock.call_budget(0.5)).texts
         except ReportError as e:
             log.info("translation failed (%s); using English", e.code)
             return None
 
-    # 1. classify
-    if mock:
-        c = mock_classify(req.question)
+    # 1. classify (web's search button skips it: the question is optional and only gives the language)
+    button = req.search_field
+    question = req.question.strip() or BUTTON_QUESTIONS.get(button or "", "")
+    if button:
+        c = ClassifyOut(language=normalize_language("en", question))
+    elif mock:
+        c = mock_classify(question)
     else:
-        c = _call(generate, fp.classify_prompt(req.question, history, [{"id": link.id, "label": link.label}
-                                                                        for link in req.links()]),
+        c = _call(generate, fp.classify_prompt(question, history, [{"id": link.id, "label": link.label}
+                                                                    for link in req.links()]),
                   ClassifyOut, clock.budget(0.4))
-    language = normalize_language(c.language, req.question)
+    language = normalize_language(c.language, question)
     debug["language"] = {"claimed": c.language, "used": language}
-    supplied = extract_user_supplied(req.question, c)
+    supplied = {} if button else extract_user_supplied(question, c)
+    sources = {k: USER for k in supplied}
     links = [i for i in dict.fromkeys(c.links) if i in link_ids][:3]
+
+    def in_scope(question: str, supplied: dict[str, Any], sources: dict[str, str],
+                 skip: frozenset = frozenset()) -> FollowupResponse:
+        """Steps 3-4 for an in-scope question. `sources`: "web_search" for values extracted from a search answer;
+        `skip`: the fields a web search answered (their fixed program sentences are left out)."""
+        # 3. merge user_supplied; property values with status "found" win; re-run rules when something new is used
+        pf = req.property_fields()
+        chat = dict(req.chat_supplied())
+        notes: list[str] = []
+        used: dict[str, Any] = {}
+        compared: list[tuple[str, Any, FieldView]] = []
+        for key, value in supplied.items():
+            if key not in web_fields.FILLABLE:
+                continue
+            f = pf.get(key)
+            if f is not None and f.status == "found" and f.value is not None:
+                compared.append((key, value, f))
+                notes.append(f"The program already states how the user's {key.replace('_', ' ')} compares with the "
+                             f"record; the record is used. Do not repeat that comparison and do not write the user's "
+                             f"value.")
+            else:
+                used[key] = value
+        user_inputs = dict(req.user_inputs)
+        rules_output = req.rules_output
+        src = {**{k: USER for k in chat}, **facts_prompt.chat_sources(req), **{k: sources.get(k, USER) for k in used}}
+        if WEB_SEARCH in src.values():  # rules-api ignores this key (UserInputs: extra="ignore")
+            user_inputs["chat_supplied_source"] = {k: src[k] for k in {**chat, **used}}
+        if used and any(chat.get(k) != v for k, v in used.items()):
+            chat.update(used)
+            user_inputs["chat_supplied"] = chat
+            try:
+                rules_output = call_rules(req.property_context, user_inputs, max(0.5, min(5.0, clock.left() * 0.3)))
+            except ReportError:
+                if not mock:
+                    raise
+                warnings.append("rules_rerun_unavailable")  # mock: answer from the input RulesOutput
+        elif used:
+            user_inputs["chat_supplied"] = chat
+        eff = ReportRequest(property_context=req.property_context, user_inputs=user_inputs, rules_output=rules_output)
+
+        data = _kb(eff, clock)
+        ev = build_evidence(eff, data.items, data.sources.keys(), source_urls=data.sources.urls)
+        titles = {s.id: s.title or "" for s in eff.sources()} | data.sources
+        ev.latin_terms = latin_terms(eff, [])
+        # A value found online is stated like a value entered earlier: by its program fact ("The year built found
+        # online is 1987; ..."), not by the user_said fact of a value stated in this very question.
+        said = {k: v for k, v in used.items() if sources.get(k) != WEB_SEARCH}
+        if used and not said:
+            allow_user_year(ev, used)
+            notes.append(f"A web search just found the {', '.join(k.replace('_', ' ') for k in used)} (unverified). "
+                         "The facts with \"user\": true depend on it.")
+        elif used:
+            allow_user_year(ev, used)
+            what = ", ".join(k.replace("_", " ") for k in used)
+            notes.append(f"The user just told us the {what}. This is unverified and is used for this answer: the facts "
+                         "with \"user\": true depend on it" + ("." if ev.user_kb else
+                                                             "; it selected no extra fact, so do not write the value."))
+        elif ev.user_kb:
+            notes.append("Facts with \"user\": true depend on what the user told us earlier (unverified).")
+
+        # Program sentences comparing the user's value with the property value (both values, cited).
+        # Chinese wording is written by code; other non-English languages translate the English sentence later.
+        fixed: list[Part] = []
+        for key, value, f in compared:
+            s = comparison_sentence(key, value, f, language, web=sources.get(key) == WEB_SEARCH)
+            native = is_english(language) or is_zh(language)
+            fails = check_comparison(s, value, ev, language if native else "en") if s else ["no_council_value"]
+            if fails:
+                log.warning("comparison sentence dropped: %s", ",".join(fails))
+            else:
+                fixed.append(Part(s, native=native, user=False, base=comparison_check(value, ev),
+                                  keep=() if key == "year_built" else (cladding_table.label(str(value)), str(f.value))))
+
+        # 4. answer from the fact list; check each rewrite; one retry when none passes and time allows; blocked
+        #    sentences fall back to their facts' drafts
+        passed: list[Part] = []
+        dropped, out_links = 0, []
+        last: Optional[ReportError] = None
+        limit = max(0, MAX_ANSWER - len(fixed))
+        if mock:
+            sentences, dropped = mock_answer(ev, data.items, used, language)
+            if fixed and not used:
+                sentences = []  # the comparison is the answer; no filler sentence
+            passed = [Part(s, native=is_english(language) or script_matches(s.text, language),
+                           user=bool(set(s.source_ids) & ev.user_kb)) for s in sentences[:limit]]
+        else:
+            fs = [f for f in facts_prompt.followup_facts(eff, ev, data.items, said)
+                  if not (f.program and f.topic.removeprefix("program:") in skip)]
+            ev.latin_terms |= latin_terms(eff, fs)
+            for f in fs:
+                for sid in f.source_ids:
+                    ev.fact_text[sid] = f"{ev.fact_text.get(sid, '')} {f.text}"
+            debug["facts"] = [{"id": f.id, "text": f.text, "draft": f.draft(), "user": f.user,
+                               "source_ids": f.source_ids} for f in fs]
+            debug["attempts"] = []
+
+            def final(s: Sentence) -> list[str]:
+                return check_answer(Sentence(text=tidy(s.text, language), source_ids=s.source_ids), ev, language)
+
+            prog_ids = {f.id for f in fs if f.program}
+            base = fp.answer_prompt(eff, ev, data.items, titles, question, history, notes, fs, language)
+            prompt = base
+            best: Optional[list] = None
+            named: list[str] = []
+            for attempt in range(2):
+                if attempt and clock.left() < 6.0:
+                    break
+                try:
+                    out = _call(generate, prompt, AnswerOut, clock.budget())
+                except ReportError as e:
+                    if e.status == 504 or (e.code == "model_unavailable" and clock.left() < 6.0):
+                        raise
+                    last = e
+                    prompt = base
+                    continue
+                # a sentence naming a program fact is replaced by that fact's draft (program_sentences)
+                prog_named = [i for s in out.answer for i in s.fact_ids if i in prog_ids]
+                rewrites = [s for s in out.answer if not set(s.fact_ids) & prog_ids]
+                checked = [check_rewrite(s, fs, ev, final=final) for s in rewrites]
+                debug["attempts"].append([{"text": s.text, "fact_ids": s.fact_ids, "filled": r.filled, "fails": r.fails}
+                                          for s, r in zip(rewrites, checked)]
+                                         + [{"program": i} for i in prog_named])
+                for r in checked:
+                    if r.fails:
+                        log.info("dropped answer sentence: %s", ",".join(r.fails))
+                out_links = out.links
+                score = sum(r.sentence is not None for r in checked) + len(prog_named)
+                if best is None or score > sum(r.sentence is not None for r in best) + len(named):
+                    best, named = checked, prog_named
+                if score:
+                    break
+                last = ReportError(502, "validation_failed", "No answer sentence passed validation.")
+                prompt = base + ("\nYour previous answer could not be used (" +
+                                 ", ".join(sorted({f for r in checked for f in r.fails} or {"no sentences"})) +
+                                 "). Follow every rule exactly.\n")
+            prog = program_sentences(fs, named, question, ev, skip)[:limit]
+            debug["program"] = [p.sentence.text for p in prog]
+            passed.extend(prog)
+            limit -= len(prog)
+            items = rewrite.compose(best or [], fs, limit, add_musts=False, sort=False,
+                                    check_draft=lambda s: check_answer(s, ev, "en")) if limit else []
+            dropped = sum(r.sentence is None for r in best or [])
+            debug["composed"] = [{"text": it.sentence.text, "fact_ids": it.fact_ids, "kind": it.kind} for it in items]
+            debug["rewrite"] = rewrite.stats(items, best or [])
+            fmap = {f.id: f for f in fs}
+            for it in items:  # a rewrite is in the answer language; a draft is English
+                passed.append(Part(it.sentence, native=it.kind == rewrite.REWRITE,
+                                   user=bool(it.user or set(it.sentence.source_ids) & ev.user_kb),
+                                   keep=text_values([fmap[i] for i in it.fact_ids if i in fmap])))
+        if not passed and not fixed:
+            raise last or ReportError(502, "validation_failed", "No answer sentence passed validation.")
+        answer = finish(fixed + passed, language, ev, translate, debug,
+                        lambda p: facts_prompt.from_web(p.sentence.source_ids, eff, ev, data.items))
+
+        return FollowupResponse(language=language, answer=answer, out_of_scope=False, user_supplied=supplied,
+                                user_supplied_source=_sources_out(supplied, sources),
+                                links=[i for i in dict.fromkeys(out_links + links) if i in link_ids][:3],
+                                dropped=dropped, warnings=warnings)
+
+    # 1b. property fields the records do not have (team decision 10/11, plan C): a Google Search answer shown as
+    #     returned; the year built and cladding code extracts from it fill user_supplied ("web_search") and re-run
+    #     the rules; the answer's other sentences come from the usual steps. No search, or no source: the usual
+    #     steps (fixed program sentences and links).
+    fields = [button] if button else fields_to_search(question, req, supplied)
+    if fields and web_search and refusal_mode == "exempt":
+        web = field_search(req, fields, question, history, generate, clock, mock, debug)
+        if web:
+            chat = req.chat_supplied()  # values only add: a value the user already gave is never replaced
+            for k in web_fields.FILLABLE:
+                if k in web.extracted and k not in supplied and k not in chat:
+                    supplied[k], sources[k] = web.extracted[k], WEB_SEARCH
+            only_web = FollowupResponse(language=language, answer=[], out_of_scope=False, user_supplied=supplied,
+                                        user_supplied_source=_sources_out(supplied, sources),
+                                        links=links or fallback_links(question, link_ids), dropped=0,
+                                        warnings=warnings, web=web)
+            # the button with nothing to fill in: the search answer is the whole reply
+            if (button and not set(supplied) & set(web_fields.FILLABLE)) or not clock.can_call():
+                return only_web
+            try:
+                # the fixed sentence of a searched field is left out unless a value found online fills it
+                out = in_scope(question, supplied, sources,
+                               frozenset(f for f in fields if sources.get(f) != WEB_SEARCH))
+            except ReportError as e:  # the search answer still stands
+                log.info("answer after the field search failed (%s); search answer only", e.code)
+                return only_web
+            return out.model_copy(update={"web": web})
 
     # 2. out of scope: an answer from a Google Search when web pages can answer it, else the fixed refusal
     if c.out_of_scope:
         address = str((req.property_context.get("address") or {}).get("matched") or "")
         if c.searchable and web_search and refusal_mode == "exempt" and address:
-            prompt = fp.web_prompt(address, req.question, history)
+            prompt = fp.web_prompt(address, question, history)
             # The model does not always search: asked once more, time allowing, when the answer names no source.
             # Neither call gets all the time that is left: web, the caller, has its own limit for the whole request.
             try:
-                web = gemini_search(prompt, clock.budget(0.6))
-                if not web and clock.left() >= 6.0:
-                    web = gemini_search(prompt, clock.budget(0.6))
+                web = gemini_search(prompt, clock.call_budget(0.6))
+                if not web and clock.can_call():
+                    web = gemini_search(prompt, clock.call_budget(0.6))
             except (gemini.ModelUnavailable, ReportError) as e:
                 log.warning("web answer unavailable: %s", type(e).__name__)
                 web = None
@@ -826,7 +1166,7 @@ def answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
                 refusal, refusal_lang = Sentence(text=tidy(got[0], language), source_ids=[]), language
             else:
                 log.info("refusal translation not used; English")
-        links = links or fallback_links(req.question, link_ids)
+        links = links or fallback_links(question, link_ids)
         if refusal_mode == "strict":
             data = _kb(req, clock)
             ev = build_evidence(req, data.items, data.sources.keys(), source_urls=data.sources.urls)
@@ -835,144 +1175,7 @@ def answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
         return FollowupResponse(language=language, answer=[refusal], out_of_scope=True, user_supplied=supplied,
                                 links=links, dropped=0, warnings=warnings)
 
-    # 3. merge user_supplied; property values with status "found" win; re-run rules when something new is used
-    pf = req.property_fields()
-    chat = dict(req.chat_supplied())
-    notes: list[str] = []
-    used: dict[str, Any] = {}
-    compared: list[tuple[str, Any, FieldView]] = []
-    for key, value in supplied.items():
-        f = pf.get(key)
-        if f is not None and f.status == "found" and f.value is not None:
-            compared.append((key, value, f))
-            notes.append(f"The program already states how the user's {key.replace('_', ' ')} compares with the "
-                         f"record; the record is used. Do not repeat that comparison and do not write the user's "
-                         f"value.")
-        else:
-            used[key] = value
-    user_inputs = dict(req.user_inputs)
-    rules_output = req.rules_output
-    if used and any(chat.get(k) != v for k, v in used.items()):
-        chat.update(used)
-        user_inputs["chat_supplied"] = chat
-        try:
-            rules_output = call_rules(req.property_context, user_inputs, max(0.5, min(5.0, clock.left() * 0.3)))
-        except ReportError:
-            if not mock:
-                raise
-            warnings.append("rules_rerun_unavailable")  # mock: answer from the input RulesOutput
-    elif used:
-        user_inputs["chat_supplied"] = chat
-    eff = ReportRequest(property_context=req.property_context, user_inputs=user_inputs, rules_output=rules_output)
-
-    data = _kb(eff, clock)
-    ev = build_evidence(eff, data.items, data.sources.keys(), source_urls=data.sources.urls)
-    titles = {s.id: s.title or "" for s in eff.sources()} | data.sources
-    ev.latin_terms = latin_terms(eff, [])
-    if used:
-        allow_user_year(ev, used)
-        what = ", ".join(k.replace("_", " ") for k in used)
-        notes.append(f"The user just told us the {what}. This is unverified and is used for this answer: the facts "
-                     "with \"user\": true depend on it" + ("." if ev.user_kb else
-                                                         "; it selected no extra fact, so do not write the value."))
-    elif ev.user_kb:
-        notes.append("Facts with \"user\": true depend on what the user told us earlier (unverified).")
-
-    # Program sentences comparing the user's value with the property value (both values, cited).
-    # Chinese wording is written by code; other non-English languages translate the English sentence later.
-    fixed: list[Part] = []
-    for key, value, f in compared:
-        s = comparison_sentence(key, value, f, language)
-        native = is_english(language) or is_zh(language)
-        fails = check_comparison(s, value, ev, language if native else "en") if s else ["no_council_value"]
-        if fails:
-            log.warning("comparison sentence dropped: %s", ",".join(fails))
-        else:
-            fixed.append(Part(s, native=native, user=False, base=comparison_check(value, ev),
-                              keep=() if key == "year_built" else (cladding_table.label(str(value)), str(f.value))))
-
-    # 4. answer from the fact list; check each rewrite; one retry when none passes and time allows; blocked
-    #    sentences fall back to their facts' drafts
-    passed: list[Part] = []
-    dropped, out_links = 0, []
-    last: Optional[ReportError] = None
-    limit = max(0, MAX_ANSWER - len(fixed))
-    if mock:
-        sentences, dropped = mock_answer(ev, data.items, used, language)
-        if fixed and not used:
-            sentences = []  # the comparison is the answer; no filler sentence
-        passed = [Part(s, native=is_english(language) or script_matches(s.text, language),
-                       user=bool(set(s.source_ids) & ev.user_kb)) for s in sentences[:limit]]
-    else:
-        fs = facts_prompt.followup_facts(eff, ev, data.items, used)
-        ev.latin_terms |= latin_terms(eff, fs)
-        for f in fs:
-            for sid in f.source_ids:
-                ev.fact_text[sid] = f"{ev.fact_text.get(sid, '')} {f.text}"
-        debug["facts"] = [{"id": f.id, "text": f.text, "draft": f.draft(), "user": f.user,
-                           "source_ids": f.source_ids} for f in fs]
-        debug["attempts"] = []
-
-        def final(s: Sentence) -> list[str]:
-            return check_answer(Sentence(text=tidy(s.text, language), source_ids=s.source_ids), ev, language)
-
-        prog_ids = {f.id for f in fs if f.program}
-        base = fp.answer_prompt(eff, ev, data.items, titles, req.question, history, notes, fs, language)
-        prompt = base
-        best: Optional[list] = None
-        named: list[str] = []
-        for attempt in range(2):
-            if attempt and clock.left() < 6.0:
-                break
-            try:
-                out = _call(generate, prompt, AnswerOut, clock.budget())
-            except ReportError as e:
-                if e.status == 504 or (e.code == "model_unavailable" and clock.left() < 6.0):
-                    raise
-                last = e
-                prompt = base
-                continue
-            # a sentence naming a program fact is replaced by that fact's draft (program_sentences)
-            prog_named = [i for s in out.answer for i in s.fact_ids if i in prog_ids]
-            rewrites = [s for s in out.answer if not set(s.fact_ids) & prog_ids]
-            checked = [check_rewrite(s, fs, ev, final=final) for s in rewrites]
-            debug["attempts"].append([{"text": s.text, "fact_ids": s.fact_ids, "filled": r.filled, "fails": r.fails}
-                                      for s, r in zip(rewrites, checked)]
-                                     + [{"program": i} for i in prog_named])
-            for r in checked:
-                if r.fails:
-                    log.info("dropped answer sentence: %s", ",".join(r.fails))
-            out_links = out.links
-            score = sum(r.sentence is not None for r in checked) + len(prog_named)
-            if best is None or score > sum(r.sentence is not None for r in best) + len(named):
-                best, named = checked, prog_named
-            if score:
-                break
-            last = ReportError(502, "validation_failed", "No answer sentence passed validation.")
-            prompt = base + ("\nYour previous answer could not be used (" +
-                             ", ".join(sorted({f for r in checked for f in r.fails} or {"no sentences"})) +
-                             "). Follow every rule exactly.\n")
-        prog = program_sentences(fs, named, req.question, ev)[:limit]
-        debug["program"] = [p.sentence.text for p in prog]
-        passed.extend(prog)
-        limit -= len(prog)
-        items = rewrite.compose(best or [], fs, limit, add_musts=False, sort=False,
-                                check_draft=lambda s: check_answer(s, ev, "en")) if limit else []
-        dropped = sum(r.sentence is None for r in best or [])
-        debug["composed"] = [{"text": it.sentence.text, "fact_ids": it.fact_ids, "kind": it.kind} for it in items]
-        debug["rewrite"] = rewrite.stats(items, best or [])
-        fmap = {f.id: f for f in fs}
-        for it in items:  # a rewrite is in the answer language; a draft is English
-            passed.append(Part(it.sentence, native=it.kind == rewrite.REWRITE,
-                               user=bool(it.user or set(it.sentence.source_ids) & ev.user_kb),
-                               keep=text_values([fmap[i] for i in it.fact_ids if i in fmap])))
-    if not passed and not fixed:
-        raise last or ReportError(502, "validation_failed", "No answer sentence passed validation.")
-    answer = finish(fixed + passed, language, ev, translate, debug)
-
-    links = [i for i in dict.fromkeys(out_links + links) if i in link_ids][:3]
-    return FollowupResponse(language=language, answer=answer, out_of_scope=False, user_supplied=supplied,
-                            links=links, dropped=dropped, warnings=warnings)
+    return in_scope(question, supplied, sources)
 
 
 
