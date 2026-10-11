@@ -43,9 +43,8 @@ Data flow for one report:
 web is the only public service. property-api, rules-api and report-api are private Cloud Run services; callers use
 Google ID tokens.
 
-**Status of the web-to-report-api link:** report-api is built, tested and has its own deploy target
-(`.github/deploy/targets.json`). The relay route in `services/web/` that calls it is not in this repo yet, so the
-live page's summary and follow-up blocks depend on that wiring. TODO(team): confirm before submission.
+The page calls web's `POST /api/report` and `POST /api/followup`; web fetches the `PropertyContext` and
+`RulesOutput` on the server side and sends them to report-api, so the browser never supplies the facts.
 
 ## How Gemini is used
 
@@ -68,11 +67,15 @@ and `jobs/rates-refresh` (extracting rates from a bank page, when a bank's terms
 **Follow-up questions.** Gemini first classifies the question (out of scope, a stated year built or cladding,
 suggested links). Code checks the extracted year or cladding value, merges it into the user's inputs without
 overriding a value the council records, **re-calls rules-api** with it, and Gemini answers from the new fact list.
-Answers go through the same validator (at most 3 sentences). Out-of-scope questions get one fixed refusal and
-links. Question history is treated as untrusted data and never becomes evidence.
+Answers go through the same validator (at most 3 sentences). An out-of-scope question that public web pages can
+answer is answered with Gemini's Google Search grounding, shown as returned with its search suggestions and sources
+and marked as not checked by this service (the Gemini API terms do not allow it to be edited); advice, verdicts and
+predictions get one fixed refusal and links. Question history is treated as untrusted data and never becomes
+evidence.
 
-**English only.** The whole system uses English. A question in another language is understood and answered in
-English; any answer sentence containing CJK characters is blocked.
+**Languages.** The report is in English. A follow-up is answered in the language of the question, with terms such as
+LVR, DTI and First Home Loan kept in English; fixed program sentences are translated under checks (numbers, terms
+and negation kept) or left in English, so an answer never mixes languages within a sentence.
 
 **Why this design.** Home-buying numbers must be right and traceable. A language model is good at plain wording and
 bad at being reliably exact, so the numbers, the sources and the selection of knowledge come from code and
