@@ -172,12 +172,21 @@ if [ -n "$PUBLIC" ] && [ -n "$(describe service "$PUBLIC")" ]; then
     hdr() { tr -d '\r' < "$WORK/headers" 2>/dev/null | awk -F': ' -v h="$1" 'tolower($1) == h {print $2}' | tail -n1; }
     mode=$(hdr x-report-mode); reason=$(hdr x-report-degraded-reason)
   }
+  # Follow-up shape (shared/b_common/report_schemas.py, FollowupResponse): language is a non-empty string and either
+  # answer has at least one sentence ({"text": non-empty string, ...}; a bare non-empty string is accepted too) or
+  # web.text (a search answer) is a non-empty string.
+  FOLLOWUP_SHAPE_JQ='def nonempty: type == "string" and (gsub("\\s"; "") | length) > 0;
+    if (.language | nonempty)
+       and (((.answer // []) | type) == "array" and ([.answer[]? | if type == "object" then .text else . end | select(nonempty)] | length) > 0
+            or ((.web // {}) | type) == "object" and ((.web // {}).text | nonempty))
+    then "ok" else "bad" end'
   # Gemini path check from the two headers (Codex R3). Sets verdict: ok | unverified | warn | fail.
   #   no X-Report-Mode (web does not forward it yet): unverified, only status and sentences are checked;
   #   gemini: ok; drafts with reason allowance_daily / allowance_event / disabled: warn (refused on purpose);
   #   drafts with any other reason (backend_error, model_error, prompt_too_large, deadline): fail;
-  #   drafts without a reason header: warn if the body says generation_degraded, else fail (report) or ok
-  #   (follow-up: a fixed refusal or program sentences are drafts without any failure); mock or anything else: fail.
+  #   drafts without a reason header: unverified if the body says generation_degraded (the reason is unknown, so
+  #   neither a pass nor an allowance warn), else fail (report) or ok (follow-up: a fixed refusal or program
+  #   sentences are drafts without any failure); mock or anything else: fail.
   gemini_verdict() {
     local what=$1
     if [ -z "$mode" ]; then verdict=unverified
@@ -186,7 +195,7 @@ if [ -n "$PUBLIC" ] && [ -n "$(describe service "$PUBLIC")" ]; then
       case "$reason" in
         allowance_daily|allowance_event|disabled) verdict=warn ;;
         "") if [ "$(jq -r '(.warnings // []) | index("generation_degraded") != null' "$WORK/body" 2>/dev/null)" = true ]; then
-              verdict=warn
+              verdict=unverified
             elif [ "$what" = followup ]; then verdict=ok
             else verdict=fail; fi ;;
         *) verdict=fail ;;
@@ -223,7 +232,7 @@ if [ -n "$PUBLIC" ] && [ -n "$(describe service "$PUBLIC")" ]; then
     if [ "$c" != 200 ] || [ "${n:-0}" -lt 1 ]; then echo "::error::report returned $c with ${n:-0} sentences"; fail=1
     else
       case "$verdict" in
-        unverified) echo "  - report: Gemini path not verified (header not forwarded)" >> "$SUMMARY" ;;
+        unverified) echo "  - report: Gemini path not verified (${mode:+mode $mode, no degraded reason header; }${mode:-X-Report-Mode header not forwarded})" >> "$SUMMARY" ;;
         warn) echo "::warning::report answered from drafts (${reason:-generation_degraded}: Gemini allowance used up or switched off); Gemini path not checked"
               echo "  - report-api refused the Gemini call on purpose (${reason:-generation_degraded}): Gemini path **not checked** by this deploy" >> "$SUMMARY" ;;
         fail) echo "::error::report mode is ${mode}${reason:+ (degraded reason $reason)}, not gemini"; fail=1 ;;
@@ -239,14 +248,14 @@ if [ -n "$PUBLIC" ] && [ -n "$(describe service "$PUBLIC")" ]; then
     esac
     smoke_post /api/followup '{"address_id": 2100210, "user_inputs": {"deposit": 34000, "household_income": 130000}, "question": "What is the flood risk for this address?", "history": []}'
     echo "- $PUBLIC POST /api/followup: $c, ${secs}s, mode ${mode:-header not passed}${reason:+, degraded reason $reason}" >> "$SUMMARY"
-    # shape: answer is an array, language is a non-empty string
-    shape=$(jq -r 'if (.answer | type) == "array" and (.language | type) == "string" and (.language | length) > 0 then "ok" else "bad" end' "$WORK/body" 2>/dev/null || echo bad)
+    # shape: language is a non-empty string; answer has a non-empty sentence or web.text is a non-empty string
+    shape=$(jq -r "$FOLLOWUP_SHAPE_JQ" "$WORK/body" 2>/dev/null || echo bad)
     gemini_verdict followup
     if [ "$c" != 200 ]; then echo "::error::followup returned $c: $(head -c 300 "$WORK/body")"; fail=1
-    elif [ "$shape" != ok ]; then echo "::error::followup response has no answer array or no language: $(head -c 300 "$WORK/body")"; fail=1
+    elif [ "$shape" != ok ]; then echo "::error::followup response has no non-empty answer sentence or web text, or no language: $(head -c 300 "$WORK/body")"; fail=1
     else
       case "$verdict" in
-        unverified) echo "  - follow-up: Gemini path not verified (header not forwarded)" >> "$SUMMARY" ;;
+        unverified) echo "  - follow-up: Gemini path not verified (${mode:+mode $mode, no degraded reason header; }${mode:-X-Report-Mode header not forwarded})" >> "$SUMMARY" ;;
         warn) echo "::warning::follow-up answered from fixed sentences (${reason:-generation_degraded}); Gemini path not checked"
               echo "  - follow-up: Gemini refused on purpose (${reason:-generation_degraded}): Gemini path **not checked**" >> "$SUMMARY" ;;
         fail) echo "::error::follow-up mode is ${mode}${reason:+ (degraded reason $reason)}"; fail=1 ;;

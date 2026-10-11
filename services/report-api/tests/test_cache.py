@@ -243,3 +243,21 @@ def test_unknown_provenance_request_is_not_stored(monkeypatch):
     client.post("/v1/report", json=b)
     client.post("/v1/report", json=b)
     assert len(fake.calls) == 2 and not cache.REPORTS.entries
+
+
+def test_default_browser_payload_with_null_chat_fields_is_cached(monkeypatch):
+    # the web page sends null chat_supplied values and no source metadata by default
+    ui = {"chat_supplied": {"year_built": None, "cladding": None}}
+    assert cache.cacheable({}, ui) is True
+    assert cache.cacheable({}, {"chat_supplied": {"year_built": None, "cladding": ""}}) is True
+    assert cache.cacheable({}, {"chat_supplied": {"year_built": None, "cladding": "brick"}}) is False  # a real value, no source
+    fake = FakeGenai(report_brain(GOOD)).install(monkeypatch)
+    b = body("case1")
+    b["user_inputs"] = b["user_inputs"] | ui
+    first = client.post("/v1/report", json=b)
+    again = client.post("/v1/report", json=b)
+    assert first.status_code == again.status_code == 200 and again.json() == first.json()
+    assert len(fake.calls) == 1 and len(cache.REPORTS.entries) == 1
+    # a null entry and an absent one are the same request: the plain payload hits the same entry
+    plain = client.post("/v1/report", json=body("case1"))
+    assert plain.json() == first.json() and len(fake.calls) == 1

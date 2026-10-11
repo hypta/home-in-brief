@@ -37,6 +37,9 @@ def _env_int(name: str, default: int) -> int:
 
 def cacheable(property_context: dict, user_inputs: dict) -> bool:
     chat = user_inputs.get("chat_supplied") or {}
+    if isinstance(chat, dict):
+        # the web page sends {"year_built": null, "cladding": null} by default: no value, nothing whose source is unknown
+        chat = {k: v for k, v in chat.items() if v is not None and v != ""}
     src = user_inputs.get("chat_supplied_source")
     if isinstance(src, dict) and any(v != "user" for v in src.values()):
         return False  # a web search value: Search material is not stored
@@ -78,8 +81,21 @@ def kb_fingerprint(items: dict, sources: Any) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
+def _without_null_chat(user_inputs: dict) -> dict:
+    """chat_supplied entries that are null are no values (ReportRequest.chat_supplied() drops them too), so a null
+    entry and an absent one give the same report and the same key."""
+    chat = user_inputs.get("chat_supplied")
+    if not isinstance(chat, dict) or all(v is not None for v in chat.values()):
+        return user_inputs
+    kept = {k: v for k, v in chat.items() if v is not None}
+    out = {k: v for k, v in user_inputs.items() if k != "chat_supplied"}
+    if kept:
+        out["chat_supplied"] = kept
+    return out
+
+
 def key(property_context: dict, user_inputs: dict, rules_output: dict, model: str, kb: str = "") -> str:
-    doc = without_timestamps({"property_context": property_context, "user_inputs": user_inputs,
+    doc = without_timestamps({"property_context": property_context, "user_inputs": _without_null_chat(user_inputs),
                               "rules_output": rules_output})
     doc |= {"model": model, "version": CACHE_VERSION, "kb": kb}
     raw = json.dumps(doc, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str)

@@ -259,3 +259,76 @@ def test_a_chinese_rewrite_with_english_words_falls_back_to_the_translated_draft
         {"text": "市議會的 Flood Plains 圖層涵蓋這塊地的{{F1.flood_plain_pct}}，flooding is common here。", "fact_ids": ["F1"]}])
     out = ask(monkeypatch, body("case1"), "淹水風險是什麼？", gen)
     assert out["answer"][0]["text"] == zh and out["dropped"] == 1
+
+
+# ---- the translation retry gets no usable answer: the fixed-language decision applies to the whole response ----
+
+def _bad_then(error):
+    """classify, answer, translate (fails the checks), then every later translate call raises `error` (None: returns [])."""
+    inner = fake("ja", lambda texts: [t.replace("1998", "1999") for t in texts])  # first translate: a number changed
+    state = {"translate": 0}
+
+    def gen(p, schema, timeout_s):
+        if p.startswith(fp.TASK_TRANSLATE):
+            state["translate"] += 1
+            if state["translate"] > 1 and error is not None:
+                raise error
+            if state["translate"] > 1:
+                return json.dumps({"texts": []})
+        return inner(p, schema, timeout_s)
+    gen.state = state
+    return gen
+
+
+def _bad_then_zh(error):
+    inner = fake("zh-Hant", lambda texts: [YEAR_ZH.replace("1998", "1999")])
+    state = {"translate": 0}
+
+    def gen(p, schema, timeout_s):
+        if p.startswith(fp.TASK_TRANSLATE):
+            state["translate"] += 1
+            if state["translate"] > 1:
+                raise error
+        return inner(p, schema, timeout_s)
+    gen.state = state
+    return gen
+
+
+@pytest.mark.parametrize("error", [gemini.ModelUnavailable("429 RESOURCE_EXHAUSTED", "quota"),
+                                   gemini.ModelUnavailable("ReadTimeout", "timeout"),
+                                   gemini.ModelUnavailable("503", "server_error")])
+def test_japanese_retry_refused_or_failed_returns_english_labelled_en(monkeypatch, no_rules, error):
+    gen = _bad_then(error)
+    out = ask(monkeypatch, council_off({"year_built": 1998, "cladding": "monolithic"}, LEAKY),
+              "この家は何年に建てられましたか？", gen)
+    assert gen.state["translate"] >= 2  # the first translation failed the checks and a retry was attempted
+    assert out["language"] == "en"
+    assert out["answer"][0]["text"] == followup.FALLBACK_LEAD["en"]
+    assert all(s["text"].isascii() for s in out["answer"])  # English content only, matching language=en
+
+
+def test_chinese_retry_refused_matches_the_first_translation_refused_path(monkeypatch, no_rules):
+    b = council_off({"year_built": 1998, "cladding": "monolithic"}, LEAKY)
+    quota = gemini.ModelUnavailable("429 RESOURCE_EXHAUSTED", "quota")
+    gen = _bad_then_zh(quota)
+    out = ask(monkeypatch, b, "這間房子是哪一年蓋的？", gen)
+    assert gen.state["translate"] >= 2  # the retry was attempted and refused
+
+    inner = fake("zh-Hant", lambda texts: [YEAR_ZH])
+
+    def first_refused(p, schema, timeout_s):
+        if p.startswith(fp.TASK_TRANSLATE):
+            raise quota
+        return inner(p, schema, timeout_s)
+    expected = ask(monkeypatch, b, "這間房子是哪一年蓋的？", first_refused)
+    assert out["language"] == expected["language"] == "zh-Hant"
+    assert out["answer"] == expected["answer"]
+    assert out["answer"][0]["text"] in (followup.FALLBACK_LEAD["zh-Hant"], followup.FALLBACK_NONE["zh-Hant"])
+    assert not any("the year built you gave" in s["text"] for s in out["answer"])  # no English program sentence
+
+
+def test_japanese_retry_returning_nothing_is_the_same_decision(monkeypatch, no_rules):
+    gen = _bad_then(None)  # the retry call answers with an empty list, i.e. no usable translation
+    out = ask(monkeypatch, council_off({"year_built": 1998, "cladding": "monolithic"}, LEAKY),
+              "この家は何年に建てられましたか？", gen)
+    assert out["language"] == "en" and out["answer"][0]["text"] == followup.FALLBACK_LEAD["en"]

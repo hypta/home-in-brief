@@ -928,6 +928,10 @@ def finish(parts: list[Part], language: str, ev: Evidence,
         copy = sorted({w for p in retry for w in (*_TR_NUM.findall(p.sentence.text), *p.keep,
                                                   *(k for k in fp.KEEP_ENGLISH if k in p.sentence.text))})
         again = translate([strip_prefix(p.sentence.text) for p in retry], copy)
+        if not done and (not again or len(again) != len(retry)):
+            # the retry was refused, timed out or failed, and nothing was translated: same fixed-language decision
+            # as when the first call is refused, so `language` matches the content
+            return fixed_answer(parts, language, ev, debug, web_part)
         for n, p in enumerate(retry if again and len(again) == len(retry) else []):
             fails = check_translation(p.sentence, again[n], language, ev, p.base, p.keep)
             debug["translations"].append({"en": p.sentence.text, "text": again[n], "fails": fails, "retry": True})
