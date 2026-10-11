@@ -307,8 +307,13 @@ Per deploy run:
    must return 200 with banks whose oldest `captured_at` is at most 30 days old (a 502 `upstream_auth` means a missing
    `run.invoker` binding). When report-api, rules-api or web was deployed, `POST /api/report` (address 2100210, fixed
    inputs, real Gemini) must return 200 with at least one summary sentence and `POST /api/followup` (one English
-   question) 200; report-api's `X-Report-Mode` header (`gemini`, `drafts`, `mock`) must be `gemini` when present (web's
-   relay does not pass it on yet). Latency and mode go to the job summary. Private services are not called;
+   question) 200 with an `answer` array and a `language`. Each POST is sent once (no retry, not even after 503 busy).
+   report-api's `X-Report-Mode` (`gemini`, `drafts`, `mock`) and `X-Report-Degraded-Reason` decide the Gemini check:
+   `gemini` passes; `drafts` with `allowance_daily`, `allowance_event` or `disabled` is a warning; `drafts` with any
+   other reason (`backend_error`, `model_error`, `prompt_too_large`, `deadline`) fails the deploy. While web's relay
+   does not pass the headers on, only status and shape are checked and the summary says "Gemini path not verified
+   (header not forwarded)". Latency, mode, reason and the estimated Gemini calls the smoke test used go to the job
+   summary. Private services are not called;
    if you check them by hand use `/health`, not `/healthz` (Cloud Run reserves some paths ending in `z`,
    [known issues](https://docs.cloud.google.com/run/docs/known-issues)).
 5. A table of what was deployed and why goes to the job summary.
@@ -469,8 +474,8 @@ Operations:
 - Logs: the completion record has `allowance` (`ok`, `daily_exhausted`, `event_exhausted`, `search_exhausted`,
   `disabled`, `backend_error`, `degraded`, `prompt_too_large`) and `busy`; refused calls log `allowance_refused`,
   busy refusals `busy_rejected`, Firestore failures `allowance_backend_error`.
-- The deploy smoke test treats a drafts report with `generation_degraded` as a warning (the allowance may be used up
-  for the day), any other drafts report as a failure.
+- The deploy smoke test treats a drafts answer with `X-Report-Degraded-Reason` `allowance_daily`, `allowance_event` or
+  `disabled` as a warning (the allowance may be used up for the day), any other reason as a failure (section 4 above).
 
 ## 9. Cloud Run jobs
 

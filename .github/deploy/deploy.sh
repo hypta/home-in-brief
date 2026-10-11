@@ -162,13 +162,36 @@ if [ -n "$PUBLIC" ] && [ -n "$(describe service "$PUBLIC")" ]; then
   code() { curl -s -o "$WORK/body" -w '%{http_code}' --max-time 30 --retry 3 --retry-all-errors "$url$1" || true; }
   # ISO 8601 time (e.g. 2026-10-10T20:20:00+13:00) -> epoch seconds (GNU date on the runner; BSD date locally)
   rates_epoch() { date -d "$1" +%s 2>/dev/null || date -j -f '%Y-%m-%dT%H:%M:%S%z' "${1%:*}${1##*:}" +%s; }
-  # POST JSON once (no retry: each call spends Gemini quota); sets c (status), secs (latency), mode (X-Report-Mode)
+  # POST JSON once: no retry of any kind, also not after 503 busy (each call spends Gemini quota). Sets c (status),
+  # secs (latency), mode (X-Report-Mode) and reason (X-Report-Degraded-Reason; only on a drafts fallback).
   smoke_post() {
     local out
     out=$(curl -s -o "$WORK/body" -D "$WORK/headers" -w '%{http_code} %{time_total}' --max-time 60 \
       -H 'content-type: application/json' --data "$2" "$url$1" || true)
     out=${out:-000 0}; c=${out% *}; secs=${out#* }
-    mode=$(tr -d '\r' < "$WORK/headers" 2>/dev/null | awk -F': ' 'tolower($1) == "x-report-mode" {print $2}' | tail -n1)
+    hdr() { tr -d '\r' < "$WORK/headers" 2>/dev/null | awk -F': ' -v h="$1" 'tolower($1) == h {print $2}' | tail -n1; }
+    mode=$(hdr x-report-mode); reason=$(hdr x-report-degraded-reason)
+  }
+  # Gemini path check from the two headers (Codex R3). Sets verdict: ok | unverified | warn | fail.
+  #   no X-Report-Mode (web does not forward it yet): unverified, only status and sentences are checked;
+  #   gemini: ok; drafts with reason allowance_daily / allowance_event / disabled: warn (refused on purpose);
+  #   drafts with any other reason (backend_error, model_error, prompt_too_large, deadline): fail;
+  #   drafts without a reason header: warn if the body says generation_degraded, else fail (report) or ok
+  #   (follow-up: a fixed refusal or program sentences are drafts without any failure); mock or anything else: fail.
+  gemini_verdict() {
+    local what=$1
+    if [ -z "$mode" ]; then verdict=unverified
+    elif [ "$mode" = gemini ]; then verdict=ok
+    elif [ "$mode" = drafts ]; then
+      case "$reason" in
+        allowance_daily|allowance_event|disabled) verdict=warn ;;
+        "") if [ "$(jq -r '(.warnings // []) | index("generation_degraded") != null' "$WORK/body" 2>/dev/null)" = true ]; then
+              verdict=warn
+            elif [ "$what" = followup ]; then verdict=ok
+            else verdict=fail; fi ;;
+        *) verdict=fail ;;
+      esac
+    else verdict=fail; fi
   }
   for path in / /config.json; do
     c=$(code "$path")
@@ -188,24 +211,54 @@ if [ -n "$PUBLIC" ] && [ -n "$(describe service "$PUBLIC")" ]; then
   fi
 
   # Report and follow-up through web with a public address (740 Sandringham Road Extension), real Gemini. Only when
-  # a target on that path was deployed, so other deploys cost no Gemini calls. web's relay does not pass report-api's
-  # X-Report-Mode header on (2026-10-11): when it is missing, 200 and at least one summary sentence are required.
+  # a target on that path was deployed, so other deploys cost no Gemini calls. Each POST is sent once (no retry, not
+  # even after 503 busy). Until web forwards X-Report-Mode / X-Report-Degraded-Reason, the Gemini path is reported as
+  # not verified and only 200 and the response shape are required.
   if grep -qxE 'report-api|rules-api|web' <<<"$TO_DEPLOY"; then
+    calls=0; calls_note=""
     smoke_post /api/report '{"address_id": 2100210, "user_inputs": {"deposit": 34000, "household_income": 130000}}'
     n=$(jq -r '.summary | length' "$WORK/body" 2>/dev/null || echo 0)
-    echo "- $PUBLIC POST /api/report: $c, ${secs}s, $n sentences, model $(jq -r '.model // "?"' "$WORK/body" 2>/dev/null), mode ${mode:-header not passed}" >> "$SUMMARY"
-    # drafts with the warning generation_degraded: report-api refused the Gemini call on purpose (daily or event
-    # allowance used up, protection/control.disabled, REPORT_DEGRADED; Codex F03). A warning, not a failed deploy:
-    # the smoke test itself may be the call that finds the day's allowance used up. Any other drafts fail.
-    degraded=$(jq -r '(.warnings // []) | index("generation_degraded") != null' "$WORK/body" 2>/dev/null || echo false)
+    echo "- $PUBLIC POST /api/report: $c, ${secs}s, $n sentences, model $(jq -r '.model // "?"' "$WORK/body" 2>/dev/null), mode ${mode:-header not passed}${reason:+, degraded reason $reason}" >> "$SUMMARY"
+    gemini_verdict report
     if [ "$c" != 200 ] || [ "${n:-0}" -lt 1 ]; then echo "::error::report returned $c with ${n:-0} sentences"; fail=1
-    elif [ "$mode" = drafts ] && [ "$degraded" = true ]; then
-      echo "::warning::report answered from drafts (generation_degraded: Gemini allowance used up or switched off); Gemini path not checked"
-      echo "  - report-api refused the Gemini call (generation_degraded): Gemini path **not checked** by this deploy" >> "$SUMMARY"
-    elif [ -n "$mode" ] && [ "$mode" != gemini ]; then echo "::error::report mode is $mode, not gemini"; fail=1; fi
+    else
+      case "$verdict" in
+        unverified) echo "  - report: Gemini path not verified (header not forwarded)" >> "$SUMMARY" ;;
+        warn) echo "::warning::report answered from drafts (${reason:-generation_degraded}: Gemini allowance used up or switched off); Gemini path not checked"
+              echo "  - report-api refused the Gemini call on purpose (${reason:-generation_degraded}): Gemini path **not checked** by this deploy" >> "$SUMMARY" ;;
+        fail) echo "::error::report mode is ${mode}${reason:+ (degraded reason $reason)}, not gemini"; fail=1 ;;
+      esac
+    fi
+    # Gemini calls this POST reserved (estimate: report-api does not return the count): a cache miss in mode
+    # gemini is 1 (2 when the first answer was unusable), a cache hit 0; drafts after a refusal 0; unknown mode 0-2.
+    case "$mode:$reason" in
+      gemini:*) calls=$((calls + 1)); calls_note="report 1 (0 if cached, 2 after a retry)" ;;
+      drafts:allowance_*|drafts:disabled|drafts:prompt_too_large) calls_note="report 0" ;;
+      drafts:*) calls=$((calls + 1)); calls_note="report 0-2 (failed call)" ;;
+      *) calls=$((calls + 1)); calls_note="report 0-2 (mode not forwarded)" ;;
+    esac
     smoke_post /api/followup '{"address_id": 2100210, "user_inputs": {"deposit": 34000, "household_income": 130000}, "question": "What is the flood risk for this address?", "history": []}'
-    echo "- $PUBLIC POST /api/followup: $c, ${secs}s, mode ${mode:-header not passed}" >> "$SUMMARY"
-    [ "$c" = 200 ] || { echo "::error::followup returned $c: $(head -c 300 "$WORK/body")"; fail=1; }
+    echo "- $PUBLIC POST /api/followup: $c, ${secs}s, mode ${mode:-header not passed}${reason:+, degraded reason $reason}" >> "$SUMMARY"
+    # shape: answer is an array, language is a non-empty string
+    shape=$(jq -r 'if (.answer | type) == "array" and (.language | type) == "string" and (.language | length) > 0 then "ok" else "bad" end' "$WORK/body" 2>/dev/null || echo bad)
+    gemini_verdict followup
+    if [ "$c" != 200 ]; then echo "::error::followup returned $c: $(head -c 300 "$WORK/body")"; fail=1
+    elif [ "$shape" != ok ]; then echo "::error::followup response has no answer array or no language: $(head -c 300 "$WORK/body")"; fail=1
+    else
+      case "$verdict" in
+        unverified) echo "  - follow-up: Gemini path not verified (header not forwarded)" >> "$SUMMARY" ;;
+        warn) echo "::warning::follow-up answered from fixed sentences (${reason:-generation_degraded}); Gemini path not checked"
+              echo "  - follow-up: Gemini refused on purpose (${reason:-generation_degraded}): Gemini path **not checked**" >> "$SUMMARY" ;;
+        fail) echo "::error::follow-up mode is ${mode}${reason:+ (degraded reason $reason)}"; fail=1 ;;
+      esac
+    fi
+    # an English flood question: classify + answer (a retry or a refused call changes it by one)
+    case "$mode:$reason" in
+      gemini:*) calls=$((calls + 2)); calls_note="$calls_note, follow-up 2 (3 after a retry)" ;;
+      drafts:allowance_*|drafts:disabled|drafts:prompt_too_large) calls_note="$calls_note, follow-up 0-1" ;;
+      *) calls=$((calls + 2)); calls_note="$calls_note, follow-up 1-3 (estimate)" ;;
+    esac
+    echo "- Gemini allowance used by this smoke test (estimated, from the response headers): about $calls call(s): $calls_note; no Search call" >> "$SUMMARY"
   fi
 fi
 exit $fail
