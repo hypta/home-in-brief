@@ -10,6 +10,7 @@ from typing import Callable
 
 from pydantic import BaseModel, ValidationError
 
+from . import obs
 from .facts import RewriteSentence
 
 log = logging.getLogger("report-api.gemini")
@@ -51,6 +52,7 @@ class Budget:
         self.deadline = clock() + total
         self.call_limit = max(MIN_CALL_S, _env_float("GEMINI_TIMEOUT_S", 20.0))
         self.searches = 0
+        obs.track_budget(self)
 
     def left(self) -> float:
         return self.deadline - clock()
@@ -99,6 +101,7 @@ def gemini_generate(prompt: str, timeout_s: float) -> str:
     key = os.environ.get("GEMINI_API_KEY")
     if not key:
         raise ModelUnavailable("GEMINI_API_KEY is not set")
+    obs.note_call()
     try:
         client = genai.Client(api_key=key, http_options=types.HttpOptions(timeout=timeout_ms(timeout_s)))
         resp = client.models.generate_content(
@@ -113,11 +116,11 @@ def gemini_generate(prompt: str, timeout_s: float) -> str:
             ),
         )
     except Exception as e:  # httpx timeouts, google.genai.errors.APIError (429, 5xx, bad key), network
-        msg = str(e).replace(key, "***")[:300]
-        log.warning("gemini call failed: %s: %s", type(e).__name__, msg)
+        msg = obs.gemini_failed(log, "gemini call", e, key)
         raise ModelUnavailable(f"{type(e).__name__}: {msg}") from e
     text = resp.text
     if not text:
+        obs.note_error(obs.SCHEMA)
         raise ModelOutputInvalid("empty response")
     return text
 
@@ -126,4 +129,5 @@ def parse(raw: str) -> list[RewriteSentence]:
     try:
         return SummaryOut.model_validate(json.loads(raw)).summary
     except (ValueError, ValidationError) as e:
+        obs.note_error(obs.SCHEMA)
         raise ModelOutputInvalid(str(e)[:300]) from e

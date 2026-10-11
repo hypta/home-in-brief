@@ -43,7 +43,7 @@ from pydantic import BaseModel, Field, ValidationError, model_validator
 from b_common import cladding as cladding_table
 from b_common.report_schemas import FieldView, ReportRequest, Sentence
 
-from . import gemini, kb, rewrite, web_fields
+from . import gemini, kb, obs, rewrite, web_fields
 from . import followup_prompt as fp
 from . import prompt as facts_prompt
 from .facts import TITLE_WORDS, RewriteSentence
@@ -157,6 +157,7 @@ def gemini_json(prompt: str, schema: type, timeout_s: float) -> str:
     key = os.environ.get("GEMINI_API_KEY")
     if not key:
         raise gemini.ModelUnavailable("GEMINI_API_KEY is not set")
+    obs.note_call()
     try:
         client = genai.Client(api_key=key, http_options=types.HttpOptions(timeout=gemini.timeout_ms(timeout_s)))
         resp = client.models.generate_content(
@@ -165,10 +166,10 @@ def gemini_json(prompt: str, schema: type, timeout_s: float) -> str:
                 response_mime_type="application/json", response_schema=schema, temperature=gemini.TEMPERATURE,
                 automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True)))
     except Exception as e:  # timeouts, APIError (429, 5xx, bad key), network
-        msg = str(e).replace(key, "***")[:300]
-        log.warning("gemini call failed: %s: %s", type(e).__name__, msg)
+        msg = obs.gemini_failed(log, "gemini call", e, key)
         raise gemini.ModelUnavailable(f"{type(e).__name__}: {msg}") from e
     if not resp.text:
+        obs.note_error(obs.SCHEMA)
         raise gemini.ModelOutputInvalid("empty response")
     return resp.text
 
@@ -181,6 +182,7 @@ def gemini_search(prompt: str, timeout_s: float) -> Optional[WebAnswer]:
     key = os.environ.get("GEMINI_API_KEY")
     if not key:
         raise gemini.ModelUnavailable("GEMINI_API_KEY is not set")
+    obs.note_call(search=True)
     try:
         client = genai.Client(api_key=key, http_options=types.HttpOptions(timeout=gemini.timeout_ms(timeout_s)))
         resp = client.models.generate_content(
@@ -191,8 +193,7 @@ def gemini_search(prompt: str, timeout_s: float) -> Optional[WebAnswer]:
         meta = resp.candidates[0].grounding_metadata if resp.candidates else None
         text = resp.text or ""  # shown as returned: strip() only tests for an empty answer
     except Exception as e:  # timeouts, APIError (429, 5xx, bad key), network
-        msg = str(e).replace(key, "***")[:300]
-        log.warning("gemini search call failed: %s: %s", type(e).__name__, msg)
+        msg = obs.gemini_failed(log, "gemini search call", e, key)
         raise gemini.ModelUnavailable(f"{type(e).__name__}: {msg}") from e
     pages = {c.web.uri: c.web.title or "" for c in (meta and meta.grounding_chunks) or [] if c.web and c.web.uri}
     if not (text.strip() and pages):
@@ -206,6 +207,7 @@ def _parse(raw: str, schema: type):
     try:
         return schema.model_validate(json.loads(raw))
     except (ValueError, ValidationError) as e:
+        obs.note_error(obs.SCHEMA)
         raise gemini.ModelOutputInvalid(str(e)[:300]) from e
 
 

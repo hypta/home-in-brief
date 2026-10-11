@@ -12,11 +12,15 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from b_common.report_schemas import Report, ReportRequest
 from b_common.schemas import ErrorResponse
 
+from . import obs
 from .followup import FollowupRequest, FollowupResponse, answer_followup
-from .service import ReportError, build_report
+from .service import Debug, ReportError, build_report
+
+obs.setup_logging()
 
 log = logging.getLogger("report-api")
 app = FastAPI(title="report-api", version="0.1.0")
+app.add_middleware(obs.CompletionLog)  # one JSON completion record per /v1 request
 ERRORS = {c: {"model": ErrorResponse, "description": d} for c, d in {
     422: "Validation error", 500: "Internal server error", 502: "Model output invalid or no sentence passed",
     503: "Model or knowledge base unavailable"}.items()}
@@ -58,7 +62,7 @@ def health() -> dict:
 
 @app.post("/v1/report", response_model=Report, responses=ERRORS)
 def report(req: ReportRequest) -> Report:
-    return build_report(req)
+    return build_report(req, debug=obs.attach(Debug()))
 
 
 FOLLOWUP_ERRORS = ERRORS | {504: {"model": ErrorResponse, "description": "Request deadline exceeded"}}
@@ -66,4 +70,6 @@ FOLLOWUP_ERRORS = ERRORS | {504: {"model": ErrorResponse, "description": "Reques
 
 @app.post("/v1/followup", response_model=FollowupResponse, response_model_exclude_none=True, responses=FOLLOWUP_ERRORS)
 def followup(req: FollowupRequest, refusal_mode: Literal["exempt", "strict"] = "exempt") -> FollowupResponse:
-    return answer_followup(req, refusal_mode, web_search=True)
+    resp = answer_followup(req, refusal_mode, debug=obs.attach({}), web_search=True)
+    obs.note_web(resp.web is not None)
+    return resp

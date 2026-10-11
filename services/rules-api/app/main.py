@@ -21,12 +21,14 @@ from b_common.schemas import (
     Source,
 )
 
-from . import calc
+from . import calc, obs
 from .repo import get_repo
 from .select import SelectContext, matches
 
 log = logging.getLogger("rules-api")
+obs.setup_logging()
 app = FastAPI(title="rules-api", version="0.1.0")
+app.add_middleware(obs.CompletionLog)  # one JSON completion record per /v1 request
 # Declared so the OpenAPI document shows the real error shape, not FastAPI's default "detail".
 ERRORS = {c: {"model": ErrorResponse, "description": d} for c, d in {
     405: "Method not allowed", 500: "Internal server error"}.items()}
@@ -153,6 +155,7 @@ def rules(req: RulesRequest) -> RulesOutput:
             else "no_verified_items" if not items
             else "no_matching_items"
         )
+    obs.note_warnings(len(out.warnings))
     return out
 
 
