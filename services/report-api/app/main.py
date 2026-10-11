@@ -12,23 +12,30 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from b_common.report_schemas import Report, ReportRequest
 from b_common.schemas import ErrorResponse
 
-from . import obs
+from . import cache, gemini, obs, protection
 from .followup import FollowupRequest, FollowupResponse, answer_followup
 from .service import Debug, ReportError, build_report
 
 obs.setup_logging()
 
 log = logging.getLogger("report-api")
-app = FastAPI(title="report-api", version="0.1.0")
+app = FastAPI(title="report-api", version="0.1.0", on_startup=[protection.warm_up])
 app.add_middleware(obs.CompletionLog)  # one JSON completion record per /v1 request
 ERRORS = {c: {"model": ErrorResponse, "description": d} for c, d in {
     422: "Validation error", 500: "Internal server error", 502: "Model output invalid or no sentence passed",
-    503: "Model or knowledge base unavailable"}.items()}
+    503: "Model or knowledge base unavailable, or busy (all generation slots taken; Retry-After)"}.items()}
+BUSY_HEADERS = {"Retry-After": "5", "Cache-Control": "no-store"}
 
 
-def _error(status: int, code: str, message: str, fields: Optional[list[dict]] = None) -> JSONResponse:
-    return JSONResponse(status_code=status,
+def _error(status: int, code: str, message: str, fields: Optional[list[dict]] = None,
+           headers: Optional[dict] = None) -> JSONResponse:
+    return JSONResponse(status_code=status, headers=headers,
                         content={"error": {"code": code, "message": message, "fields": fields or []}})
+
+
+@app.exception_handler(protection.Busy)
+def _busy(_: Request, exc: protection.Busy) -> JSONResponse:
+    return _error(503, "busy", "The service is busy; try again in a few seconds.", headers=BUSY_HEADERS)
 
 
 @app.exception_handler(RequestValidationError)
@@ -62,7 +69,34 @@ def health() -> dict:
 
 @app.post("/v1/report", response_model=Report, responses=ERRORS)
 def report(req: ReportRequest, response: Response) -> Report:
-    rep = build_report(req, debug=obs.attach(Debug()))
+    response.headers["Cache-Control"] = "no-store"
+    if not cache.cacheable(req.property_context, req.user_inputs):
+        return _generate_report(req, response)
+    k = cache.key(req.property_context, req.user_inputs, req.rules_output, gemini.model_name())
+    hit = cache.REPORTS.get(k)
+    leader, flight = (False, None) if hit is not None else cache.REPORTS.join(k)
+    if hit is None and not leader:
+        hit = cache.wait(flight)  # an identical request is generating: its result, without a slot or a call
+    if hit is not None:
+        obs.note_cache("hit")
+        response.headers["X-Report-Mode"] = "gemini"
+        return Report.model_validate(hit)
+    obs.note_cache("miss")
+    value = None
+    try:
+        rep = _generate_report(req, response)
+        if leader and response.headers["X-Report-Mode"] == "gemini" and \
+                protection.GENERATION_DEGRADED not in rep.warnings:
+            value = rep.model_dump(mode="json")
+        return rep
+    finally:
+        if leader:
+            cache.REPORTS.finish(k, value)  # also after busy or an error: the duplicates stop waiting
+
+
+def _generate_report(req: ReportRequest, response: Response) -> Report:
+    with protection.generation_slot():  # 503 busy at once when GENERATION_SLOTS requests are running (Codex F03)
+        rep = build_report(req, debug=obs.attach(Debug()))
     response.headers["X-Report-Mode"] = obs.mode()  # gemini | drafts | mock (deploy smoke test, Codex F06)
     return rep
 
@@ -73,7 +107,9 @@ FOLLOWUP_ERRORS = ERRORS | {504: {"model": ErrorResponse, "description": "Reques
 @app.post("/v1/followup", response_model=FollowupResponse, response_model_exclude_none=True, responses=FOLLOWUP_ERRORS)
 def followup(req: FollowupRequest, response: Response,
              refusal_mode: Literal["exempt", "strict"] = "exempt") -> FollowupResponse:
-    resp = answer_followup(req, refusal_mode, debug=obs.attach({}), web_search=True)
+    with protection.generation_slot():
+        resp = answer_followup(req, refusal_mode, debug=obs.attach({}), web_search=True)
     obs.note_web(resp.web is not None)
     response.headers["X-Report-Mode"] = obs.mode()
+    response.headers["Cache-Control"] = "no-store"
     return resp

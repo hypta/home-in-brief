@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 
 from b_common.report_schemas import Report, ReportRequest, Sentence
 
-from . import assemble, gemini, kb, mock, prompt, rewrite
+from . import assemble, gemini, kb, mock, prompt, protection, rewrite
 from .validator import (MAX_WORDS, PREFIX, WEB_PREFIX, build_evidence, check_rewrite, check_sentence, relies_on_user_input,
                         validate, with_prefix)
 
@@ -56,6 +56,17 @@ def mock_enabled() -> bool:
 
 def build_report(req: ReportRequest, generate: Optional[gemini.Generator] = None,
                  debug: Optional[Debug] = None) -> Report:
+    """The report (_build_report). When protection refused the model call (allowance used up, REPORT_DEGRADED,
+    prompt too large) the summary is the checked drafts and warnings end with generation_degraded."""
+    with protection.request_scope() as scope:
+        rep = _build_report(req, generate, debug)
+    if scope.degraded and protection.GENERATION_DEGRADED not in rep.warnings:
+        rep = rep.model_copy(update={"warnings": [*rep.warnings, protection.GENERATION_DEGRADED]})
+    return rep
+
+
+def _build_report(req: ReportRequest, generate: Optional[gemini.Generator] = None,
+                  debug: Optional[Debug] = None) -> Report:
     debug = debug if debug is not None else Debug()
     budget = gemini.Budget()
 

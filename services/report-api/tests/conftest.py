@@ -11,10 +11,13 @@ sys.path[:0] = [str(HERE.parents[1]), str(HERE.parents[3] / "shared")]
 os.environ["KB_SOURCE"] = "local"
 os.environ.pop("REPORT_MOCK", None)
 os.environ.pop("GEMINI_API_KEY", None)
+# Protection (Codex F03): a per-process allowance in memory, never Firestore, unless a test chooses otherwise.
+os.environ["PROTECTION_BACKEND"] = "memory"
+os.environ.pop("REPORT_DEGRADED", None)
 
 from b_common.report_schemas import ReportRequest  # noqa: E402
 
-from app import kb  # noqa: E402
+from app import cache, kb, protection  # noqa: E402
 from app.validator import build_evidence  # noqa: E402
 
 FIXTURES = HERE.parents[1] / "fixtures"
@@ -49,5 +52,12 @@ def evidence(case: str):
 def _env(monkeypatch):
     monkeypatch.setenv("KB_SOURCE", "local")
     monkeypatch.delenv("REPORT_MOCK", raising=False)
+    monkeypatch.delenv("REPORT_DEGRADED", raising=False)
+    monkeypatch.setenv("PROTECTION_BACKEND", "memory")
+    for name in protection.DEFAULTS:
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("REPORT_CACHE_SIZE", "0")  # report cache off; tests/test_cache.py turns it on
     kb.clear_cache()
+    protection.reset()
+    cache.REPORTS.clear()
     yield

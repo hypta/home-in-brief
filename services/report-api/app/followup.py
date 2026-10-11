@@ -43,7 +43,7 @@ from pydantic import BaseModel, Field, ValidationError, model_validator
 from b_common import cladding as cladding_table
 from b_common.report_schemas import FieldView, ReportRequest, Sentence
 
-from . import gemini, kb, obs, rewrite, web_fields
+from . import gemini, kb, obs, protection, rewrite, web_fields
 from . import followup_prompt as fp
 from . import prompt as facts_prompt
 from .facts import TITLE_WORDS, RewriteSentence
@@ -157,13 +157,15 @@ def gemini_json(prompt: str, schema: type, timeout_s: float) -> str:
     key = os.environ.get("GEMINI_API_KEY")
     if not key:
         raise gemini.no_key()
+    gemini.admit(prompt)
     obs.note_call()
     try:
-        client = genai.Client(api_key=key, http_options=types.HttpOptions(timeout=gemini.timeout_ms(timeout_s)))
+        client = genai.Client(api_key=key, http_options=gemini.http_options(timeout_s))
         resp = client.models.generate_content(
             model=gemini.model_name(), contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json", response_schema=schema, temperature=gemini.TEMPERATURE,
+                max_output_tokens=protection.max_output_tokens(),
                 automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True)))
     except Exception as e:  # timeouts, APIError (429, 5xx, bad key), network
         msg, category = obs.gemini_failed(log, "gemini call", e, key)
@@ -182,13 +184,15 @@ def gemini_search(prompt: str, timeout_s: float) -> Optional[WebAnswer]:
     key = os.environ.get("GEMINI_API_KEY")
     if not key:
         raise gemini.no_key()
+    gemini.admit(prompt, search=True)
     obs.note_call(search=True)
     try:
-        client = genai.Client(api_key=key, http_options=types.HttpOptions(timeout=gemini.timeout_ms(timeout_s)))
+        client = genai.Client(api_key=key, http_options=gemini.http_options(timeout_s))
         resp = client.models.generate_content(
             model=gemini.model_name(), contents=prompt,
             config=types.GenerateContentConfig(
                 tools=[types.Tool(google_search=types.GoogleSearch())], temperature=gemini.TEMPERATURE,
+                max_output_tokens=protection.max_output_tokens(),
                 automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True)))
         meta = resp.candidates[0].grounding_metadata if resp.candidates else None
         text = resp.text or ""  # shown as returned: strip() only tests for an empty answer
@@ -1019,6 +1023,20 @@ def skipped_answer(kind: str, found: dict[str, Any], language: str,
 def answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
                     generate: Optional[JsonGenerator] = None, debug: Optional[dict] = None,
                     web_search: bool = False) -> FollowupResponse:
+    """The follow-up answer (_answer_followup), with the warning generation_degraded when protection refused a
+    model call (allowance used up, REPORT_DEGRADED, prompt too large): the answer then comes from the program's
+    facts or fixed sentences, without search, extracted values or translation. A refused Search alone (daily Search
+    allowance) adds no warning: the rest of the answer is made as usual."""
+    with protection.request_scope() as scope:
+        resp = _answer_followup(req, refusal_mode, generate, debug, web_search)
+    if scope.degraded and protection.GENERATION_DEGRADED not in resp.warnings:
+        resp = resp.model_copy(update={"warnings": [*resp.warnings, protection.GENERATION_DEGRADED]})
+    return resp
+
+
+def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
+                     generate: Optional[JsonGenerator] = None, debug: Optional[dict] = None,
+                     web_search: bool = False) -> FollowupResponse:
     """`debug`, when given, receives the fact list, the checked attempts and the composed answer (for eval).
     `web_search` lets an out-of-scope question, or a property field the records do not have (`search_field`, or a
     question about it), be answered from a Google Search. The route turns it on; eval runs leave it off, because the

@@ -34,7 +34,7 @@ Response 200:
 | `summary` | `[{text, source_ids}]`. Gemini rewrites a fact list built by code into 3-5 sentences (see "Summary: fact list and rewrite"); rewrites that fail the checks are replaced by the facts' draft sentences, and every must-mention fact is always present (at most 5). With no loan (`price_missing`, `deposit_exceeds_price`, `cash_purchase_no_loan`) code appends one fixed sentence with `source_ids: []`. Sentences that use chat-supplied facts get the prefix "Based on what you told us, " from code |
 | `next_steps` | `[{text, source_ids, kb_item}]`: `next_step_en` of selected KB items, verbatim. Items cited in the summary first, then a fixed program order (flood insurance whenever a primary flood layer intersects, other intersecting-hazard items, build era/cladding, RBNZ LVR/DTI, LIM, title, First Home Loan, the rest). Identical texts are merged (`kb_item` = first, `source_ids` = all). At most 6. No lending items when there is no loan |
 | `not_found_notes` | `[{field, text, reason}]`: property fields and primary hazard layers with status `not_found` or `unavailable`. Fields that share the same wording and reason are merged into one note; `field` is then a comma-separated list (for example `cv,year_built,...`, `hazards.flood_plain,hazards.flood_prone_area`). Hazard notes end with "This does not mean there is no hazard." |
-| `warnings` | `rules_output.warnings` without panel-level and internal codes (`lem_base_unverified:*`, `bank_skipped:*`, `kb_hash_mismatch:*`, `kb_verification_incomplete:*`, `hazard_status_*`, `hazard_priority_unknown:*`), plus `kb_includes_draft` when `rules_output.kb_includes_draft` is true. report-api adds no codes of its own; meanings are in CODES.md |
+| `warnings` | `rules_output.warnings` without panel-level and internal codes (`lem_base_unverified:*`, `bank_skipped:*`, `kb_hash_mismatch:*`, `kb_verification_incomplete:*`, `hazard_status_*`, `hazard_priority_unknown:*`), plus `kb_includes_draft` when `rules_output.kb_includes_draft` is true. report-api adds one code of its own, last: `generation_degraded` when protection refused the Gemini call (allowance used up, `REPORT_DEGRADED`, prompt too large; see "Abuse and cost protection"); the summary is then the checked drafts. Other meanings are in CODES.md |
 | `dropped` | Number of Gemini sentences blocked by the checks (their facts fall back to drafts) |
 
 ## Errors
@@ -50,6 +50,7 @@ Same shape as rules-api: `{"error": {"code", "message", "fields": [{"field", "me
 | `kb_unavailable` | 503 | KB items or sources could not be read from rules-api |
 | `rules_unavailable` | 503 | Follow-up only: the rules-api re-run with a supplied year or cladding failed |
 | `deadline_exceeded` | 504 | Follow-up only: `REQUEST_DEADLINE_S` ran out between calls |
+| `busy` | 503 | `GENERATION_SLOTS` requests already running in this instance; refused at once with `Retry-After: 5` and `Cache-Control: no-store` |
 | `not_found`, `method_not_allowed` | 404, 405 | Unknown path or method |
 | `internal_error` | 500 | Anything else; no details |
 
@@ -123,7 +124,9 @@ plus `web` when an out-of-scope question was answered from a Google Search (step
 field was searched for (below), plus `user_supplied_source` when a `user_supplied` value came from a web search.
 `language` is the detected language of the question (BCP 47: `en`, `zh-Hant`, `zh-Hans`, `ja`, `ko`, ...). A
 sentence whose translation failed its checks (step 7) is in English even when `language` is not.
-`warnings` is `[]` except `rules_rerun_unavailable` (mock mode answered from the input RulesOutput).
+`warnings` is `[]` except `rules_rerun_unavailable` (mock mode answered from the input RulesOutput) and
+`generation_degraded` (protection refused a model call: the answer is the program's facts or fixed sentences, with no
+search, no extracted values and no translation; see "Abuse and cost protection").
 1 or more passing sentences gives 200 (at most 3); 0 gives 502 `validation_failed`.
 
 Steps (INTERFACE_DRAFT 5 and 6.1):
@@ -396,6 +399,34 @@ A summary sentence is dropped when any rule fails (rule code in parentheses, log
 | `REPORT_MOCK` | false | `true`: no Gemini call (below) |
 | `GEMINI_TIMEOUT_S` | 20 | Limit for one Gemini call |
 | `REQUEST_DEADLINE_S` | 25 | Total budget; a Gemini call only with at least 11 s left, sent with at least 10 s; one retry (invalid JSON, 0 passing sentences, model error) only if the remaining time covers another attempt; no time for a call: drafts |
+| `PROTECTION_BACKEND`, `GEMINI_DAILY_CALLS` (100), `SEARCH_DAILY_CALLS` (30), `GEMINI_EVENT_CALLS` (3000), `GENERATION_SLOTS` (2), `GEMINI_MAX_OUTPUT_TOKENS` (2048), `GEMINI_INPUT_MAX_BYTES` (32000), `REPORT_DEGRADED` (false), `PROTECTION_TIMEOUT_S` (1), `REPORT_CACHE_SIZE` (100), `REPORT_CACHE_TTL_S` (600) | | See "Abuse and cost protection" |
+
+## Abuse and cost protection (Codex F03, `app/protection.py`)
+
+- **Generation slots**: at most `GENERATION_SLOTS` /v1/report and /v1/followup requests run at once per process; the
+  next is refused at once with 503 `busy` (`Retry-After: 5`), no queue. `/health` takes no slot.
+- **Allowance**: each Gemini SDK call (`gemini.gemini_generate`, `followup.gemini_json`, `followup.gemini_search`;
+  every classify, answer, retry, translation, extraction and Search goes through one of them) first reserves one call
+  in a Firestore transaction (`protection/control` + `protection/daily-<UTC date>`; DEPLOY.md section 8d). Refused:
+  daily (`GEMINI_DAILY_CALLS`) or total (`GEMINI_EVENT_CALLS`) allowance used up, `protection/control.disabled`,
+  Firestore failure or a transaction slower than `PROTECTION_TIMEOUT_S`. Refused calls are never sent; failed calls
+  stay counted. A Search call also counts against `SEARCH_DAILY_CALLS`; when only that is used up, only the search is
+  skipped (no warning).
+- **Degraded answers**: a refused call (or `REPORT_DEGRADED=true`, or a prompt over `GEMINI_INPUT_MAX_BYTES`) is not
+  retried: the report summary is the checked drafts and the follow-up the program's facts or fixed sentences (no search,
+  values or translation), both 200 with the warning `generation_degraded` and `X-Report-Mode: drafts`.
+- **Caps per call**: `max_output_tokens=GEMINI_MAX_OUTPUT_TOKENS`; one transport attempt (google-genai 2.28.0 retries
+  only with `retry_options`; it is set to `attempts=1`).
+- **Report cache** (`app/cache.py`): /v1/report only, per process, LRU `REPORT_CACHE_SIZE` (100) entries for
+  `REPORT_CACHE_TTL_S` (600 s; either 0 turns it off). Key: SHA-256 of the three inputs as canonical JSON plus the
+  model and `cache.CACHE_VERSION` (bump it when prompts, facts or checks change). Stored: reports with
+  `X-Report-Mode: gemini` only (never drafts, mock, degraded or errors), never when `user_inputs.chat_supplied_source`
+  has a web-search value. Identical requests in flight wait for the first (single flight; no slot, no call). A hit
+  keeps its `generated_at`. Follow-ups are never cached.
+- Logs: `allowance` (`ok`, `daily_exhausted`, `event_exhausted`, `search_exhausted`, `disabled`, `backend_error`,
+  `degraded`, `prompt_too_large`), `busy` and `cache` (`none`, `miss`, `hit`) in the completion record.
+- Tests: `tests/test_protection.py`, `tests/test_cache.py` (sockets blocked; the Firestore transactions also run against the emulator when
+  `FIRESTORE_EMULATOR_HOST` is set, e.g. after `make up`).
 
 ## Mock mode
 

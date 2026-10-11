@@ -10,7 +10,7 @@ from typing import Callable
 
 from pydantic import BaseModel, ValidationError
 
-from . import obs
+from . import obs, protection
 from .facts import RewriteSentence
 
 log = logging.getLogger("report-api.gemini")
@@ -82,7 +82,25 @@ class ModelUnavailable(Exception):
 
 
 # No immediate retry after these: exhausted quota (429) or no key cannot succeed a second later.
-NO_RETRY = frozenset({obs.QUOTA, obs.CONFIG})
+# Nor after a call protection refused (allowance used up, REPORT_DEGRADED, prompt too large): the drafts answer.
+NO_RETRY = frozenset({obs.QUOTA, obs.CONFIG, obs.ALLOWANCE})
+
+
+def admit(prompt: str, search: bool = False) -> None:
+    """The allowance gate every SDK call passes right before it is sent (protection.admit): raises
+    ModelUnavailable (obs.ALLOWANCE; obs.SEARCH_ALLOWANCE when only the Search allowance is used up) when the call
+    must not be made. Nothing is sent then."""
+    reason = protection.admit(prompt, search)
+    if reason != protection.OK:
+        raise ModelUnavailable(f"call refused: {reason}",
+                               obs.SEARCH_ALLOWANCE if reason == protection.SEARCH else obs.ALLOWANCE)
+
+
+def http_options(timeout_s: float):
+    """One transport attempt per reserved call: google-genai 2.28.0 retries only when retry_options is set
+    (_api_client.retry_args: None -> stop_after_attempt(1)); attempts=1 says so explicitly."""
+    from google.genai import types
+    return types.HttpOptions(timeout=timeout_ms(timeout_s), retry_options=types.HttpRetryOptions(attempts=1))
 
 
 def no_key() -> ModelUnavailable:
@@ -114,9 +132,10 @@ def gemini_generate(prompt: str, timeout_s: float) -> str:
     key = os.environ.get("GEMINI_API_KEY")
     if not key:
         raise no_key()
+    admit(prompt)
     obs.note_call()
     try:
-        client = genai.Client(api_key=key, http_options=types.HttpOptions(timeout=timeout_ms(timeout_s)))
+        client = genai.Client(api_key=key, http_options=http_options(timeout_s))
         resp = client.models.generate_content(
             model=model_name(),
             contents=prompt,
@@ -125,6 +144,7 @@ def gemini_generate(prompt: str, timeout_s: float) -> str:
                 response_schema=SummaryOut,
                 temperature=TEMPERATURE,
                 seed=SEED,
+                max_output_tokens=protection.max_output_tokens(),
                 automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
             ),
         )

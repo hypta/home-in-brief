@@ -23,6 +23,8 @@ ENDPOINTS = {"/v1/report": "report", "/v1/followup": "followup"}
 # error categories (worst last wins in the record only by order of occurrence: the last failure is kept)
 TIMEOUT, QUOTA, HTTP_4XX, HTTP_5XX, SCHEMA, OTHER, NONE = "timeout", "quota", "http_4xx", "http_5xx", "schema", "other", "none"
 CONFIG = "config"  # GEMINI_API_KEY is not set
+ALLOWANCE = "allowance"  # protection.admit refused the call (allowance, REPORT_DEGRADED, prompt size): drafts
+SEARCH_ALLOWANCE = "search_allowance"  # the daily Search allowance is used up: only that search is skipped
 
 
 class JsonFormatter(logging.Formatter):
@@ -62,6 +64,9 @@ class Stats:
     debug: Any = None          # service.Debug (report) or the follow-up debug dict
     budget: Any = None         # the request's gemini.Budget (remaining time)
     web_answer: bool = False   # the follow-up returned a Google Search answer
+    allowance: str = "ok"      # protection: ok, or the last reason a Gemini call was refused
+    busy: bool = False         # refused with 503 busy (no free generation slot)
+    cache: str = "none"        # /v1/report cache: none (not cacheable), miss, hit (stored or from a duplicate in flight)
 
 
 _stats: contextvars.ContextVar[Optional[Stats]] = contextvars.ContextVar("obs_stats", default=None)
@@ -103,6 +108,25 @@ def note_error(category: str) -> None:
     st = _stats.get()
     if st is not None:
         st.error = category
+
+
+def note_allowance(reason: str) -> None:
+    st = _stats.get()
+    if st is not None and reason != "ok":
+        st.allowance = reason
+
+
+def note_busy() -> None:
+    st = _stats.get()
+    if st is not None:
+        st.busy = True
+        st.error = "busy"
+
+
+def note_cache(state: str) -> None:
+    st = _stats.get()
+    if st is not None:
+        st.cache = state
 
 
 def note_web(answered: bool) -> None:
@@ -160,7 +184,7 @@ def mode(st: Optional[Stats] = None) -> str:
     st = st or _stats.get()
     if mock_mode() or (st is not None and _get(st.debug, "mode") == "mock"):
         return "mock"
-    if st is not None and (sentence_counts(st)["passed"] or st.web_answer):
+    if st is not None and (sentence_counts(st)["passed"] or st.web_answer or st.cache == "hit"):
         return "gemini"
     return "drafts"
 
@@ -175,6 +199,7 @@ def completion_fields(st: Stats, status: int) -> dict[str, Any]:
         "gemini_calls": st.gemini_calls, "searches": st.searches, "error": st.error,
         "sentences": sentence_counts(st), "mode": mode(st),
         "remaining_s": round(st.budget.left(), 1) if st.budget is not None else None,
+        "allowance": st.allowance, "busy": st.busy, "cache": st.cache,
     }
     lang = _get(st.debug, "language")
     if st.endpoint == "followup":
