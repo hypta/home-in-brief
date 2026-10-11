@@ -306,7 +306,24 @@ def _lending(req: ReportRequest, sel: list[str], ev: Evidence) -> list[_Topic]:
                                          ("DTI", dti, "kb_fhl_dti_not_restricted")) if on and kb_id in sel]
         say = "A First Home Loan is shown because your income is within Kāinga Ora's cap"
         cite = ["kainga_ora_fhl"]
-        if exempt:
+        caps = req.rules_output.get("fhl_income_caps") or {}
+        conditional = fhl.get("eligibility") == "conditional" and None not in (
+            to_decimal(caps.get("multiple_or_dependants")), to_decimal(caps.get("single")))
+        if conditional:
+            # income between the single and the multiple/dependants caps, household type not entered (rules-api
+            # fhl_household_type_unknown): the condition is the fact; no room for the exemption clause in 25 words
+            src_m, src_s = (("kb_fhl_income_cap_multiple", "kb_fhl_income_cap_individual")
+                            if {"kb_fhl_income_cap_multiple", "kb_fhl_income_cap_individual"} <= set(sel)
+                            else ("kainga_ora_fhl", "kainga_ora_fhl"))
+            lo = t.slot("cap_single", caps["single"], "money", "the Kāinga Ora income cap for a single buyer", src_s,
+                        label="cap")
+            hi = t.slot("cap_multiple", caps["multiple_or_dependants"], "money",
+                        "the Kāinga Ora income cap for multiple buyers or a buyer with dependants", src_m)
+            say = (f"A First Home Loan may be available: your income is above Kāinga Ora's {lo} single-buyer cap, "
+                   f"but within {hi} for multiple buyers or dependants.")
+            out.append(t.set(say, cite + [src_s, src_m], keep=["may be available", "single-buyer", "but within",
+                                                                 "multiple buyers or dependants"]))
+        elif exempt:
             say += f"; it is exempt from Reserve Bank {' and '.join(exempt)} limits"
             cite += [f"kb_fhl_{k.lower()}_not_restricted" for k in exempt]
         elif "kb_fhl_deposit_5pct" in sel:
@@ -315,7 +332,8 @@ def _lending(req: ReportRequest, sel: list[str], ev: Evidence) -> list[_Topic]:
             say += f"; Kāinga Ora requires a deposit of at least {d}"
             cite.append("kb_fhl_deposit_5pct")
         # "it is exempt" keeps the subject: "your income is within the cap and is exempt" makes the income exempt
-        out.append(t.set(say + ".", cite, keep=["because your income"] + (["it is exempt"] if exempt else [])))
+        if not conditional:
+            out.append(t.set(say + ".", cite, keep=["because your income"] + (["it is exempt"] if exempt else [])))
         if ht in HOUSEHOLD:  # user-input meaning: which cap was used (no amount)
             e = _Topic(O_FHL, P_EXTRA, "user_input")
             hh = e.slot("household", HOUSEHOLD[ht], "text", "the household type you entered", "kainga_ora_fhl")
