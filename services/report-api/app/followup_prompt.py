@@ -100,7 +100,10 @@ def answer_prompt(req: ReportRequest, ev: Evidence, kb_items: dict[str, dict], t
     detected language of the question; the answer is written in it."""
     english = language.lower().startswith("en")
     cjk = language.lower().startswith(("zh", "ja", "ko"))
-    length = (f"at most {CJK_MAX_UNITS_BY_LANG[language.lower()[:2]]} characters" if cjk else
+    # The validator counts filled text (followup.cjk_units): an English word or a placeholder is one unit, so a
+    # limit stated in raw characters made Chinese answers split one fact into short sentences without its source.
+    length = (f"at most {CJK_MAX_UNITS_BY_LANG[language.lower()[:2]]} units (one unit per CJK character, English "
+              "word or placeholder)" if cjk else
               f"12 to 20 words, never over {MAX_WORDS}" if english else "12 to 25 words")
     data = {
         "FACTS ('negations' is how many not/no/never words the fact has)": facts_for_prompt(fs),
@@ -114,7 +117,8 @@ def answer_prompt(req: ReportRequest, ev: Evidence, kb_items: dict[str, dict], t
                  "keep each 'keep' phrase's meaning with a plain equivalent in your language (in Chinese: could not "
                  "-> 無法, may -> 可能, only -> 只, at least -> 至少, unknown -> 未知, if -> 如果), keep every negation, "
                  "never add a cause or a 'says' the facts do not have, and keep the English terms and publisher names "
-                 "listed above in English.")
+                 "listed above in English. Every sentence names the publisher its facts name (e.g. Auckland Council); "
+                 "never split one fact into sentences without it.")
     if english:
         lang_rule = ("- Write in English only, whatever language the question is in. Never write any Chinese, Japanese or "
                      "Korean character. Understand the question in its own language, then answer in plain English.")
