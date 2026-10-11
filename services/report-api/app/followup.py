@@ -32,7 +32,6 @@ import json
 import logging
 import os
 import re
-import time
 from dataclasses import dataclass, replace
 from datetime import datetime
 from decimal import Decimal
@@ -48,7 +47,7 @@ from . import gemini, kb, rewrite, web_fields
 from . import followup_prompt as fp
 from . import prompt as facts_prompt
 from .facts import TITLE_WORDS, RewriteSentence
-from .service import ReportError, _env_float, mock_enabled
+from .service import ReportError, mock_enabled
 from .validator import (BANNED_WORD, MAX_WORDS, NUMBER_WORD, TOO_LONG, URL_OR_HTML, WEB_PREFIX, Allowed, Evidence,
                         build_evidence, check_rewrite, check_sentence, strip_prefix, to_decimal)
 
@@ -80,6 +79,9 @@ class FollowupRequest(ReportRequest):
     history: list[Turn] = Field(default_factory=list, max_length=6)
     # web's "Search the web for this" button: search for this one field, no classify step (question optional).
     search_field: Optional[Literal["year_built", "cladding", "last_sale"]] = None
+    # The button with no question: the page's language (BCP 47, e.g. "zh-Hant"), for the search answer and the
+    # sentences derived from it. Ignored when a question is sent (its language is detected as usual). Default en.
+    language: Optional[str] = Field(default=None, max_length=35, pattern=r"^[A-Za-z]{2,3}(?:[-_][A-Za-z0-9]{2,8})*$")
 
     @model_validator(mode="after")
     def _question_or_field(self):
@@ -112,7 +114,7 @@ class FollowupResponse(BaseModel):
     user_supplied: dict[str, Any]
     # Only when a user_supplied value came from a web search: {field: "user" | "web_search"} for each user_supplied
     # key ("web_search": code extracted it from the search answer in `web`). Absent: every value is the user's.
-    # web sends it back as user_inputs.chat_supplied_source.
+    # web is to send it back as user_inputs.chat_supplied_source (not wired in web yet; see README).
     user_supplied_source: Optional[dict[str, str]] = None
     links: list[str]
     dropped: int
@@ -152,7 +154,7 @@ def gemini_json(prompt: str, schema: type, timeout_s: float) -> str:
     if not key:
         raise gemini.ModelUnavailable("GEMINI_API_KEY is not set")
     try:
-        client = genai.Client(api_key=key, http_options=types.HttpOptions(timeout=int(timeout_s * 1000)))
+        client = genai.Client(api_key=key, http_options=types.HttpOptions(timeout=gemini.timeout_ms(timeout_s)))
         resp = client.models.generate_content(
             model=gemini.model_name(), contents=prompt,
             config=types.GenerateContentConfig(
@@ -176,20 +178,20 @@ def gemini_search(prompt: str, timeout_s: float) -> Optional[WebAnswer]:
     if not key:
         raise gemini.ModelUnavailable("GEMINI_API_KEY is not set")
     try:
-        client = genai.Client(api_key=key, http_options=types.HttpOptions(timeout=int(timeout_s * 1000)))
+        client = genai.Client(api_key=key, http_options=types.HttpOptions(timeout=gemini.timeout_ms(timeout_s)))
         resp = client.models.generate_content(
             model=gemini.model_name(), contents=prompt,
             config=types.GenerateContentConfig(
                 tools=[types.Tool(google_search=types.GoogleSearch())], temperature=gemini.TEMPERATURE,
                 automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True)))
         meta = resp.candidates[0].grounding_metadata if resp.candidates else None
-        text = (resp.text or "").strip()
+        text = resp.text or ""  # shown as returned: strip() only tests for an empty answer
     except Exception as e:  # timeouts, APIError (429, 5xx, bad key), network
         msg = str(e).replace(key, "***")[:300]
         log.warning("gemini search call failed: %s: %s", type(e).__name__, msg)
         raise gemini.ModelUnavailable(f"{type(e).__name__}: {msg}") from e
     pages = {c.web.uri: c.web.title or "" for c in (meta and meta.grounding_chunks) or [] if c.web and c.web.uri}
-    if not (text and pages):
+    if not (text.strip() and pages):
         return None
     entry = meta.search_entry_point
     return WebAnswer(text=text, sources=[WebSource(title=t, url=u) for u, t in pages.items()],
@@ -203,30 +205,19 @@ def _parse(raw: str, schema: type):
         raise gemini.ModelOutputInvalid(str(e)[:300]) from e
 
 
-class _Clock:
-    def __init__(self):
-        self.deadline = time.monotonic() + _env_float("REQUEST_DEADLINE_S", 25.0)
-        self.call_limit = _env_float("GEMINI_TIMEOUT_S", 20.0)
-
-    def left(self) -> float:
-        return self.deadline - time.monotonic()
-
-    def budget(self, share: float = 1.0) -> float:
-        left = self.left()
-        if left <= 0.5:
-            raise ReportError(504, "deadline_exceeded", "The request ran out of time.")
-        return max(0.5, min(self.call_limit, left * share))
-
-    def call_budget(self, share: float = 1.0) -> float:
-        """For an optional call: at least MIN_CALL_S (the Gemini API refuses a shorter deadline with 400 "Minimum
-        allowed deadline is 10s"); callers check can_call() first."""
-        return max(MIN_CALL_S, self.budget(share))
-
-    def can_call(self) -> bool:
-        return self.left() >= MIN_CALL_S + 1.0
+# One deadline for the request (gemini.Budget): every Gemini call, search, translation and retry is made only with
+# gemini.ADMIT_S (11 s) left and is sent with at least gemini.MIN_CALL_S (10 s, the API minimum); at most
+# gemini.MAX_SEARCHES Google Search calls per request. Without time for a call: program drafts or fixed sentences.
+_Clock = gemini.Budget
+MIN_CALL_S = gemini.MIN_CALL_S
 
 
-MIN_CALL_S = 10.0
+def _search(prompt: str, clock: _Clock, share: float) -> Optional[WebAnswer]:
+    """One Google Search call when the request's search limit and time allow it; None otherwise."""
+    if not clock.can_search():
+        return None
+    clock.searches += 1
+    return gemini_search(prompt, clock.timeout(share))
 
 
 def _call(generate: JsonGenerator, prompt: str, schema: type, timeout: float):
@@ -268,6 +259,32 @@ def extract_user_supplied(question: str, c: ClassifyOut) -> dict[str, Any]:
         else:
             log.info("user_supplied_ignored: cladding not stated in the question")
     return out
+
+
+_CLAUSE_SPLIT = re.compile(r"[^,，、.?!。？！;；\n]+[,，、.?!。？！;；]?")
+_ASKS_START = re.compile(r"^\s*(?:and\s+|or\s+|so\s+)?(?:when|what|which|how|is|was|were|are|does|did|do|has|have|had|could|"
+                         r"can|would|will|any|tell)\b", re.I)
+_ASKS_ZH = re.compile(r"嗎|吗|是否|是不是|有沒有|有没有|呢|か[。？?]?$|ですか")
+
+
+def affirmed(question: str, key: str, value: Any) -> bool:
+    """The question states the value rather than asks about it: a clause that names it is not itself a question.
+    "It was built in 1997, what does that mean?" states 1997; "Was it built in 1997?" and "這房子是 1997 年蓋的嗎？"
+    ask about it."""
+    if key == "year_built":
+        m = re.fullmatch(r"(\d{3}0)s", str(value))
+        rx = re.compile(rf"(?<!\d){m.group(1) if m else re.escape(str(value))}(?!\d)")
+    else:
+        rx = dict(cladding_table._COMPILED).get(str(value))
+        if rx is None:
+            return False
+    for clause in _CLAUSE_SPLIT.findall(question):
+        if not rx.search(clause):
+            continue
+        asking = clause.rstrip().endswith(("?", "？")) or _ASKS_START.search(clause) or _ASKS_ZH.search(clause)
+        if not asking:
+            return True
+    return False
 
 
 def _year_numbers(v: Any) -> list[int]:
@@ -331,6 +348,20 @@ def normalize_language(claimed: str, question: str) -> str:
         return "zh-Hans" if hans > hant else "zh-Hant"
     if low.startswith(("zh", "ja", "ko")):
         return "en"  # no CJK script in the question
+    return "en" if low.startswith("en") else lang
+
+
+def page_language(code: Optional[str]) -> str:
+    """The language web sends for a button request without a question (the page's language), as a code the answer
+    steps know: zh variants -> zh-Hant / zh-Hans, ja, ko; anything unusable -> en."""
+    lang = (code or "en").strip().replace("_", "-")
+    if not _BCP47_RE.fullmatch(lang):
+        return "en"
+    low = lang.lower()
+    if low.startswith("zh"):
+        return "zh-Hans" if "hans" in low or low.endswith(("-cn", "-sg")) else "zh-Hant"
+    if low.startswith(("ja", "ko")):
+        return low[:2]
     return "en" if low.startswith("en") else lang
 
 
@@ -547,11 +578,11 @@ def comparison_sentence(key: str, value: Any, f: FieldView, language: str = "en"
                     if decade is not None and u_int is not None
                     else f"The year you gave, {u_en}, matches {src_en}'s record, {c_en}.")
             if web:
-                zh_t = zh_t.replace("你提供的", "網路搜尋找到的")
-                en_t = en_t.replace("The year you gave", "The year found online")
-        elif web:
-            zh_t = f"網路搜尋找到的建造年份是 {u_zh}；{src_zh}記錄為 {c_zh}。以下說明以{src_zh}為準。"
-            en_t = (f"A web search gave the year built as {u_en}; {src_en} records {c_en}, and this answer uses "
+                zh_t = zh_t.replace("你提供的", "網頁上的")
+                en_t = en_t.replace("The year you gave", "the year found online")
+        elif web:  # the web-search prefix is added in front (finish)
+            zh_t = f"網頁上的建造年份是 {u_zh}；{src_zh}記錄為 {c_zh}。以下說明以{src_zh}為準。"
+            en_t = (f"web pages give the year built as {u_en}; {src_en} records {c_en}, and this answer uses "
                     f"{src_en}'s record.")
         else:
             zh_t = f"你提供的建造年份是 {u_zh}；{src_zh}記錄為 {c_zh}。以下說明以{src_zh}為準。"
@@ -564,11 +595,11 @@ def comparison_sentence(key: str, value: Any, f: FieldView, language: str = "en"
             zh_t = f"你提供的外牆 {shown} 和{src_zh}記錄的 {cv} 一致。"
             en_t = f"The cladding you gave, {shown}, matches {src_en}'s record, {cv}."
             if web:
-                zh_t = zh_t.replace("你提供的", "網路搜尋找到的")
-                en_t = en_t.replace("The cladding you gave", "The cladding found online")
-        elif web:
-            zh_t = f"網路搜尋找到的外牆是 {shown}；{src_zh}記錄為 {cv}。以下說明以{src_zh}為準。"
-            en_t = f"A web search gave the cladding as {shown}; {src_en} records {cv}, and this answer uses {src_en}'s record."
+                zh_t = zh_t.replace("你提供的", "網頁上的")
+                en_t = en_t.replace("The cladding you gave", "the cladding found online")
+        elif web:  # the web-search prefix is added in front (finish)
+            zh_t = f"網頁上的外牆是 {shown}；{src_zh}記錄為 {cv}。以下說明以{src_zh}為準。"
+            en_t = f"web pages give the cladding as {shown}; {src_en} records {cv}, and this answer uses {src_en}'s record."
         else:
             zh_t = f"你提供的外牆是 {shown}；{src_zh}記錄為 {cv}。以下說明以{src_zh}為準。"
             en_t = f"You gave the cladding as {shown}; {src_en} records {cv}, and this answer uses {src_en}'s record."
@@ -666,8 +697,9 @@ def mock_answer(ev: Evidence, kb_items: dict[str, dict], used: dict, language: s
 _FIELD_Q = {
     "cladding": re.compile(r"cladding|exterior|outside walls?|\bwalls?\b|weatherboard|stucco|plaster|monolithic|"
                            r"roughcast|brick|leaky|外牆|外墙|牆|墙|漏水|外壁|雨漏り", re.I),
-    "year_built": re.compile(r"\bbuilt\b|\bbuild\b|year built|how old|\bage\b|decade|建造|屋齡|屋龄|哪一年蓋|哪一年盖|"
-                             r"幾年蓋|几年盖|哪年|蓋的|盖的|蓋好|盖好|建成|落成|築年|建築年|建てられ", re.I),
+    "year_built": re.compile(r"\bbuilt\b|\bbuild\b|\bconstruct(?:ed|ion)\b|\berected\b|year built|how old|\bage\b|decade|"
+                             r"when was (?:it|this|the) (?:home|house|place|property|building)? ?(?:made|put up|finished)|建造|屋齡|屋龄|哪一年蓋|哪一年盖|"
+                             r"幾年蓋|几年盖|哪年|蓋的|盖的|蓋好|盖好|建成|落成|築年|建築年|建てられ|建於|建于|興建|兴建|幾年建|几年建", re.I),
     "last_sale": re.compile(r"last sale|last sold|\bsold\b|sale price|sale history|purchase price|bought for|成交|"
                             r"賣出|卖出|售出|上次.{0,4}[賣卖售]|買賣紀錄|买卖记录|売却|販売価格", re.I),
 }
@@ -683,6 +715,8 @@ class Part:
     user: bool
     base: Optional[BaseCheck] = None
     keep: tuple[str, ...] = ()  # values a translation must copy as written (a title, the cladding, land-use words)
+    fields: frozenset = frozenset()  # the chat-supplied fields its facts depend on (prompt.from_web)
+    web: Optional[bool] = None  # set when code knows the sentence uses a value found online (a comparison)
 
 
 def program_sentences(fs: list, named: list[str], question: str, ev: Evidence,
@@ -707,7 +741,7 @@ def program_sentences(fs: list, named: list[str], question: str, ev: Evidence,
         if fails:
             log.warning("program sentence %s dropped: %s", i, ",".join(fails))
             continue
-        out.append(Part(s, native=False, user=f.user, base=base, keep=text_values([f])))
+        out.append(Part(s, native=False, user=f.user, base=base, keep=text_values([f]), fields=frozenset(f.fields)))
     return out
 
 
@@ -834,66 +868,66 @@ BUTTON_QUESTIONS = {"year_built": "When was this home built?",
                     "last_sale": "When was this home last sold, and for how much?"}
 _ASKING = re.compile(r"[?？]|\b(?:when|what|which|how|is|was|were|does|did|do|has|any|tell)\b|哪|幾|几|什麼|什么|多少|多久|"
                      r"嗎|吗|是否|呢|何|いつ|ですか", re.I)
-_YEAR_IN_Q = re.compile(r"(?<!\d)(?:1[89]\d\d|20\d\d)(?!\d)")
 MOCK_WEB = WebAnswer(
     text=("MOCK web search answer for testing the page; no search was run. Listing pages describe this home as built "
           "in 1985 with weatherboard cladding. It last sold in March 2019 for $850,000."),
     sources=[WebSource(title="example.com", url="https://example.com/mock-web-search")], search_suggestions="")
 
 
+def missing_field(req: ReportRequest, name: str) -> bool:
+    """The property field is not_found/unavailable (or PropertyContext lacks it): only then is it searched for, and
+    only then may a value found online fill it (council data wins over everything)."""
+    f = req.property_fields().get(name)
+    return f is None or f.status in facts_prompt.MISSING
+
+
 def fields_to_search(question: str, req: ReportRequest, supplied: dict[str, Any]) -> list[str]:
-    """Fields the question asks about whose status is not_found/unavailable (or that PropertyContext lacks), and
-    that the user has not given (in this question or earlier, chat_supplied). A year written in the question means
-    the user states or supposes one: no year search."""
+    """Fields the question asks about (_FIELD_Q) whose status is not_found/unavailable, and that the user has not
+    given: stated in this question (`supplied` holds only values the question states, see affirmed; "Was it built in
+    1997?" asks) or earlier (chat_supplied). Other years in the question ("It sold in 2019; when was it built?") do
+    not stop a search."""
     if not _ASKING.search(question):
         return []
-    pf, chat = req.property_fields(), req.chat_supplied()
-    out = []
-    for name in web_fields.FIELDS:
-        f = pf.get(name)
-        if f is not None and f.status not in facts_prompt.MISSING:
-            continue  # found: answered from the program's facts, no search
-        if name in supplied or name in chat or not _FIELD_Q[name].search(question):
-            continue
-        if name == "year_built" and _YEAR_IN_Q.search(question):
-            continue
-        out.append(name)
-    return out
+    chat = req.chat_supplied()
+    return [name for name in web_fields.FIELDS
+            if missing_field(req, name) and name not in supplied and name not in chat and _FIELD_Q[name].search(question)]
 
 
 def field_search(req: ReportRequest, fields: list[str], question: str, history: list[dict],
-                 generate: JsonGenerator, clock: _Clock, mock: bool, debug: dict) -> Optional[WebAnswer]:
-    """One Google Search for the fields (a second only when the first names no source and time allows), then the
-    values code extracts from its text (web_fields.extract; a field code found nothing for may be asked once of
-    Gemini, from the text only, and is kept only when written in the text). Mock mode: MOCK_WEB, no call."""
+                 generate: JsonGenerator, clock: _Clock, mock: bool, debug: dict,
+                 language: str = "") -> Optional[WebAnswer]:
+    """One Google Search for the fields (a second only when the first names no source, within the request's search
+    limit and time), then the values code extracts from its text (web_fields.extract; a field code found nothing
+    for may be asked once of Gemini, from the text only, and is kept only when its quote passes the same checks).
+    `language`: the button's page language when there is no question. Mock mode: MOCK_WEB, no call."""
     info: dict[str, Any] = {"fields": list(fields), "searches": 0}
     debug["field_search"] = info
     address = str((req.property_context.get("address") or {}).get("matched") or "")
+    web: Optional[WebAnswer] = None
     if mock:
-        web: Optional[WebAnswer] = MOCK_WEB.model_copy(deep=True)
+        web = MOCK_WEB.model_copy(deep=True)
     elif not address:
         return None
     else:
-        prompt = fp.field_search_prompt(address, fields, req.question.strip(), history)
+        prompt = fp.field_search_prompt(address, fields, req.question.strip(), history, language)
         try:
-            info["searches"] = 1
-            web = gemini_search(prompt, clock.call_budget(0.5))
-            if not web and clock.can_call():
-                info["searches"] = 2
-                web = gemini_search(prompt, clock.call_budget(0.5))
-        except (gemini.ModelUnavailable, ReportError) as e:
+            web = _search(prompt, clock, 0.5)
+            if not web:
+                web = _search(prompt, clock, 0.5)
+        except gemini.ModelUnavailable as e:
             log.warning("field search unavailable: %s", type(e).__name__)
             web = None
+        info["searches"] = clock.searches
     info["web"] = bool(web)
     if not web:
         return None
-    found, ambiguous, missing = web_fields.extract(web.text, list(fields))
+    found, ambiguous, missing = web_fields.extract(web.text, list(fields), address)
     info.update(by_code=sorted(found), ambiguous=sorted(ambiguous))
     if missing and not mock and clock.can_call():
         try:
             out = _call(generate, fp.extract_prompt(web.text, sorted(missing)), web_fields.ExtractOut,
-                        clock.call_budget(0.25))
-            got = web_fields.check_model_values(out, web.text, missing)
+                        clock.timeout(0.25))
+            got = web_fields.check_model_values(out, web.text, missing, address)
             info["by_model"] = sorted(got)
             found.update(got)
         except ReportError as e:
@@ -931,7 +965,7 @@ def answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
             return None
         try:
             return _call(generate, fp.translate_prompt(texts, language, copy), TranslateOut,
-                         clock.call_budget(0.5)).texts
+                         clock.timeout(0.5)).texts
         except ReportError as e:
             log.info("translation failed (%s); using English", e.code)
             return None
@@ -940,16 +974,23 @@ def answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
     button = req.search_field
     question = req.question.strip() or BUTTON_QUESTIONS.get(button or "", "")
     if button:
-        c = ClassifyOut(language=normalize_language("en", question))
+        # a question sent with the button gives the language as before; without one, the page's language
+        lang = normalize_language("en", question) if req.question.strip() else page_language(req.language)
+        c = ClassifyOut(language=lang)
     elif mock:
         c = mock_classify(question)
-    else:
+    elif clock.can_call():
         c = _call(generate, fp.classify_prompt(question, history, [{"id": link.id, "label": link.label}
                                                                     for link in req.links()]),
-                  ClassifyOut, clock.budget(0.4))
-    language = normalize_language(c.language, question)
+                  ClassifyOut, clock.timeout(0.4))
+    else:  # no time for classify: the language by script, no values, no search; program drafts answer
+        c = ClassifyOut(language=normalize_language("en", question))
+    language = c.language if button else normalize_language(c.language, question)
     debug["language"] = {"claimed": c.language, "used": language}
     supplied = {} if button else extract_user_supplied(question, c)
+    for k in [k for k, v in supplied.items() if not affirmed(question, k, v)]:
+        log.info("user_supplied_ignored: %s is asked about, not stated", k)
+        supplied.pop(k)
     sources = {k: USER for k in supplied}
     links = [i for i in dict.fromkeys(c.links) if i in link_ids][:3]
 
@@ -983,7 +1024,7 @@ def answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
             chat.update(used)
             user_inputs["chat_supplied"] = chat
             try:
-                rules_output = call_rules(req.property_context, user_inputs, max(0.5, min(5.0, clock.left() * 0.3)))
+                rules_output = call_rules(req.property_context, user_inputs, min(5.0, max(0.1, clock.left() * 0.3)))
             except ReportError:
                 if not mock:
                     raise
@@ -1016,14 +1057,17 @@ def answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
         # Chinese wording is written by code; other non-English languages translate the English sentence later.
         fixed: list[Part] = []
         for key, value, f in compared:
-            s = comparison_sentence(key, value, f, language, web=sources.get(key) == WEB_SEARCH)
+            web = sources.get(key) == WEB_SEARCH
+            s = comparison_sentence(key, value, f, language, web=web)
             native = is_english(language) or is_zh(language)
             fails = check_comparison(s, value, ev, language if native else "en") if s else ["no_council_value"]
             if fails:
                 log.warning("comparison sentence dropped: %s", ",".join(fails))
             else:
-                fixed.append(Part(s, native=native, user=False, base=comparison_check(value, ev),
-                                  keep=() if key == "year_built" else (cladding_table.label(str(value)), str(f.value))))
+                # a comparison with a value found online names the web search in its prefix too
+                fixed.append(Part(s, native=native, user=web, base=comparison_check(value, ev),
+                                  keep=() if key == "year_built" else (cladding_table.label(str(value)), str(f.value)),
+                                  fields=frozenset({key}), web=web))
 
         # 4. answer from the fact list; check each rewrite; one retry when none passes and time allows; blocked
         #    sentences fall back to their facts' drafts
@@ -1056,14 +1100,14 @@ def answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
             prompt = base
             best: Optional[list] = None
             named: list[str] = []
+            out_of_time = False  # no time for a (further) call: the program's drafts answer
             for attempt in range(2):
-                if attempt and clock.left() < 6.0:
+                if not clock.can_call():
+                    out_of_time = True
                     break
                 try:
-                    out = _call(generate, prompt, AnswerOut, clock.budget())
+                    out = _call(generate, prompt, AnswerOut, clock.timeout())
                 except ReportError as e:
-                    if e.status == 504 or (e.code == "model_unavailable" and clock.left() < 6.0):
-                        raise
                     last = e
                     prompt = base
                     continue
@@ -1091,7 +1135,9 @@ def answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
             debug["program"] = [p.sentence.text for p in prog]
             passed.extend(prog)
             limit -= len(prog)
-            items = rewrite.compose(best or [], fs, limit, add_musts=False, sort=False,
+            # out of time with no answer and no fixed sentence: the must-mention facts' drafts
+            musts = out_of_time and best is None and not prog and not fixed
+            items = rewrite.compose(best or [], fs, limit, add_musts=musts, sort=False,
                                     check_draft=lambda s: check_answer(s, ev, "en")) if limit else []
             dropped = sum(r.sentence is None for r in best or [])
             debug["composed"] = [{"text": it.sentence.text, "fact_ids": it.fact_ids, "kind": it.kind} for it in items]
@@ -1100,11 +1146,14 @@ def answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
             for it in items:  # a rewrite is in the answer language; a draft is English
                 passed.append(Part(it.sentence, native=it.kind == rewrite.REWRITE,
                                    user=bool(it.user or set(it.sentence.source_ids) & ev.user_kb),
-                                   keep=text_values([fmap[i] for i in it.fact_ids if i in fmap])))
+                                   keep=text_values([fmap[i] for i in it.fact_ids if i in fmap]), fields=it.fields))
         if not passed and not fixed:
+            if last is None and not clock.can_call():
+                raise ReportError(504, "deadline_exceeded", "The request ran out of time.")
             raise last or ReportError(502, "validation_failed", "No answer sentence passed validation.")
         answer = finish(fixed + passed, language, ev, translate, debug,
-                        lambda p: facts_prompt.from_web(p.sentence.source_ids, eff, ev, data.items))
+                        lambda p: p.web if p.web is not None else
+                        facts_prompt.from_web(p.sentence.source_ids, eff, ev, data.items, p.fields))
 
         return FollowupResponse(language=language, answer=answer, out_of_scope=False, user_supplied=supplied,
                                 user_supplied_source=_sources_out(supplied, sources),
@@ -1115,13 +1164,18 @@ def answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
     #     returned; the year built and cladding code extracts from it fill user_supplied ("web_search") and re-run
     #     the rules; the answer's other sentences come from the usual steps. No search, or no source: the usual
     #     steps (fixed program sentences and links).
-    fields = [button] if button else fields_to_search(question, req, supplied)
+    # The button searches only a field the records do not have; a found field is answered from the records.
+    if button:
+        fields = [button] if missing_field(req, button) else []
+    else:
+        fields = fields_to_search(question, req, supplied)
     if fields and web_search and refusal_mode == "exempt":
-        web = field_search(req, fields, question, history, generate, clock, mock, debug)
+        web = field_search(req, fields, question, history, generate, clock, mock, debug,
+                           language if button and not req.question.strip() else "")
         if web:
             chat = req.chat_supplied()  # values only add: a value the user already gave is never replaced
-            for k in web_fields.FILLABLE:
-                if k in web.extracted and k not in supplied and k not in chat:
+            for k in web_fields.FILLABLE:  # council data > the user's values > search values
+                if k in web.extracted and k not in supplied and k not in chat and missing_field(req, k):
                     supplied[k], sources[k] = web.extracted[k], WEB_SEARCH
             only_web = FollowupResponse(language=language, answer=[], out_of_scope=False, user_supplied=supplied,
                                         user_supplied_source=_sources_out(supplied, sources),
@@ -1146,11 +1200,12 @@ def answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
             prompt = fp.web_prompt(address, question, history)
             # The model does not always search: asked once more, time allowing, when the answer names no source.
             # Neither call gets all the time that is left: web, the caller, has its own limit for the whole request.
+            # The search limit is shared with the field search: at most gemini.MAX_SEARCHES calls per request.
             try:
-                web = gemini_search(prompt, clock.call_budget(0.6))
-                if not web and clock.can_call():
-                    web = gemini_search(prompt, clock.call_budget(0.6))
-            except (gemini.ModelUnavailable, ReportError) as e:
+                web = _search(prompt, clock, 0.6)
+                if not web:
+                    web = _search(prompt, clock, 0.6)
+            except gemini.ModelUnavailable as e:
                 log.warning("web answer unavailable: %s", type(e).__name__)
                 web = None
             if web:
@@ -1189,6 +1244,6 @@ def allow_user_year(ev: Evidence, used: dict[str, Any]) -> None:
 
 def _kb(req: ReportRequest, clock: _Clock):
     try:
-        return kb.load(req.selected_kb_ids(), timeout=max(0.5, min(5.0, clock.left())))
+        return kb.load(req.selected_kb_ids(), timeout=min(5.0, max(0.1, clock.left())))
     except kb.KbUnavailable:
         raise ReportError(503, "kb_unavailable", "Knowledge-base items or sources could not be read.")

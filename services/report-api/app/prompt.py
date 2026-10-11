@@ -79,8 +79,8 @@ HOUSEHOLD = {"single": "a single buyer", "single_with_dependants": "a single buy
              "multiple": "multiple buyers"}
 MISSING = ("not_found", "unavailable")
 
-# Where a chat-supplied value came from (user_inputs.chat_supplied_source, set by web from the follow-up's
-# user_supplied_source). "web_search": extracted by code from a Google Search answer (team decision 10/11, plan C);
+# Where a chat-supplied value came from (user_inputs.chat_supplied_source, to be set by web from the follow-up's
+# user_supplied_source; not wired in web yet). "web_search": extracted by code from a Google Search answer (team decision 10/11, plan C);
 # facts then say "found online" instead of "you gave", and the prefix names the web search.
 USER, WEB_SEARCH = "user", "web_search"
 _TOPIC_FIELD = {"build_era": "year_built", "cladding": "cladding"}
@@ -93,15 +93,18 @@ def chat_sources(req: ReportRequest) -> dict[str, str]:
     return {k: (WEB_SEARCH if raw.get(k) == WEB_SEARCH else USER) for k in req.chat_supplied()}
 
 
-def from_web(source_ids: list[str], req: ReportRequest, ev: Evidence, kb_items: dict[str, dict]) -> bool:
-    """True when a user-dependent sentence relies only on values found by a web search: the fields of the
-    user-input KB items it cites, else every chat-supplied year built / cladding."""
+def from_web(source_ids: list[str], req: ReportRequest, ev: Evidence, kb_items: dict[str, dict],
+             fields=()) -> bool:
+    """True when a user-dependent sentence uses any value found by a web search, also next to a value the user gave:
+    the fields its facts depend on (Fact.fields) and the fields of the user-input KB items it cites; when neither
+    is known, any chat-supplied year built / cladding."""
     src = chat_sources(req)
     if WEB_SEARCH not in src.values():
         return False
-    keys = {_TOPIC_FIELD.get((kb_items.get(i) or {}).get("topic")) for i in source_ids if i in ev.user_kb} - {None}
+    keys = set(fields) | ({_TOPIC_FIELD.get((kb_items.get(i) or {}).get("topic")) for i in source_ids
+                           if i in ev.user_kb} - {None})
     keys = keys or {k for k in src if k in ("year_built", "cladding")}
-    return bool(keys) and all(src.get(k) == WEB_SEARCH for k in keys)
+    return any(src.get(k) == WEB_SEARCH for k in keys)
 
 
 def _gave(req: ReportRequest, key: str) -> str:
@@ -144,8 +147,9 @@ LEAKY_KB = ("kb_leaky_build_era", "kb_monolithic_cladding")
 class _Topic:
     """A fact under construction: text with {{$.name}} slots, rendered for word counts."""
 
-    def __init__(self, order: int, prio: int, topic: str, user: bool = False):
+    def __init__(self, order: int, prio: int, topic: str, user: bool = False, fields: tuple = ()):
         self.say, self.cite, self.order, self.prio, self.topic, self.user = "", [], order, prio, topic, user
+        self.fields: set[str] = set(fields)  # chat-supplied fields the fact depends on (Fact.fields)
         self.slots: dict[str, Slot] = {}
         self.clause: Optional[str] = None  # lower-case form appended to another sentence when over the cap
         self.keep: list[str] = []          # extra phrases a rewrite must keep, in this order
@@ -408,7 +412,7 @@ def _topics(req: ReportRequest, ev: Evidence, kb_items: dict[str, dict]) -> list
                    + t.slot("year_built", yb.value, "year", "the year built from the council's property category",
                             "ac_property_page"))
         if uy is not None and not inside:
-            u = _Topic(O_USER, P_ERA, "user_year", user=True)
+            u = _Topic(O_USER, P_ERA, "user_year", user=True, fields=("year_built",))
             year_user = (u, f"the year {yg} differs from the council's property category, which gives "
                          + u.slot("council_year", yb.value, "year", "the year built the council's property "
                                   "category gives", "ac_property_page") + "; this report uses the council figure")
@@ -417,9 +421,10 @@ def _topics(req: ReportRequest, ev: Evidence, kb_items: dict[str, dict]) -> list
                 say += ", a period covered by Settled.govt.nz's guidance on leaky buildings"
             out.append(t.set(say + ".", ["ac_property_page"] + (["kb_leaky_build_era"] if leaky else [])))
             if inside:
-                year_user = (_Topic(O_USER, P_ERA, "user_year", user=True), f"the year {yg} falls in the same decade")
+                year_user = (_Topic(O_USER, P_ERA, "user_year", user=True, fields=("year_built",)),
+                             f"the year {yg} falls in the same decade")
     elif uy is not None:
-        u = _Topic(O_USER, P_ERA, "user_year", user=True)
+        u = _Topic(O_USER, P_ERA, "user_year", user=True, fields=("year_built",))
         if "kb_leaky_build_era" in user_leaky and clad_ok:
             # both leaky-building items from what the user told us: one sentence names both (RUBRIC 3, user facts)
             out.append(u.set(f"The year {yg} and the monolithic cladding are both discussed in Settled.govt.nz's "
@@ -427,6 +432,7 @@ def _topics(req: ReportRequest, ev: Evidence, kb_items: dict[str, dict]) -> list
                              ["ac_property_page", "kb_leaky_build_era", "kb_monolithic_cladding"],
                              keep=["monolithic cladding", "leaky buildings", "could not confirm them"]))
             u.topic, clad_ok = "user_year_cladding", False
+            u.fields.add("cladding")
         elif "kb_leaky_build_era" in user_leaky:
             out.append(u.set(f"The year {yg} falls in a period covered by Settled.govt.nz's guidance on leaky "
                              "buildings; council records could not confirm it.",
@@ -439,6 +445,7 @@ def _topics(req: ReportRequest, ev: Evidence, kb_items: dict[str, dict]) -> list
         merged = clause + ", and " + clad_text
         if clad_ok and words(_DRAFT_RE.sub(lambda m: u.slots[m.group(1)].render(), merged)) <= MERGED_MAX_WORDS:
             u.topic = "user_year_cladding"
+            u.fields.add("cladding")
             out.append(u.set(merged[:1].upper() + merged[1:] + ".", ["ac_property_page", "kb_monolithic_cladding"],
                              keep=["is monolithic", "discusses"]))
             clad_ok = False
@@ -446,7 +453,7 @@ def _topics(req: ReportRequest, ev: Evidence, kb_items: dict[str, dict]) -> list
             out.append(u.set(clause[:1].upper() + clause[1:] + ".", ["ac_property_page"],
                              keep=["council figure"] if "council figure" in clause else []))
     if clad_ok:
-        out.append(_Topic(O_USER, P_ERA, "user_cladding", user=True).set(
+        out.append(_Topic(O_USER, P_ERA, "user_cladding", user=True, fields=("cladding",)).set(
             clad_text[:1].upper() + clad_text[1:] + "; public data could not confirm it.", ["kb_monolithic_cladding"],
             keep=["is monolithic", "discusses"]))
     for t in out:  # a user fact that cites a leaky-building item the user's input triggered is a must-mention
@@ -527,7 +534,7 @@ def fact_list(req: ReportRequest, ev: Evidence, kb_items: dict[str, dict]) -> li
         fid = f"F{n}"
         text = _DRAFT_RE.sub(lambda m: "{{" + fid + "." + m.group(1) + "}}", t.say)
         out.append(Fact(id=fid, text=text, source_ids=t.cite, slots=dict(t.slots), topic=t.topic, priority=t.prio,
-                        user=t.user, must=id(t) in musts, order=t.order, keep=list(t.keep)))
+                        user=t.user, must=id(t) in musts, order=t.order, keep=list(t.keep), fields=sorted(t.fields)))
     return out
 
 
@@ -624,6 +631,8 @@ def followup_facts(req: ReportRequest, ev: Evidence, kb_items: dict[str, dict],
         claim = (kb_items.get(i) or {}).get("claim_en")
         if i in kb_items and claim and i in ev.selected_kb:
             t = _Topic(90, P_EXTRA, "kb:" + str(kb_items[i].get("topic") or ""), user=i in ev.user_kb)
+            if i in ev.user_kb and _TOPIC_FIELD.get(kb_items[i].get("topic")):
+                t.fields.add(_TOPIC_FIELD[kb_items[i]["topic"]])
             extra.append(t.set(_claim_fact(t, i, claim), [i]))
     for name, f in req.property_fields().items():
         if not f.source_id:
@@ -662,7 +671,7 @@ def followup_facts(req: ReportRequest, ev: Evidence, kb_items: dict[str, dict],
     user_kb = sorted(ev.user_kb)
     if used and user_kb:
         if used.get("year_built") is not None:
-            t = _Topic(94, P_EXTRA, "user_said", user=True)
+            t = _Topic(94, P_EXTRA, "user_said", user=True, fields=("year_built",))
             y = used["year_built"]
             m = re.fullmatch(r"(\d{3}0)s", str(y))
             v = t.slot("user_year", int(m.group(1)) if m else y, "decade" if m else "year",
@@ -670,7 +679,7 @@ def followup_facts(req: ReportRequest, ev: Evidence, kb_items: dict[str, dict],
                                            "the user told us") + " (unverified)", user_kb[0])
             extra.append(t.set(f"The year built {_gave(req, 'year_built')} is {'the ' if m else ''}{v}.", user_kb))
         if used.get("cladding"):
-            t = _Topic(94, P_EXTRA, "user_said", user=True)
+            t = _Topic(94, P_EXTRA, "user_said", user=True, fields=("cladding",))
             v = t.slot("user_cladding", cladding_table.label(str(used["cladding"])), "text", "the cladding " + ("a web search found" if _gave(req, "cladding") != "you gave" else
                                          "the user told us") + " (unverified)", user_kb[0])
             extra.append(t.set(f"The cladding {_gave(req, 'cladding')} is {v}.", user_kb))
@@ -691,7 +700,7 @@ def _fact(t: _Topic, n: int, program: bool = False) -> Fact:
     fid = f"F{n}"
     text = _DRAFT_RE.sub(lambda m: "{{" + fid + "." + m.group(1) + "}}", t.say)
     return Fact(id=fid, text=text, source_ids=t.cite, slots=dict(t.slots), topic=t.topic, priority=t.prio,
-                user=t.user, must=False, order=t.order, keep=list(t.keep), program=program)
+                user=t.user, must=False, order=t.order, keep=list(t.keep), program=program, fields=sorted(t.fields))
 
 
 def _program_topics(req: ReportRequest, ev: Evidence, kb_items: dict[str, dict], used: dict[str, Any]) -> list[_Topic]:
@@ -706,7 +715,8 @@ def _program_topics(req: ReportRequest, ev: Evidence, kb_items: dict[str, dict],
         if f.status not in MISSING:
             continue
         given = chat.get(name) if name in ("year_built", "cladding") else None
-        t = _Topic(95, P_EXTRA, "program:" + name, user=given is not None)
+        t = _Topic(95, P_EXTRA, "program:" + name, user=given is not None,
+                   fields=(name,) if given is not None else ())
         if name == "year_built" and given is not None:
             m = re.fullmatch(r"(\d{3}0)s", str(given))
             if not m and not isinstance(given, int):

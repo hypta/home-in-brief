@@ -29,6 +29,7 @@ class Item:
     fact_ids: list[str]
     kind: str          # rewrite | draft (a blocked rewrite's fact) | must_added (a must fact no sentence used)
     user: bool         # uses a fact that relies on chat-supplied input: the caller adds the prefix
+    fields: frozenset = frozenset()  # the chat-supplied fields its facts depend on (Fact.fields): picks the prefix
 
 
 def compose(checked: list[Rewrite], facts: list[Fact], limit: int, add_musts: bool = True,
@@ -47,12 +48,13 @@ def compose(checked: list[Rewrite], facts: list[Fact], limit: int, add_musts: bo
         if fails:  # drafts are tested to pass; never show one that does not
             log.warning("draft %s dropped: %s", fid, ",".join(fails))
             return
-        items.append(Item(s, [fid], kind, f.user))
+        items.append(Item(s, [fid], kind, f.user, frozenset(f.fields)))
         covered.add(fid)
 
     for r in checked:
         if r.sentence is not None:
-            items.append(Item(r.sentence, r.fact_ids, REWRITE, any(fmap[i].user for i in r.fact_ids)))
+            items.append(Item(r.sentence, r.fact_ids, REWRITE, any(fmap[i].user for i in r.fact_ids),
+                              frozenset(x for i in r.fact_ids for x in fmap[i].fields)))
         else:
             for fid in sorted(r.fact_ids, key=lambda i: fmap[i].priority):
                 if fid not in covered:

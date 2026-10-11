@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import logging
 import os
-import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Optional
@@ -57,18 +56,17 @@ def mock_enabled() -> bool:
 def build_report(req: ReportRequest, generate: Optional[gemini.Generator] = None,
                  debug: Optional[Debug] = None) -> Report:
     debug = debug if debug is not None else Debug()
-    start = time.monotonic()
-    deadline = start + _env_float("REQUEST_DEADLINE_S", 25.0)
-    call_limit = _env_float("GEMINI_TIMEOUT_S", 20.0)
+    budget = gemini.Budget()
 
     try:
-        kbd = kb.load(req.selected_kb_ids(), timeout=min(5.0, deadline - time.monotonic()))
+        kbd = kb.load(req.selected_kb_ids(), timeout=min(5.0, max(0.1, budget.left())))
     except kb.KbUnavailable:
         raise ReportError(503, "kb_unavailable", "Knowledge-base items or sources could not be read.")
     ev = build_evidence(req, kbd.items, kbd.sources.keys())
     titles = {s.id: s.title or "" for s in req.sources()} | kbd.sources
 
     user_flags: list[bool] = []
+    item_fields: list[frozenset] = []  # the chat-supplied fields each sentence's facts depend on
     if mock_enabled():
         debug.mode = "mock"
         case = mock.match_case(req)
@@ -85,14 +83,17 @@ def build_report(req: ReportRequest, generate: Optional[gemini.Generator] = None
     else:
         model = gemini.model_name()
         items, dropped = _gemini_summary(req, ev, kbd.items, titles, generate or gemini.gemini_generate,
-                                         deadline, call_limit, debug)
+                                         budget, debug)
         passed, user_flags = [it.sentence for it in items], [it.user for it in items]
+        item_fields = [it.fields for it in items]
 
     user_flags += [False] * (len(passed) - len(user_flags))
-    # The prefix names where the value came from: the user, or a web search (user_inputs.chat_supplied_source).
-    summary = [with_prefix(s, WEB_PREFIX if prompt.from_web(s.source_ids, req, ev, kbd.items) else PREFIX)
+    item_fields += [frozenset()] * (len(passed) - len(item_fields))
+    # The prefix names where the value came from: the user, or a web search (user_inputs.chat_supplied_source). A
+    # sentence that uses any value found by a web search gets the web prefix, also when it uses the user's values.
+    summary = [with_prefix(s, WEB_PREFIX if prompt.from_web(s.source_ids, req, ev, kbd.items, fields) else PREFIX)
                if user or relies_on_user_input(s, ev) else s
-               for s, user in list(zip(passed, user_flags))[:MAX_SUMMARY]]
+               for s, user, fields in list(zip(passed, user_flags, item_fields))[:MAX_SUMMARY]]
     fixed = assemble.no_loan_sentence(req)
     if fixed:
         summary.append(fixed)
@@ -107,10 +108,12 @@ def build_report(req: ReportRequest, generate: Optional[gemini.Generator] = None
     )
 
 
-def _gemini_summary(req, ev, kb_items, titles, generate, deadline, call_limit, debug) -> tuple[list, int]:
+def _gemini_summary(req, ev, kb_items, titles, generate, budget: gemini.Budget, debug) -> tuple[list, int]:
     """Gemini rewrites the fact list; each rewrite is checked (validator.check_rewrite) and blocked ones fall back
-    to their facts' drafts (rewrite.compose). One retry when no rewrite passes and time allows. Returns the
-    composed items and the number of blocked model sentences."""
+    to their facts' drafts (rewrite.compose). One retry when no rewrite passes and time allows. A call is made only
+    with gemini.ADMIT_S left (and sent with at least gemini.MIN_CALL_S); when there is no time for a first call, or
+    for another after a failed one, the summary is the facts' drafts. Returns the composed items and the number of
+    blocked model sentences."""
     fs = prompt.fact_list(req, ev, kb_items)
     debug.facts = [{"id": f.id, "text": f.text, "draft": f.draft(), "must": f.must, "user": f.user,
                     "source_ids": f.source_ids} for f in fs]
@@ -119,17 +122,16 @@ def _gemini_summary(req, ev, kb_items, titles, generate, deadline, call_limit, d
     last_error: Optional[ReportError] = None
     last_seconds = 0.0
     best: Optional[list] = None
+    out_of_time = False
     for attempt in range(2):
-        remaining = deadline - time.monotonic()
-        if attempt and remaining < last_seconds + 1.0:
-            break  # not enough time left for a full second attempt
-        if remaining <= 1.0:
+        if not budget.can_call() or (attempt and budget.left() < last_seconds + 1.0):
+            out_of_time = True  # not enough time left for a (full second) call
             break
-        t0 = time.monotonic()
+        t0 = gemini.clock()
         rec = Attempt(0.0)
         debug.attempts.append(rec)
         try:
-            raw = generate(text, min(call_limit, remaining))
+            raw = generate(text, budget.timeout())
             sentences = gemini.parse(raw)
         except gemini.ModelUnavailable as e:
             rec.error = f"model_unavailable: {e}"
@@ -149,13 +151,16 @@ def _gemini_summary(req, ev, kb_items, titles, generate, deadline, call_limit, d
                     log.info("rewrite blocked: %s", ",".join(r.fails))
             if best is None or sum(r.sentence is not None for r in checked) > sum(r.sentence is not None for r in best):
                 best = checked
-            rec.seconds = last_seconds = time.monotonic() - t0
+            rec.seconds = last_seconds = gemini.clock() - t0
             if any(r.sentence is not None for r in checked):
                 break
             last_error = None
             text = base + prompt.retry_note([f for r in checked for f in r.fails] or ["no sentences"])
             continue
-        rec.seconds = last_seconds = time.monotonic() - t0
+        rec.seconds = last_seconds = gemini.clock() - t0
+    if best is None and out_of_time:
+        log.info("no time for a model call; summary from the drafts")
+        best = []
     if best is None:
         raise last_error or ReportError(503, "model_unavailable", "The language model did not answer in time.")
     items = rewrite.compose(best, fs, MAX_SUMMARY, add_musts=True,

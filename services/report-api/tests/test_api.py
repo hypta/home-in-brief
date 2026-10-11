@@ -116,18 +116,15 @@ def test_missing_key_is_model_unavailable():
     assert r.status_code == 503 and r.json()["error"]["code"] == "model_unavailable"
 
 
-def test_no_retry_without_time(monkeypatch):
-    import time
-
-    def slow(prompt, timeout_s):
-        time.sleep(0.3)
-        return "not json"
+def test_no_call_without_time_uses_the_drafts(monkeypatch):
+    """Under gemini.ADMIT_S (11 s) left, no Gemini call is made (the API refuses deadlines under 10 s): the summary is
+    the must-mention facts' drafts."""
     calls = []
-    monkeypatch.setattr(gemini, "gemini_generate", lambda p, t: calls.append(1) or slow(p, t))
+    monkeypatch.setattr(gemini, "gemini_generate", lambda p, t: calls.append(t) or "not json")
     monkeypatch.setenv("REQUEST_DEADLINE_S", "0.5")
-    monkeypatch.setenv("GEMINI_TIMEOUT_S", "0.4")
     r = client.post("/v1/report", json=body("case1"))
-    assert r.status_code in (502, 503) and len(calls) <= 1
+    assert r.status_code == 200 and calls == []
+    assert r.json()["summary"] and r.json()["summary"][0]["text"].startswith("Council maps show")
 
 
 def test_kb_unavailable_is_503(monkeypatch):

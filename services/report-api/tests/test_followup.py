@@ -477,7 +477,8 @@ def test_gemini_search_lists_each_page_once_and_needs_a_source(monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", "k")
     monkeypatch.setattr(genai, "Client", Client)
     found = followup.gemini_search("prompt", 5)
-    assert found.text == "Buses run to the city." and found.search_suggestions == "<div>chips</div>"
+    # shown as returned: not even the surrounding spaces are removed
+    assert found.text == " Buses run to the city. " and found.search_suggestions == "<div>chips</div>"
     assert [s.model_dump() for s in found.sources] == [{"title": "at.govt.nz", "url": "https://redirect.invalid/1"},
                                                         {"title": "at.govt.nz", "url": "https://redirect.invalid/2"}]
     assert followup.gemini_search("prompt", 5) is None  # an answer the search grounded on no page

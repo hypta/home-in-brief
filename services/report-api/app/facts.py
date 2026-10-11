@@ -115,6 +115,9 @@ class Fact:
     order: int = 0                # display order (RUBRIC 1)
     keep: list[str] = field(default_factory=list)  # extra phrases a rewrite must keep (besides validator.QUALIFIERS)
     program: bool = False         # follow-up only: shown as its draft, never rewritten (prompt.program_facts)
+    # The chat-supplied fields ("year_built", "cladding") the fact depends on: a sentence using a fact whose field
+    # came from a web search gets the web-search prefix (prompt.from_web).
+    fields: list[str] = field(default_factory=list)
 
     def draft(self) -> str:
         return fill(self.text, {self.id: self})

@@ -107,7 +107,9 @@ Request: the three documents plus `question` (1-1000 characters) and `history` (
 `{role: "user"|"assistant", text}`, text at most 2000 characters; web sends the last 3 turns). No server state.
 Query `refusal_mode`: `exempt` (default) or `strict`. Optional `search_field`: `"year_built"`, `"cladding"` or
 `"last_sale"` (the "Search the web for this" button; `question` may then be empty; see "Fields the records do not
-have" below).
+have" below). Optional `language` (BCP 47, e.g. `"zh-Hant"`, `"zh-TW"`, `"ja"`; default `en`): for a button request
+**without** a question, the page's language, used for the search answer and the derived sentences; ignored when
+a question is sent (its language is detected as usual). A malformed code is a 422 `validation_error`.
 
 Response 200: `{language, answer: [{text, source_ids}], out_of_scope, user_supplied, links, dropped, warnings}`,
 plus `web` when an out-of-scope question was answered from a Google Search (step 3; `answer` is then `[]`) or a
@@ -127,11 +129,14 @@ Steps (INTERFACE_DRAFT 5 and 6.1):
 2. `user_supplied`, checked by code: `year_built` is an integer 1800..this year or a decade such as `1990s`
    that appears in the question as written; `cladding` is one of `monolithic`, `weatherboard`, `brick`,
    `concrete`, `other` and a matching word must appear in the question. A question with a conditional or
-   negation word (`if`, `not`, `如果`, `假如`, `不是`, ...) gives no value. Logged as `user_supplied_ignored`.
+   negation word (`if`, `not`, `如果`, `假如`, `不是`, ...) gives no value, and so does a value the question only
+   asks about (`followup.affirmed`: "Was it built in 1997?", `這房子是 1997 年蓋的嗎？`; "It was built in 1997, what
+   does that mean?" states it). Logged as `user_supplied_ignored`.
 3. Out of scope, and classify says web pages can answer it (schools, commute, services nearby, published crime
    statistics; never advice, verdicts or predictions): a Gemini call with the Google Search tool
    (`followup.gemini_search`, prompt `followup_prompt.web_prompt` with the matched address, the question and the
-   history), made once more, time allowing, when the first answer names no source. The response carries `web: {text, sources: [{title, url}], search_suggestions}`: the answer in the
+   history), made once more, time allowing, when the first answer names no source. Field searches (below) and this
+   search share one limit: at most 2 search calls per request. The response carries `web: {text, sources: [{title, url}], search_suggestions}`: the answer in the
    language of the question, the pages the search grounded it on (`title` is the site's domain, `url` is
    Google's redirect) and Google's search-suggestions HTML. This text is **not** checked by the validator and is
    not edited by code: the Gemini API terms for Grounding with Google Search require it to be shown as returned,
@@ -225,52 +230,87 @@ Steps (INTERFACE_DRAFT 5 and 6.1):
 Ting reversed "no Gemini help for data the first-hand sources do not have" on 10/11 (the risk is recorded; the team
 chose plan C). For `year_built`, `cladding` and `last_sale` (`app/web_fields.py`, `followup.field_search`):
 
-- **Triggers.** (1) A question about one of them (`followup._FIELD_Q`, any wording that asks: a question mark or a
-  question word) when PropertyContext has it as `not_found` / `unavailable` (or lacks it), the user has not given
-  it (in this question or earlier in `chat_supplied`), and, for the year, the question has no year in it. A field
-  PropertyContext has (`found`) is answered from the program's facts as before, with no search. (2) The button:
-  `search_field` searches for that one field with no classify call (`question` is optional and only sets the
-  language; empty means English).
+- **Triggers.** (1) A question about one of them (`followup._FIELD_Q`: built, constructed, erected, how old,
+  建造, 哪年蓋, ...; any wording that asks: a question mark or a question word) when PropertyContext has it as
+  `not_found` / `unavailable` (or lacks it) and the user has not given it: stated in this question (a value the
+  question only asks about, "Was it built in 1997?", does not count) or earlier in `chat_supplied`. Other years in
+  the question ("It sold in 2019; when was it built?") do not stop the search. (2) The button: `search_field`
+  searches for that one field with no classify call (`question` is optional and only sets the language; without
+  one, `language`, default English). Both triggers search only a field the records do not have: a field
+  PropertyContext has (`found`) is answered from the records (the program's facts), with no search, also for the
+  button.
 - **Search.** One Gemini call with the Google Search tool (`followup_prompt.field_search_prompt`: the matched
   address and the fields; it asks for plain sentences such as "built in 1987"), a second only when the first names
-  no source and at least 8 s are left. Sources are not filtered by domain (team decision). No answer, no source, a
-  failed call, `strict` mode or no `web_search` (eval): the usual steps run (fixed program sentences and links).
+  no source; at most 2 search calls per request in all (with the out-of-scope search), each only with at least 11 s
+  left (see Time). Sources are not filtered by domain (team decision). No answer, no source, a failed call,
+  `strict` mode or no `web_search` (eval): the usual steps run (fixed program sentences and links).
 - **Shown as returned.** `web: {text, sources, search_suggestions, fields, extracted}`: `text`, `sources` and
-  `search_suggestions` as for step 3, never edited or mixed with anything. `fields`: the fields searched for.
+  `search_suggestions` as for step 3, never edited or mixed with anything (`text` is the model's text exactly, not
+  even trimmed). `fields`: the fields searched for.
   `extracted`: what code took from `text`, e.g. `{"year_built": 1987, "cladding": "wood", "last_sale": {"date":
   "March 2019", "price": "$850,000"}}` (each key only when found).
-- **Extraction** (`web_fields.extract`, by code first): a year 1800..this year, or a decade (`1990s`, `1990 年代`),
-  whose nearest keyword is a build word (built, constructed, 建於, 興建, ...; not renovated, sold, 改建, 售出, ...);
-  the cladding words of `b_common.cladding` in a sentence about the walls (not a roof, floor or fence), giving one
-  of the 13 shared values; for the last sale one date and one price in sale sentences. Sentences with a negation or
-  an uncertainty word (not, unknown, may, estimated, 無法, 可能, ...) are skipped. Two different values for a field:
-  nothing (ambiguous). A field code found nothing for may be asked once of Gemini (`followup_prompt.extract_prompt`:
-  the search text only, no question; `web_fields.check_model_values`): kept only when the year is written in the
-  text and in the model's quote from the text, or the cladding is named in that quote.
+- **Extraction** (`web_fields.extract`, by code first). The text is split into sentences (a decimal point, as in
+  "$1.2 million", never ends one) and clauses (commas, but, whereas, 但, ...). A sentence about another property
+  (neighbouring, next door, nearby, the street, the suburb, 隔壁, 附近, ..., or a street address that is not the
+  property's) is skipped. A clause with a negation or an uncertainty word (not, unknown, may, estimated, 無法, 可能,
+  ...) is skipped, and for the year also one with an approximation (probably, circa, c., approximately, about/around
+  1987, before 1990, 大約, 約 1987 年, 左右, 初期, ...); the negation of another clause does not count ("built in 1987,
+  but not renovated" gives 1987). Year: a year 1800..this year, or a decade (`1990s`, `1990 年代`), as a whole token
+  (1990 is not "1990s"), whose nearest keyword in its clause is a build word (built, constructed, 建於, 興建, ...; not
+  renovated, sold, 改建, 售出, ...). Cladding: each material word of `b_common.cladding` is bound to the part of the
+  building it belongs to (the part named right after it, "brick exterior", "iron roof", else the nearest part named
+  before it in its clause, "the fence is wood", else the clause's wall wording); only wall materials count ("The
+  walls are brick and the fence is wood." gives brick), giving one of the 13 shared values. Last sale: one sale
+  event (one sentence with a sale word, about this property) with its own date and price; several events: the one
+  marked last/latest, else nothing. Ambiguity: two different values for a field, or for the year any other
+  plausible year in the whole text (a year with no dated-event keyword, "1965 or 1972"), fills nothing. A field code
+  found nothing for may be asked once of Gemini (`followup_prompt.extract_prompt`: the search text only, marked as
+  untrusted page data and never instructions, no question): its value is kept only when its quote is written in
+  the text and the quote's clause passes the same checks (affirmative, about this property, a build word and no
+  other dated event for the year, a wall material for the cladding) and the text gives no other plausible year or
+  wall material (`web_fields.check_model_values`). `web.text` is never changed by any of this.
 - **Merge.** `year_built` and `cladding` go into `user_supplied` with `user_supplied_source: {"year_built":
   "web_search", ...}` (one entry per `user_supplied` key, `"user"` for values from the question; the key is absent
   when no value came from a search). `last_sale` never goes into `user_supplied` (rules-api has no such input); it
-  is only in `web.extracted`. The usual merge applies: values only add; a property value with status `found` wins
-  and code writes the comparison ("A web search gave the year built as 1985; the council records the 1960s
-  (1960–1969), and this answer uses the council's record." / `網路搜尋找到的建造年份是 1985 年；...`). A new value
+  is only in `web.extracted`. Order: council data > the user's own values > search values; values only add, never
+  clear. A search value never fills a field the records have (status `found`) and never replaces a value the user
+  gave (in this question or in `chat_supplied`); such values stay in `web.extracted` only, so `user_supplied` never
+  holds a search value that conflicts with the council's. (A code comparison of a value found online with a found
+  record, "Based on a web search (not checked by this service), web pages give the year built as 1985; the council
+  records ...", is kept for values that reach the follow-up some other way.) A new value
   re-runs rules-api with `user_inputs.chat_supplied_source` added (rules-api ignores unknown keys), and the answer
   comes from the new facts ("The year built found online is 1987."). The fixed program sentence of a searched field
   is left out next to the search answer. The button with nothing to fill in (last sale, ambiguous, none found), or
-  less than 6 s left, or an answer step that fails: `answer: []` and `web` only.
+  less than 11 s left, or an answer step that fails: `answer: []` and `web` only.
 - **Prefix.** A sentence that depends on a value found online gets "Based on a web search (not checked by this
   service), " / `依網路搜尋結果（未經本系統核對），` / `依网络搜索结果（未经本系统核对），`; other languages translate the
-  English phrase (at most 70 characters). The source of a sentence is the field of the user-input KB items it cites
-  (`build_era` -> year built, `cladding` -> cladding), else every chat-supplied year/cladding; all from the web
-  gives the web prefix, otherwise "Based on what you told us, ".
-- **`/v1/report`.** web sends the source back as `user_inputs.chat_supplied_source: {"year_built": "web_search"}`
-  next to `chat_supplied` (a missing key or any other value means `"user"`). The summary then says "found online"
-  instead of "you gave" and uses the web prefix by the same rule (`prompt.chat_sources`, `prompt.from_web`).
+  English phrase (at most 70 characters). Each fact records the chat-supplied fields it depends on (`Fact.fields`:
+  the user-year, user-cladding, user-said and program facts, KB claims selected by the user's input); a sentence
+  depends on the fields of its facts plus those of the user-input KB items it cites (`build_era` -> year built,
+  `cladding` -> cladding), and, when neither is known, on every chat-supplied year/cladding. If **any** of them came
+  from a web search the sentence gets the web prefix, also when it mixes a search value with the user's value;
+  otherwise "Based on what you told us, ". A council comparison that involves a search value also gets the web
+  prefix (`prompt.from_web`).
+- **`/v1/report`.** report-api reads the source from `user_inputs.chat_supplied_source: {"year_built":
+  "web_search"}` next to `chat_supplied` (a missing or malformed value, or any value other than `"web_search"`,
+  means `"user"`). The summary then says "found online" instead of "you gave" and uses the web prefix by the same
+  rule (`prompt.chat_sources`, `prompt.from_web`). **Not wired in web yet (teammate A's work):** web fills the form
+  from `user_supplied` but does not yet keep `user_supplied_source` or send `chat_supplied_source` on the report
+  recalculation and later follow-ups, so today a search-filled value comes back as the user's own value. web needs
+  to store the source with each form value (`"web_search"` from the follow-up response, `"user"` after a manual
+  edit) and send it as `user_inputs.chat_supplied_source`.
 - **Mock** (`REPORT_MOCK=true`): no search; `web` is `followup.MOCK_WEB` (text starting "MOCK web search answer",
   source `example.com`), and extraction by code gives `year_built: 1985`, `cladding: "wood"`, `last_sale: {date:
   "March 2019", price: "$850,000"}` (only the fields asked for).
 
-Time: one budget, `REQUEST_DEADLINE_S`; each Gemini call gets at most `GEMINI_TIMEOUT_S` and what is left;
-the rules re-run at most 5 s.
+Time (`gemini.Budget`, used by `/v1/report` and `/v1/followup`): one deadline per request, `REQUEST_DEADLINE_S`
+(25 s; web waits 30 s). Every Gemini call (summary and its retry, classify, answer and its retry, translations,
+extraction, field and out-of-scope searches) is made only when at least 11 s are left (`gemini.ADMIT_S`) and is sent
+with a deadline of at least 10 s (`gemini.MIN_CALL_S`; the API refuses shorter ones with 400 "Minimum allowed
+deadline is 10s"), at most `GEMINI_TIMEOUT_S` and 1 s less than what is left, so no call runs past the deadline.
+At most 2 search calls per request (`gemini.MAX_SEARCHES`). The rules re-run gets at most 5 s, the KB read at most
+5 s. Without time for a call the answer is code's: the summary's must-mention drafts, the follow-up's program
+sentences (or must-mention drafts), English instead of a translation, the fixed refusal instead of a search.
 
 Mock (`REPORT_MOCK=true`, no Gemini call, for front-end work without a key): code classifies the question.
 Out-of-scope keywords (school, zone, commute, crime, neighbour, traffic, 學區, 通勤, 治安, ...; not when the
@@ -335,7 +375,7 @@ A summary sentence is dropped when any rule fails (rule code in parentheses, log
 | `KB_DIR` | `kb/seed` | Seed directory for `KB_SOURCE=local` |
 | `REPORT_MOCK` | false | `true`: no Gemini call (below) |
 | `GEMINI_TIMEOUT_S` | 20 | Limit for one Gemini call |
-| `REQUEST_DEADLINE_S` | 25 | Total budget; one retry (invalid JSON, 0 passing sentences, model error) only if the remaining time covers another attempt |
+| `REQUEST_DEADLINE_S` | 25 | Total budget; a Gemini call only with at least 11 s left, sent with at least 10 s; one retry (invalid JSON, 0 passing sentences, model error) only if the remaining time covers another attempt; no time for a call: drafts |
 
 ## Mock mode
 
