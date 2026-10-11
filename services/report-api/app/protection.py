@@ -12,13 +12,20 @@ Search) reserves one call BEFORE it is sent (`admit`), in one Firestore transact
 A call is refused when `disabled` is true, `event_calls` >= GEMINI_EVENT_CALLS (whole judging period),
 `calls` >= GEMINI_DAILY_CALLS, or (Search only) `searches` >= SEARCH_DAILY_CALLS. A Search call counts once in
 `calls` and once in `searches`. Reserved calls are never refunded (failures and timeouts count). The transaction
-makes no Gemini call; it gets PROTECTION_TIMEOUT_S (1 s) in all, at most 2 attempts on contention. Firestore
-unavailable, slow or conflicting: the call is refused (`backend_error`).
+makes no Gemini call; it gets PROTECTION_TIMEOUT_S (1 s; never more than the request has left) for its whole life:
+begin, reads, commit and rollback each get only what is left of that limit (Codex R1), at most 2 attempts on
+contention. The caller stops waiting at the limit and the next reservation may start at once; at most
+MAX_IN_FLIGHT transactions run per process (a further one is refused at once). Firestore unavailable, slow or
+conflicting: the call is refused (`backend_error`).
 
 Refused calls never reach the network: the caller falls back to the program's drafts (gemini.ModelUnavailable
 with category obs.ALLOWANCE, in gemini.NO_RETRY). A refused Search (obs.SEARCH_ALLOWANCE) stops only that search.
 REPORT_DEGRADED=true refuses every call without reading Firestore; a prompt over GEMINI_INPUT_MAX_BYTES is refused
 without counting.
+
+Request stop (Codex R5): a refusal other than the Search allowance, provider quota (429), a configuration error or no
+time left after a reservation stops the whole request: every later SDK wrapper refuses before reserving
+(gemini.check_stopped). A used-up Search allowance only stops searches.
 
 PROTECTION_BACKEND: firestore (default on Cloud Run, where K_SERVICE is set) | memory (default elsewhere: one
 process, for local runs and tests) | off (no allowance; slots, REPORT_DEGRADED and the size cap still apply).
@@ -49,6 +56,11 @@ DISABLED = "disabled"          # protection/control.disabled is true
 BACKEND = "backend_error"      # Firestore unavailable, slow or conflicting
 DEGRADED = "degraded"          # REPORT_DEGRADED=true
 TOO_LARGE = "prompt_too_large"  # prompt over GEMINI_INPUT_MAX_BYTES
+DEADLINE = "deadline"          # reserved, then no time left to send the call (kept, never refunded)
+
+# X-Report-Degraded-Reason (Codex R3) for each refusal; obs adds model_error and deadline
+DEGRADED_REASON = {DAILY: "allowance_daily", EVENT: "allowance_event", DISABLED: "disabled", DEGRADED: "disabled",
+                   BACKEND: "backend_error", TOO_LARGE: "prompt_too_large", DEADLINE: "deadline"}
 
 GENERATION_DEGRADED = "generation_degraded"  # response warning when a model call was refused (not for SEARCH)
 COLLECTION = "protection"
@@ -134,6 +146,7 @@ def generation_slot() -> Iterator[None]:
 @dataclass
 class Scope:
     refused: list[str] = field(default_factory=list)
+    stop: Optional[str] = None  # why the request makes no further model call (Codex R5), None: calls allowed
 
     @property
     def degraded(self) -> bool:
@@ -151,6 +164,27 @@ def request_scope() -> Iterator[Scope]:
         yield sc
     finally:
         _scope.reset(token)
+
+
+def stop_request(why: str) -> None:
+    """No further model call in this request (quota, config, allowance refusal, no time after a reservation)."""
+    sc = _scope.get()
+    if sc is not None and sc.stop is None:
+        sc.stop = why
+
+
+def stopped() -> bool:
+    sc = _scope.get()
+    return sc is not None and sc.stop is not None
+
+
+def refused_after_reservation() -> None:
+    """The call was reserved but the request's deadline left no time to send it: degraded like a refusal."""
+    sc = _scope.get()
+    if sc is not None:
+        sc.refused.append(DEADLINE)
+    log.info("gemini call not sent: no time left after the reservation",
+             extra={"json_fields": {"event": "allowance_refused", "allowance": DEADLINE}})
 
 
 # ---- allowance -------------------------------------------------------------------------------------------------
@@ -186,7 +220,7 @@ class MemoryBackend:
         self.control: dict = {}
         self.days: dict[str, dict] = {}
 
-    def reserve(self, search: bool, lim: Limits, day: str) -> str:
+    def reserve(self, search: bool, lim: Limits, day: str, wait_s: Optional[float] = None) -> str:
         with self.lock:
             d = self.days.setdefault(day, {"date": day, "calls": 0, "searches": 0})
             reason = decide(self.control, d, search, lim)
@@ -198,15 +232,70 @@ class MemoryBackend:
             return reason
 
 
+MAX_IN_FLIGHT = 2  # allowance transactions running at once per process (abandoned ones included)
+
+
+def _bounded_transaction(client, end: float):
+    """A Firestore transaction whose begin, commit and rollback RPCs (not only the reads) get at most the time left
+    until `end` (monotonic), with no RPC retry. Past `end`, begin and commit raise TimeoutError; rollback is skipped
+    (the server lets the transaction expire)."""
+    from google.cloud.firestore_v1.transaction import Transaction
+
+    class Bounded(Transaction):
+        def _left(self) -> float:
+            left = end - time.monotonic()
+            if left <= 0:
+                raise TimeoutError("allowance transaction past its time limit")
+            return left
+
+        def _begin(self, retry_id=None) -> None:
+            if self.in_progress:
+                raise ValueError("transaction already begun")
+            resp = self._client._firestore_api.begin_transaction(
+                request={"database": self._client._database_string, "options": self._options_protobuf(retry_id)},
+                metadata=self._client._rpc_metadata, retry=None, timeout=self._left())
+            self._id = resp.transaction
+
+        def _rollback(self) -> None:
+            if not self.in_progress:
+                raise ValueError("no transaction in progress")
+            try:
+                left = end - time.monotonic()
+                if left > 0:
+                    self._client._firestore_api.rollback(
+                        request={"database": self._client._database_string, "transaction": self._id},
+                        metadata=self._client._rpc_metadata, retry=None, timeout=left)
+            finally:
+                self._clean_up()
+
+        def _commit(self) -> list:
+            if not self.in_progress:
+                raise ValueError("no transaction in progress")
+            resp = self._client._firestore_api.commit(
+                request={"database": self._client._database_string, "writes": self._write_pbs,
+                         "transaction": self._id},
+                metadata=self._client._rpc_metadata, retry=None, timeout=self._left())
+            self._clean_up()
+            self.write_results = list(resp.write_results)
+            self.commit_time = resp.commit_time
+            return self.write_results
+
+    return Bounded(client, max_attempts=2)
+
+
 class FirestoreBackend:
     """protection/control and protection/daily-<UTC date>, read and incremented in one transaction."""
 
     def __init__(self, client_factory: Optional[Callable] = None):
         self._client_factory = client_factory
-        self._pool = concurrent.futures.ThreadPoolExecutor(max_workers=2, thread_name_prefix="allowance")
-        # One transaction at a time per process: two at once on the same documents contend, and contention takes
-        # longer than the time limit to resolve (about 2 s on the emulator). Held until the transaction ends.
+        self._pool = concurrent.futures.ThreadPoolExecutor(max_workers=MAX_IN_FLIGHT + 1,
+                                                           thread_name_prefix="allowance")
+        # One reservation waited on at a time per process: two at once on the same documents contend, and contention
+        # takes longer than the time limit to resolve (about 2 s on the emulator). Released when the caller stops
+        # waiting (result or time limit), never held by an abandoned transaction (Codex R1).
         self._one = threading.Lock()
+        self._count = threading.Lock()
+        self._in_flight = 0
 
     def client(self):
         if self._client_factory is not None:
@@ -214,17 +303,19 @@ class FirestoreBackend:
         from b_common.firestore import get_client
         return get_client()
 
-    def _transaction(self, search: bool, lim: Limits, day: str) -> str:
+    def _transaction(self, search: bool, lim: Limits, day: str, end: float) -> str:
         from google.cloud import firestore
 
         client = self.client()
         coll = client.collection(COLLECTION)
         ctrl_ref, day_ref = coll.document(CONTROL_DOC), coll.document(f"daily-{day}")
-        read_timeout = max(0.1, _env_float("PROTECTION_TIMEOUT_S", TIMEOUT_S) * 0.6)
 
         @firestore.transactional
         def run(txn) -> str:  # no Gemini call in here: Firestore may run it twice (contention)
-            snaps = {s.reference.id: s for s in txn.get_all([ctrl_ref, day_ref], retry=None, timeout=read_timeout)}
+            left = end - time.monotonic()
+            if left <= 0:
+                raise TimeoutError("allowance transaction past its time limit")
+            snaps = {s.reference.id: s for s in txn.get_all([ctrl_ref, day_ref], retry=None, timeout=left)}
             ctrl = snaps.get(CONTROL_DOC)
             dsnap = snaps.get(day_ref.id)
             control = (ctrl.to_dict() if ctrl is not None and ctrl.exists else None) or {}
@@ -240,23 +331,39 @@ class FirestoreBackend:
                         merge=True)
             return reason
 
-        return run(client.transaction(max_attempts=2))
+        return run(_bounded_transaction(client, end))
 
-    def reserve(self, search: bool, lim: Limits, day: str) -> str:
-        """Bounded to PROTECTION_TIMEOUT_S: a transaction still running after that is abandoned (it may still
-        commit, counting a call that is not made: never the other way round)."""
+    def _done(self, _fut) -> None:
+        with self._count:
+            self._in_flight -= 1
+
+    def reserve(self, search: bool, lim: Limits, day: str, wait_s: Optional[float] = None) -> str:
+        """Bounded to PROTECTION_TIMEOUT_S, and to `wait_s` (what the request has left): a transaction still
+        running after that is abandoned (its RPCs end by the same limit; it may still commit, counting a call that
+        is not made: never the other way round) and does not hold up the next reservation."""
         limit = _env_float("PROTECTION_TIMEOUT_S", TIMEOUT_S)
-        t0 = time.monotonic()
+        if wait_s is not None:
+            limit = min(limit, wait_s)
+        end = time.monotonic() + max(0.0, limit)
         try:
+            if limit <= 0:
+                raise TimeoutError("no time left for a reservation")
             if not self._one.acquire(timeout=limit):
                 raise TimeoutError("another reservation is still running")
             try:
-                fut = self._pool.submit(self._transaction, search, lim, day)
-            except BaseException:
+                with self._count:
+                    if self._in_flight >= MAX_IN_FLIGHT:
+                        raise TimeoutError("earlier reservations are still running")
+                    self._in_flight += 1
+                try:
+                    fut = self._pool.submit(self._transaction, search, lim, day, end)
+                except BaseException:
+                    self._done(None)
+                    raise
+                fut.add_done_callback(self._done)
+                return fut.result(timeout=max(0.0, end - time.monotonic()))
+            finally:
                 self._one.release()
-                raise
-            fut.add_done_callback(lambda _: self._one.release())
-            return fut.result(timeout=max(0.0, limit - (time.monotonic() - t0)))
         except Exception as e:  # timeout, unavailable, permission denied, contention after 2 attempts
             log.warning("allowance backend failed: %s", type(e).__name__,
                         extra={"json_fields": {"event": "allowance_backend_error", "exception": type(e).__name__}})
@@ -273,7 +380,7 @@ class FirestoreBackend:
 
 
 class OffBackend:
-    def reserve(self, search: bool, lim: Limits, day: str) -> str:
+    def reserve(self, search: bool, lim: Limits, day: str, wait_s: Optional[float] = None) -> str:
         return OK
 
 
@@ -309,19 +416,22 @@ def warm_up() -> None:
             b.warm_up()
 
 
-def admit(prompt: str, search: bool = False) -> str:
+def admit(prompt: str, search: bool = False, wait_s: Optional[float] = None) -> str:
     """Called by every Gemini SDK wrapper right before the call is sent. OK: one call (and one search) reserved;
-    otherwise the reason the call must not be made."""
+    otherwise the reason the call must not be made. `wait_s`: what the request has left (the reservation never
+    waits longer)."""
     if degraded_switch():
         reason = DEGRADED
     elif len(prompt.encode("utf-8")) > env_int("GEMINI_INPUT_MAX_BYTES"):
         reason = TOO_LARGE
     else:
-        reason = backend().reserve(search, Limits.from_env(), utc_day())
+        reason = backend().reserve(search, Limits.from_env(), utc_day(), wait_s=wait_s)
     if reason != OK:
         sc = _scope.get()
         if sc is not None:
             sc.refused.append(reason)
+        if reason != SEARCH:
+            obs.note_degraded(DEGRADED_REASON.get(reason, BACKEND))
         log.info("gemini call refused: %s", reason,
                  extra={"json_fields": {"event": "allowance_refused", "allowance": reason, "search": search}})
     obs.note_allowance(reason)

@@ -10,13 +10,14 @@ from zoneinfo import ZoneInfo
 
 from b_common.report_schemas import Report, ReportRequest, Sentence
 
-from . import assemble, gemini, kb, mock, prompt, protection, rewrite
+from . import assemble, gemini, kb, mock, obs, prompt, protection, rewrite
 from .validator import (MAX_WORDS, PREFIX, WEB_PREFIX, build_evidence, check_rewrite, check_sentence, relies_on_user_input,
                         validate, with_prefix)
 
 log = logging.getLogger("report-api")
 NZ = ZoneInfo("Pacific/Auckland")
 MAX_SUMMARY = 5
+CODE_DRAFT = "code-draft"  # Report.model when no sentence is a Gemini rewrite (Codex R4): no model wrote the wording
 
 
 class ReportError(Exception):
@@ -54,26 +55,32 @@ def mock_enabled() -> bool:
     return os.environ.get("REPORT_MOCK", "").lower() in ("1", "true", "yes")
 
 
+def load_kb(req: ReportRequest, budget: gemini.Budget) -> kb.KbData:
+    """KB items and sources within the request's deadline (at most 5 s). 503 kb_unavailable."""
+    try:
+        return kb.load(req.selected_kb_ids(), timeout=min(5.0, max(0.1, budget.left())))
+    except kb.KbUnavailable:
+        raise ReportError(503, "kb_unavailable", "Knowledge-base items or sources could not be read.")
+
+
 def build_report(req: ReportRequest, generate: Optional[gemini.Generator] = None,
-                 debug: Optional[Debug] = None) -> Report:
+                 debug: Optional[Debug] = None, kbd: Optional[kb.KbData] = None) -> Report:
     """The report (_build_report). When protection refused the model call (allowance used up, REPORT_DEGRADED,
-    prompt too large) the summary is the checked drafts and warnings end with generation_degraded."""
+    prompt too large) the summary is the checked drafts and warnings end with generation_degraded. `kbd`: the KB
+    the route already read (its fingerprint is in the cache key)."""
     with protection.request_scope() as scope:
-        rep = _build_report(req, generate, debug)
+        rep = _build_report(req, generate, debug, kbd)
     if scope.degraded and protection.GENERATION_DEGRADED not in rep.warnings:
         rep = rep.model_copy(update={"warnings": [*rep.warnings, protection.GENERATION_DEGRADED]})
     return rep
 
 
 def _build_report(req: ReportRequest, generate: Optional[gemini.Generator] = None,
-                  debug: Optional[Debug] = None) -> Report:
+                  debug: Optional[Debug] = None, kbd: Optional[kb.KbData] = None) -> Report:
     debug = debug if debug is not None else Debug()
-    budget = gemini.Budget()
+    budget = gemini.Budget()  # inside a route: the request's one deadline (gemini.request_budget)
 
-    try:
-        kbd = kb.load(req.selected_kb_ids(), timeout=min(5.0, max(0.1, budget.left())))
-    except kb.KbUnavailable:
-        raise ReportError(503, "kb_unavailable", "Knowledge-base items or sources could not be read.")
+    kbd = kbd if kbd is not None else load_kb(req, budget)
     ev = build_evidence(req, kbd.items, kbd.sources.keys())
     titles = {s.id: s.title or "" for s in req.sources()} | kbd.sources
 
@@ -93,9 +100,9 @@ def _build_report(req: ReportRequest, generate: Optional[gemini.Generator] = Non
         else:
             passed, dropped = [Sentence(text=assemble.MOCK_SENTENCE, source_ids=[])], 0
     else:
-        model = gemini.model_name()
         items, dropped = _gemini_summary(req, ev, kbd.items, titles, generate or gemini.gemini_generate,
                                          budget, debug)
+        model = gemini.model_name() if any(it.kind == rewrite.REWRITE for it in items) else CODE_DRAFT
         passed, user_flags = [it.sentence for it in items], [it.user for it in items]
         item_fields = [it.fields for it in items]
 
@@ -175,9 +182,12 @@ def _gemini_summary(req, ev, kb_items, titles, generate, budget: gemini.Budget, 
         if stop:
             break
     if best is None and out_of_time and last_error is None:
+        obs.note_degraded(obs.DEADLINE)
         log.info("no time for a model call; summary from the drafts")
     elif best is None:
         log.warning("no usable model answer (%s); summary from the drafts", last_error.code if last_error else "none")
+    elif best is not None and not any(r.sentence is not None for r in best):
+        obs.note_degraded(obs.MODEL_ERROR)  # the model answered, but no rewrite passed the checks
     best = best if best is not None else []
     items = rewrite.compose(best, fs, MAX_SUMMARY, add_musts=True,
                             check_draft=lambda s: check_sentence(s, ev, MAX_WORDS))

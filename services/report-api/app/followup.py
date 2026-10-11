@@ -3,7 +3,9 @@
 Language (2026-10-11 decision; the report itself stays English): classify detects the question's language
 (BCP 47, corrected by script in normalize_language); the answer is written in it, with English terms (LVR, DTI,
 First Home Loan, Cross Lease, Unit Title, Freehold, Settled.govt.nz, ...) kept. `language` in the response is the
-detected language.
+detected language, except when no model call could be made for the translation (allowance refused, request stopped,
+no time; Codex R6): Chinese then gets fixed Chinese sentences written by code, any other language the English
+sentences with `language` "en" (fixed_answer).
 
 Flow: classify (Gemini: language, out-of-scope, stated year/cladding) -> code checks user_supplied ->
 optional rules-api re-run with the merged chat_supplied -> fact list (prompt.followup_facts, rebuilt from the
@@ -154,10 +156,11 @@ def gemini_json(prompt: str, schema: type, timeout_s: float) -> str:
     from google import genai
     from google.genai import types
 
+    gemini.check_stopped()
     key = os.environ.get("GEMINI_API_KEY")
     if not key:
         raise gemini.no_key()
-    gemini.admit(prompt)
+    timeout_s = gemini.admit(prompt, timeout_s)
     obs.note_call()
     try:
         client = genai.Client(api_key=key, http_options=gemini.http_options(timeout_s))
@@ -168,8 +171,7 @@ def gemini_json(prompt: str, schema: type, timeout_s: float) -> str:
                 max_output_tokens=protection.max_output_tokens(),
                 automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True)))
     except Exception as e:  # timeouts, APIError (429, 5xx, bad key), network
-        msg, category = obs.gemini_failed(log, "gemini call", e, key)
-        raise gemini.ModelUnavailable(f"{type(e).__name__}: {msg}", category) from e
+        raise gemini.failed(log, "gemini call", e) from e
     if not resp.text:
         obs.note_error(obs.SCHEMA)
         raise gemini.ModelOutputInvalid("empty response")
@@ -181,10 +183,11 @@ def gemini_search(prompt: str, timeout_s: float) -> Optional[WebAnswer]:
     from google import genai
     from google.genai import types
 
+    gemini.check_stopped()
     key = os.environ.get("GEMINI_API_KEY")
     if not key:
         raise gemini.no_key()
-    gemini.admit(prompt, search=True)
+    timeout_s = gemini.admit(prompt, timeout_s, search=True)
     obs.note_call(search=True)
     try:
         client = genai.Client(api_key=key, http_options=gemini.http_options(timeout_s))
@@ -197,8 +200,7 @@ def gemini_search(prompt: str, timeout_s: float) -> Optional[WebAnswer]:
         meta = resp.candidates[0].grounding_metadata if resp.candidates else None
         text = resp.text or ""  # shown as returned: strip() only tests for an empty answer
     except Exception as e:  # timeouts, APIError (429, 5xx, bad key), network
-        msg, category = obs.gemini_failed(log, "gemini search call", e, key)
-        raise gemini.ModelUnavailable(f"{type(e).__name__}: {msg}", category) from e
+        raise gemini.failed(log, "gemini search call", e) from e
     pages = {c.web.uri: c.web.title or "" for c in (meta and meta.grounding_chunks) or [] if c.web and c.web.uri}
     if not (text.strip() and pages):
         return None
@@ -212,7 +214,7 @@ def _parse(raw: str, schema: type):
         return schema.model_validate(json.loads(raw))
     except (ValueError, ValidationError) as e:
         obs.note_error(obs.SCHEMA)
-        raise gemini.ModelOutputInvalid(str(e)[:300]) from e
+        raise gemini.ModelOutputInvalid(type(e).__name__) from e  # no model text in the message (Codex R7)
 
 
 # One deadline for the request (gemini.Budget): every Gemini call, search, translation and retry is made only with
@@ -224,7 +226,7 @@ MIN_CALL_S = gemini.MIN_CALL_S
 
 def _search(prompt: str, clock: _Clock, share: float) -> Optional[WebAnswer]:
     """One Google Search call when the request's search limit and time allow it; None otherwise."""
-    if not clock.can_search():
+    if not clock.can_search() or protection.stopped():
         return None
     clock.searches += 1
     return gemini_search(prompt, clock.timeout(share))
@@ -798,6 +800,88 @@ def check_translation(orig: Sentence, text: str, language: str, ev: Evidence,
 EMPTY_TRANSLATION = "empty_translation"
 
 
+# ---- fixed sentences when no model call can be made (Codex R6) ------------------------------------------------
+# Allowance refused, the request stopped (quota, config) or no time left: no translation call. A language with
+# sentences written by code (zh-Hant / zh-Hans) gets them; any other language gets the English sentences, and the
+# response's `language` is then "en" (it always names the language of the text delivered).
+FALLBACK_LEAD = {"zh-Hant": "目前無法產生完整回答，以下是紀錄中的事實。",
+                 "zh-Hans": "目前无法产生完整回答，以下是记录中的事实。",
+                 "en": "A full answer could not be produced right now; these are the facts on record."}
+FALLBACK_NONE = {"zh-Hant": "目前無法產生完整回答，請查看下方的原始資料連結。",
+                 "zh-Hans": "目前无法产生完整回答，请查看下方的原始资料链接。",
+                 "en": "A full answer could not be produced right now; the original sources linked below may help."}
+_ZH_FIELD = {"year built": ("建造年份", "建造年份"), "cladding": ("外牆材質", "外墙材质"),
+             "last sale": ("上次成交紀錄", "上次成交记录"), "council valuation": ("市議會估價", "市议会估价"),
+             "title type": ("產權類型", "产权类型"), "annual rates": ("年度地方稅", "年度地方税"),
+             "land value": ("土地價值", "土地价值"), "floor area": ("樓地板面積", "楼地板面积"),
+             "land area": ("土地面積", "土地面积"), "local board": ("地方委員會", "地方委员会"),
+             "building site coverage": ("建築覆蓋面積", "建筑覆盖面积")}
+_ZH_EXACT = {
+    facts_prompt.NO_SOURCE_TEXT["cladding"]: ("沒有免費的公開來源記錄外牆材質，因此無法確認；如果你知道，可以在表單中填寫。",
+                                              "没有免费的公开来源记录外墙材质，因此无法确认；如果你知道，可以在表单中填写。"),
+    facts_prompt.NO_SOURCE_TEXT["last_sale"]: ("我們沒有成交價格的授權資料來源，因此無法查核上次成交紀錄。",
+                                               "我们没有成交价格的授权资料来源，因此无法查核上次成交记录。"),
+}
+_ZH_PATTERNS = [
+    (re.compile(r"The (.+) could not be checked from public records\."), ("公開紀錄無法查核{f}。", "公开纪录无法查核{f}。")),
+    (re.compile(r"Council property records could not be retrieved, so the (.+) is unknown\."),
+     ("無法取得市議會的物業紀錄，因此{f}不明。", "无法取得市议会的物业纪录，因此{f}不明。")),
+    (re.compile(r"Council records could not be read from our server, so the (.+) is unknown\."),
+     ("本系統無法讀取市議會紀錄，因此{f}不明。", "本系统无法读取市议会纪录，因此{f}不明。")),
+]
+
+
+def _variant(language: str) -> int:
+    return 1 if language == "zh-Hans" else 0
+
+
+def zh_fixed(text: str, language: str) -> Optional[str]:
+    """Code-written Chinese for an English program sentence (a field the records do not have), or None."""
+    text = text.strip()
+    if text in _ZH_EXACT:
+        return _ZH_EXACT[text][_variant(language)]
+    for rx, pair in _ZH_PATTERNS:
+        m = rx.fullmatch(text)
+        if m and m.group(1) in _ZH_FIELD:
+            return pair[_variant(language)].format(f=_ZH_FIELD[m.group(1)][_variant(language)])
+    return None
+
+
+def fallback_language(language: str) -> str:
+    """The language of the fixed sentences: the asker's when code has sentences in it, else English."""
+    if is_zh(language):
+        return "zh-Hans" if language == "zh-Hans" else "zh-Hant"
+    return "en"
+
+
+def fixed_answer(parts: list[Part], language: str, ev: Evidence, debug: dict,
+                 web_part: Callable[[Part], bool]) -> list[Sentence]:
+    """The answer when no translation call may be made (Codex R6). Chinese: sentences already in Chinese (checked
+    rewrites, code-written comparisons) and code-written Chinese for program sentences, each checked; an English
+    sentence with no Chinese version is left out. Other languages: the English sentences, no sentence in the asker's
+    language (they would not match `language: "en"`). A lead sentence says the answer is limited."""
+    out_lang = fallback_language(language)
+    out: list[Sentence] = []
+    if out_lang != "en":
+        prefix = {False: PREFIXES[out_lang], True: WEB_PREFIXES[out_lang]}
+        for p in parts:
+            if p.native:
+                s = Sentence(text=tidy(p.sentence.text, out_lang), source_ids=p.sentence.source_ids)
+            else:
+                zh = zh_fixed(strip_prefix(p.sentence.text), out_lang)
+                s = Sentence(text=zh or "", source_ids=p.sentence.source_ids)
+                if not zh or check_answer(s, ev, out_lang, p.base):
+                    continue
+            out.append(add_prefix(s, prefix[web_part(p)]) if p.user else s)
+    else:
+        english_prefix = {False: PREFIX_EN, True: WEB_PREFIX_EN}
+        out = [add_prefix(p.sentence, english_prefix[web_part(p)]) if p.user else p.sentence
+               for p in parts if not p.native]
+    lead = (FALLBACK_LEAD if out else FALLBACK_NONE)[out_lang]
+    debug["fallback"] = {"language": out_lang, "left_out": len(parts) - len(out)}
+    return [Sentence(text=lead, source_ids=[]), *out]
+
+
 def check_prefix(text: str, language: str, max_len: int = 40) -> bool:
     t = (text or "").strip().rstrip(" ,，、")
     return bool(t) and len(t) <= max_len and not re.search(r"\d|https?:|www\.|<|@|\.[a-z]{2,}", t, re.I) \
@@ -806,11 +890,14 @@ def check_prefix(text: str, language: str, max_len: int = 40) -> bool:
 
 def finish(parts: list[Part], language: str, ev: Evidence,
            translate: Callable[..., Optional[list[str]]], debug: dict,
-           web_part: Callable[[Part], bool] = lambda p: False) -> list[Sentence]:
+           web_part: Callable[[Part], bool] = lambda p: False,
+           unavailable: Callable[[], bool] = lambda: False) -> list[Sentence]:
     """The language step: English parts are translated (one restricted call for all of them, plus the prefix
     for languages other than Chinese); sentences whose translation fails check_translation are sent once more
     with the words to copy; a second failure leaves the whole sentence in English. The prefix is added in the
-    language the sentence ends up in. `web_part`: the user part depends on a value from a web search (web prefix)."""
+    language the sentence ends up in. `web_part`: the user part depends on a value from a web search (web prefix).
+    `unavailable()`: no model call may be made (allowance refused, request stopped, no time): fixed_answer, whose
+    language is in debug["fallback"]."""
     english_prefix = {False: PREFIX_EN, True: WEB_PREFIX_EN}
     if is_english(language):
         return [add_prefix(p.sentence, english_prefix[web_part(p)]) if p.user else p.sentence for p in parts]
@@ -818,6 +905,8 @@ def finish(parts: list[Part], language: str, ev: Evidence,
     kinds = [] if is_zh(language) else sorted({web_part(p) for p in parts if p.user})
     texts = [strip_prefix(p.sentence.text) for p in english] + [english_prefix[k].strip().rstrip(",") for k in kinds]
     got = translate(texts) if texts else None
+    if got is None and texts and unavailable():
+        return fixed_answer(parts, language, ev, debug, web_part)
     if got is not None and len(got) != len(texts):
         log.info("translation returned %d texts for %d; using English", len(got), len(texts))
         got = None
@@ -933,7 +1022,7 @@ def field_search(req: ReportRequest, fields: list[str], question: str, history: 
         return None
     found, ambiguous, missing = web_fields.extract(web.text, list(fields), address)
     info.update(by_code=sorted(found), ambiguous=sorted(ambiguous))
-    if missing and not mock and clock.can_call():
+    if missing and not mock and clock.can_call() and not protection.stopped():
         try:
             out = _call(generate, fp.extract_prompt(web.text, sorted(missing)), web_fields.ExtractOut,
                         clock.timeout(0.25))
@@ -980,7 +1069,8 @@ _SKIP_ZH = {"unit": ("這是分戶產權（Unit Title）物業，搜尋結果可
 
 
 def skipped_answer(kind: str, found: dict[str, Any], language: str,
-                   translate: Callable[..., Optional[list[str]]], debug: dict) -> list[Sentence]:
+                   translate: Callable[..., Optional[list[str]]], debug: dict,
+                   unavailable: Callable[[], bool] = lambda: False) -> list[Sentence]:
     """Code-written sentences for a search value that was not filled in: what was found, why it was not added, and
     that the user may enter it. Chinese is written by code; other languages are translated under the usual checks
     (English when a check fails). Each sentence passes the validator against the found values only."""
@@ -1016,7 +1106,7 @@ def skipped_answer(kind: str, found: dict[str, Any], language: str,
                 native = z
         parts.append(Part(native or s, native=native is not None, user=n == 0, base=base,
                           keep=tuple(terms), web=True if n == 0 else None))
-    return finish(parts, language, ev, translate, debug, lambda p: True)
+    return finish(parts, language, ev, translate, debug, lambda p: True, unavailable)
 
 
 # ---- main flow ----------------------------------------------------------------------------------
@@ -1049,18 +1139,32 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
     link_ids = [link.id for link in req.links()]
     warnings: list[str] = []
     classify_failed = stopped = False  # stopped: quota or no key, no further Gemini call (gemini.NO_RETRY)
+    no_call = {"translate": False}  # a translation was needed but no model call could be made (Codex R6)
+
+    def halted() -> bool:
+        return stopped or protection.stopped()
 
     def translate(texts: list[str], copy: Optional[list[str]] = None) -> Optional[list[str]]:
         """Sees only the fixed sentences, the language code and (on the retry) the words to copy, which come from
         those sentences (fp.translate_prompt)."""
-        if mock or stopped or not clock.can_call():
+        if mock:
+            return None
+        if halted() or not clock.can_call():
+            if not halted():
+                obs.note_degraded(obs.DEADLINE)
+            no_call["translate"] = True
             return None
         try:
             return _call(generate, fp.translate_prompt(texts, language, copy), TranslateOut,
                          clock.timeout(0.5)).texts
         except ReportError as e:
             log.info("translation failed (%s); using English", e.code)
+            if e.category in gemini.NO_RETRY:
+                no_call["translate"] = True
             return None
+
+    def unavailable() -> bool:
+        return no_call["translate"]
 
     # 1. classify (web's search button skips it: the question is optional and only gives the language)
     button = req.search_field
@@ -1081,6 +1185,7 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
             c, classify_failed = ClassifyOut(language=normalize_language("en", question)), True
             stopped = e.category in gemini.NO_RETRY
     else:  # no time for classify: the language by script, no values, no search; program drafts answer
+        obs.note_degraded(obs.DEADLINE)
         c = ClassifyOut(language=normalize_language("en", question))
     language = c.language if button else normalize_language(c.language, question)
     debug["language"] = {"claimed": c.language, "used": language}
@@ -1200,10 +1305,11 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
             named: list[str] = []
             out_of_time = False  # no time for a (further) call: the program's drafts answer
             for attempt in range(2):
-                if stopped:
+                if halted():
                     break
                 if not clock.can_call():
                     out_of_time = True
+                    obs.note_degraded(obs.DEADLINE)
                     break
                 try:
                     out = _call(generate, prompt, AnswerOut, clock.timeout())
@@ -1257,12 +1363,15 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
             raise last or ReportError(502, "validation_failed", "No answer sentence passed validation.")
         answer = finish(fixed + passed, language, ev, translate, debug,
                         lambda p: p.web if p.web is not None else
-                        facts_prompt.from_web(p.sentence.source_ids, eff, ev, data.items, p.fields))
-
-        return FollowupResponse(language=language, answer=answer, out_of_scope=False, user_supplied=supplied,
+                        facts_prompt.from_web(p.sentence.source_ids, eff, ev, data.items, p.fields), unavailable)
+        out_links = [i for i in dict.fromkeys(out_links + links) if i in link_ids][:3]
+        fallback = debug.get("fallback")
+        if fallback and not out_links:
+            out_links = fallback_links(question, link_ids)  # the fixed lead sentence points to the links
+        return FollowupResponse(language=fallback["language"] if fallback else language, answer=answer,
+                                out_of_scope=False, user_supplied=supplied,
                                 user_supplied_source=_sources_out(supplied, sources),
-                                links=[i for i in dict.fromkeys(out_links + links) if i in link_ids][:3],
-                                dropped=dropped, warnings=warnings)
+                                links=out_links, dropped=dropped, warnings=warnings)
 
     # 1b. property fields the records do not have (team decision 10/11, plan C): a Google Search answer shown as
     #     returned; the year built and cladding code extracts from it fill user_supplied ("web_search") and re-run
@@ -1288,7 +1397,9 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
                         supplied[k], sources[k] = web.extracted[k], WEB_SEARCH
             if held:  # shown, not filled in: no user_supplied value, no rules-api call
                 web = web.model_copy(update={"autofill_skipped": MULTI_UNIT})
-                return FollowupResponse(language=language, answer=skipped_answer(kind, held, language, translate, debug),
+                answer = skipped_answer(kind, held, language, translate, debug, unavailable)
+                fallback = debug.get("fallback")
+                return FollowupResponse(language=fallback["language"] if fallback else language, answer=answer,
                                         out_of_scope=False, user_supplied=supplied,
                                         user_supplied_source=_sources_out(supplied, sources),
                                         links=links or fallback_links(question, link_ids), dropped=0,
@@ -1337,6 +1448,8 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
                 refusal, refusal_lang = Sentence(text=tidy(got[0], language), source_ids=[]), language
             else:
                 log.info("refusal translation not used; English")
+                if unavailable():
+                    language = "en"  # no model call could be made: the English refusal, said to be English (R6)
         links = links or fallback_links(question, link_ids)
         if refusal_mode == "strict":
             data = _kb(req, clock)

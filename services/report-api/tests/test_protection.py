@@ -105,7 +105,7 @@ def post_followup(question, case="case1", **extra):
 def test_third_concurrent_request_is_busy_and_health_is_not(monkeypatch):
     started, release = threading.Barrier(3), threading.Event()
 
-    def slow_report(req, generate=None, debug=None):
+    def slow_report(req, generate=None, debug=None, kbd=None):
         started.wait(5)
         release.wait(5)
         raise RuntimeError("stop here")  # the slot must still be released
@@ -411,6 +411,7 @@ def test_degraded_followup_in_japanese_stays_english(monkeypatch):
     r = post_followup("洪水のリスクはありますか？")
     assert r.status_code == 200 and not fake.calls
     assert r.json()["warnings"] == [protection.GENERATION_DEGRADED]
+    assert r.json()["language"] == "en"  # Codex R6: no Japanese sentences written by code, so said to be English
 
 
 def test_search_allowance_exhausted_only_skips_the_search(monkeypatch, caplog):

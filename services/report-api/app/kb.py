@@ -98,7 +98,10 @@ def _auth(base: str, timeout: float) -> dict:
 
 
 def _get_json(base: str, path: str, params: Optional[dict], timeout: float):
-    r = requests.get(base + path, params=params, headers=_auth(base, timeout), timeout=timeout)
+    t0 = time.monotonic()
+    headers = _auth(base, timeout)
+    timeout = max(0.1, timeout - (time.monotonic() - t0))  # the ID token fetch counts against the same limit
+    r = requests.get(base + path, params=params, headers=headers, timeout=timeout)
     if r.status_code in (401, 403):
         _tokens.pop(base, None)
     r.raise_for_status()
@@ -119,9 +122,16 @@ def _cached(key: str, fetch):
 
 def _load_remote(ids: list[str], timeout: float) -> KbData:
     base = os.environ.get("RULES_API_URL", "http://localhost:8080").rstrip("/")
-    timeout = max(0.5, min(5.0, timeout))
+    end = time.monotonic() + max(0.5, min(5.0, timeout))  # every request below shares this limit (Codex R1)
+
+    def left() -> float:
+        t = end - time.monotonic()
+        if t <= 0:
+            raise TimeoutError("kb load out of time")
+        return t
+
     def _fetch_sources() -> SourceTitles:
-        rows = [s for s in _get_json(base, "/v1/sources", None, timeout) if isinstance(s, dict) and "id" in s]
+        rows = [s for s in _get_json(base, "/v1/sources", None, left()) if isinstance(s, dict) and "id" in s]
         return SourceTitles({s["id"]: s.get("title") or s["id"] for s in rows},
                             {s["id"]: s["url"] for s in rows if s.get("url")})
 
@@ -135,7 +145,7 @@ def _load_remote(ids: list[str], timeout: float) -> KbData:
         else:
             missing.append(i)
     if missing:
-        rows = _get_json(base, "/v1/kb/items", {"ids": ",".join(missing)}, timeout)
+        rows = _get_json(base, "/v1/kb/items", {"ids": ",".join(missing)}, left())
         now = time.time()
         for row in rows:
             if isinstance(row, dict) and "id" in row:

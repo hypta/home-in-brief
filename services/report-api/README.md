@@ -16,10 +16,19 @@ Private Cloud Run service; only web calls it.
 | POST | `/v1/followup?refusal_mode=exempt\|strict` | Follow-up answer (below) |
 | GET | `/health` | `{"status": "ok"}`; calls nothing |
 
-Both POST routes set the header `X-Report-Mode`: `gemini` (at least one Gemini rewrite passed, or a Search answer),
-`drafts` (only program drafts and fixed sentences, e.g. after a Gemini failure) or `mock` (`REPORT_MOCK`). Logs: one
-JSON completion record per request (`app/obs.py`: request id, status, latency, model, call and Search counts, error
-category, sentence counts, mode; never the question, history, prompts or amounts).
+Headers (both POST routes):
+
+| Header | Direction | Meaning |
+|---|---|---|
+| `X-Report-Mode` | response | `gemini`: the response has Gemini content that passed the checks (a rewrite or a Search answer). It may come from the report cache, and it may be mixed with program drafts; it does not mean a fresh, healthy call was made in this request. `drafts`: only program drafts and fixed sentences. `mock`: `REPORT_MOCK` |
+| `X-Report-Degraded-Reason` | response | Only when the response fell back to drafts after a refused or failed model call or for lack of time: `allowance_daily`, `allowance_event`, `disabled` (`protection/control.disabled` or `REPORT_DEGRADED`), `backend_error` (allowance backend unavailable, slow or denied), `prompt_too_large`, `model_error` (Gemini timeout, quota 429, 4xx/5xx, invalid JSON, no rewrite passing the checks, or no `GEMINI_API_KEY`), `deadline` (no time left for a call, before it or after its reservation). Absent on a normal drafts answer (e.g. the follow-up's fixed refusal) |
+| `X-Request-Deadline-Ms` | request (from web) | Milliseconds web has left for this request. The request's one deadline is the smaller of this and `REQUEST_DEADLINE_S` (a larger or malformed value is ignored). web does not send it yet (A); without it the deadline is 25 s |
+
+Logs: one JSON completion record per request (`app/obs.py`: request id, status, latency, model, call and Search counts,
+error category, sentence counts, mode, `degraded_reason`; never the question, history, prompts or amounts). A failed
+Gemini call logs its exception class, category, HTTP status and the provider's request id, never the exception's
+message; tracebacks (ours and uvicorn's "Exception in ASGI application") keep only exception classes and
+file:line:function (`obs.safe_traceback`).
 
 Request body: `{"property_context": {...}, "user_inputs": {...}, "rules_output": {...}}`. All three keys
 are required JSON objects and are kept whole (`b_common.report_schemas.ReportRequest`).
@@ -123,11 +132,16 @@ Response 200: `{language, answer: [{text, source_ids}], out_of_scope, user_suppl
 plus `web` when an out-of-scope question was answered from a Google Search (step 3; `answer` is then `[]`) or a
 field was searched for (below), plus `user_supplied_source` when a `user_supplied` value came from a web search.
 `language` is the detected language of the question (BCP 47: `en`, `zh-Hant`, `zh-Hans`, `ja`, `ko`, ...). A
-sentence whose translation failed its checks (step 7) is in English even when `language` is not.
+sentence whose translation failed its checks (step 7) is in English even when `language` is not. When no model call
+can be made for the translation (allowance refused, the request stopped, or no time left) there is no translation
+call: a Chinese question gets fixed Chinese sentences written by code (a lead "目前無法產生完整回答，以下是紀錄中的事實。",
+or "…請查看下方的原始資料連結。" when no fact has Chinese wording, plus the code-written Chinese of the comparison and
+missing-field sentences; English sentences without a Chinese version are left out); any other language gets the
+English sentences with an English lead, and `language` is then `"en"`. An English question is answered as usual.
 `warnings` is `[]` except `rules_rerun_unavailable` (mock mode answered from the input RulesOutput) and
 `generation_degraded` (protection refused a model call: the answer is the program's facts or fixed sentences, with no
 search, no extracted values and no translation; see "Abuse and cost protection").
-1 or more passing sentences gives 200 (at most 3); 0 gives 502 `validation_failed`.
+1 or more passing sentences gives 200 (at most 3, plus the fixed lead sentence when no model call could be made); 0 gives 502 `validation_failed`.
 
 Steps (INTERFACE_DRAFT 5 and 6.1):
 
@@ -326,8 +340,12 @@ chose plan C). For `year_built`, `cladding` and `last_sale` (`app/web_fields.py`
   source `example.com`), and extraction by code gives `year_built: 1985`, `cladding: "wood"`, `last_sale: {date:
   "March 2019", price: "$850,000"}` (only the fields asked for).
 
-Time (`gemini.Budget`, used by `/v1/report` and `/v1/followup`): one deadline per request, `REQUEST_DEADLINE_S`
-(25 s; web waits 30 s). Every Gemini call (summary and its retry, classify, answer and its retry, translations,
+Time (`gemini.Budget`, used by `/v1/report` and `/v1/followup`): one deadline per request, set when the route is
+entered (`gemini.request_budget`): `REQUEST_DEADLINE_S` (25 s; web waits 30 s), or less when web sends
+`X-Request-Deadline-Ms`. The KB read, the wait for an identical report in flight (at most 12 s, never more than is
+left; a duplicate that gives up generates with what is left, never a fresh budget), each allowance reservation and
+every call count against it. After a reservation the time left is checked again and the call's timeout recomputed;
+under 11 s the reserved call is kept (not refunded), nothing is sent and the drafts answer (`deadline`). Every Gemini call (summary and its retry, classify, answer and its retry, translations,
 extraction, field and out-of-scope searches) is made only when at least 11 s are left (`gemini.ADMIT_S`) and is sent
 with a deadline of at least 10 s (`gemini.MIN_CALL_S`; the API refuses shorter ones with 400 "Minimum allowed
 deadline is 10s"), at most `GEMINI_TIMEOUT_S` and 1 s less than what is left, so no call runs past the deadline.
@@ -413,17 +431,32 @@ A summary sentence is dropped when any rule fails (rule code in parentheses, log
   stay counted. A Search call also counts against `SEARCH_DAILY_CALLS`; when only that is used up, only the search is
   skipped (no warning).
 - **Degraded answers**: a refused call (or `REPORT_DEGRADED=true`, or a prompt over `GEMINI_INPUT_MAX_BYTES`) is not
-  retried: the report summary is the checked drafts and the follow-up the program's facts or fixed sentences (no search,
-  values or translation), both 200 with the warning `generation_degraded` and `X-Report-Mode: drafts`.
+  retried, and it stops the request (below). Degradation can be partial: what an earlier call of the same request
+  already produced stays. The report summary is the checked drafts (`model: "code-draft"` when no sentence is a Gemini
+  rewrite; the Gemini model name when at least one is). A follow-up keeps, for example, a Search answer or a
+  classification made before the refusal, and makes no further search, extraction or translation after it; with
+  nothing from Gemini it is the program's facts or fixed sentences (see the follow-up's `language` above). Both are
+  200 with the warning `generation_degraded`; `X-Report-Mode` is `drafts` only when no accepted Gemini content is
+  left, and then `X-Report-Degraded-Reason` says why.
+- **Request stop**: provider quota (429), a configuration error (no key), an allowance refusal (any reason except
+  the Search allowance) or no time after a reservation stops the whole request: every later SDK wrapper refuses before
+  reserving (`gemini.check_stopped`). A used-up Search allowance only skips searches; the answer is still generated.
+- **Allowance transaction**: `PROTECTION_TIMEOUT_S`, never more than the request has left, bounds its whole life
+  (begin, reads, commit, rollback get only what is left of it, no RPC retry). The caller stops waiting at the limit and
+  the next reservation may start at once; at most 2 run per process (a third is refused at once, `backend_error`).
 - **Caps per call**: `max_output_tokens=GEMINI_MAX_OUTPUT_TOKENS`; one transport attempt (google-genai 2.28.0 retries
   only with `retry_options`; it is set to `attempts=1`).
 - **Report cache** (`app/cache.py`): /v1/report only, per process, LRU `REPORT_CACHE_SIZE` (100) entries for
   `REPORT_CACHE_TTL_S` (600 s; either 0 turns it off). Key: SHA-256 of the three inputs as canonical JSON plus the
-  model and `cache.CACHE_VERSION` (bump it when prompts, facts or checks change). Stored: reports with
-  `X-Report-Mode: gemini` only (never drafts, mock, degraded or errors), never when `user_inputs.chat_supplied_source`
-  has a web-search value. Identical requests in flight wait for the first (single flight; no slot, no call). A hit
+  model, `cache.CACHE_VERSION` (bump it when prompts, facts or checks change) and a fingerprint of the KB items and
+  sources read for the request (a KB change misses). Left out of the key: only `rules_output.generated_at`,
+  `property_context.generated_at` and `property_context.sources[].accessed_at` (when an input was computed; never
+  read by report-api), so the same inputs computed in another second hit; rates dates, warnings, amounts, sources and
+  array order stay in. Stored: reports with `X-Report-Mode: gemini` only (never drafts, mock, degraded or errors), never
+  when `user_inputs.chat_supplied_source` has a web-search value, and never when `chat_supplied` has values whose
+  source is missing from `chat_supplied_source` or does not match its keys (provenance unknown). Identical requests in flight wait for the first (single flight; no slot, no call). A hit
   keeps its `generated_at`. Follow-ups are never cached.
-- Logs: `allowance` (`ok`, `daily_exhausted`, `event_exhausted`, `search_exhausted`, `disabled`, `backend_error`,
+- Logs: `degraded_reason` (as `X-Report-Degraded-Reason`), `allowance` (`ok`, `daily_exhausted`, `event_exhausted`, `search_exhausted`, `disabled`, `backend_error`,
   `degraded`, `prompt_too_large`), `busy` and `cache` (`none`, `miss`, `hit`) in the completion record.
 - Tests: `tests/test_protection.py`, `tests/test_cache.py` (sockets blocked; the Firestore transactions also run against the emulator when
   `FIRESTORE_EMULATOR_HOST` is set, e.g. after `make up`).

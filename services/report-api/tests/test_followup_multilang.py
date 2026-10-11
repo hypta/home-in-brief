@@ -67,6 +67,8 @@ def test_year_program_fact_in_chinese_with_the_chinese_prefix(monkeypatch, no_ru
 
 
 def test_cladding_program_fact_without_a_source_in_chinese(monkeypatch, no_rules):
+    # the cladding question searches the web first; no key here, so the real wrapper would stop the request (R5)
+    monkeypatch.setattr(followup, "gemini_search", lambda prompt, timeout_s: None)
     out = ask(monkeypatch, council_off(), "外牆是什麼材質？", fake("zh-Hant", lambda texts: [CLAD_ZH]))
     assert out["answer"] == [{"text": CLAD_ZH, "source_ids": []}]
 

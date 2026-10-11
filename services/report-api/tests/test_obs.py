@@ -90,7 +90,7 @@ def test_gemini_failure_warning_has_category_and_no_key(caplog, exc, category):
     key = "AIzaSECRETKEY123"
     exc.args = (f"{exc.args[0]} key={key}",)
     with caplog.at_level(logging.WARNING):
-        msg, got = obs.gemini_failed(logging.getLogger("report-api.gemini"), "gemini call", exc, key)
+        msg, got = obs.gemini_failed(logging.getLogger("report-api.gemini"), "gemini call", exc)
     assert key not in msg and got == category
     [rec] = caplog.records
     assert rec.levelname == "WARNING" and rec.json_fields["error"] == category
@@ -132,3 +132,96 @@ def test_followup_mode_header(monkeypatch):
     monkeypatch.setattr(followup, "gemini_json", fake_followup(cls(), [ans(FLOOD_EN)]))
     r = client.post("/v1/followup", json=body("case1") | {"question": "Flood risk?", "history": []})
     assert r.status_code == 200 and r.headers["X-Report-Mode"] == "gemini"
+
+
+# ---- Codex R7: no exception message reaches the logs ------------------------------------------------------------
+SENTINELS = ("household income 130000", "12 Sentinel Street, Remuera", "is my house a good buy")
+
+
+class LeakyError(Exception):
+    """A provider error whose message echoes request content (the hypothesis in Codex R7)."""
+
+    def __init__(self, code=500):
+        super().__init__("; ".join(SENTINELS))
+        self.code = code
+        self.response = type("Resp", (), {"headers": {"x-goog-request-id": "req-123 <x>"}})()
+
+
+def all_log_text(caplog, capsys=None):
+    fmt_json, fmt_plain = obs.JsonFormatter(), logging.Formatter("%(message)s")
+    out = []
+    for r in caplog.records:
+        out.append(fmt_json.format(r))
+        out.append(fmt_plain.format(r))  # also what a plain handler (uvicorn's) would print
+    if capsys is not None:
+        cap = capsys.readouterr()
+        out += [cap.out, cap.err]
+    return "\n".join(out)
+
+
+def test_sentinel_sdk_error_logs_class_category_status_and_request_id_only(monkeypatch, caplog, capsys):
+    from test_protection import FakeGenai
+
+    def leaky(prompt, schema):
+        raise LeakyError(500)
+
+    FakeGenai(leaky).install(monkeypatch)
+    caplog.set_level(logging.INFO)
+    r = client.post("/v1/report", json=body("case1"))
+    assert r.status_code == 200 and r.headers["X-Report-Degraded-Reason"] == "model_error"
+    text = all_log_text(caplog, capsys)
+    for s in SENTINELS:
+        assert s not in text
+    warns = [x for x in caplog.records if x.levelname == "WARNING" and "failed" in x.getMessage()]
+    assert warns and all(w.json_fields == warns[0].json_fields for w in warns)  # the 5xx retry logs the same
+    assert warns[0].json_fields == {"error": "http_5xx", "exception": "LeakyError", "http_status": 500,
+                                "provider_request_id": "req-123x"}
+
+
+def test_sentinel_unhandled_exception_is_logged_without_its_message(monkeypatch, caplog, capsys):
+    from app import main
+
+    def broken(req, generate=None, debug=None, kbd=None):
+        raise ValueError("; ".join(SENTINELS))
+
+    monkeypatch.setattr(main, "build_report", broken)
+    caplog.set_level(logging.INFO)
+    assert client.post("/v1/report", json=body("case1")).status_code == 500
+    text = all_log_text(caplog, capsys)
+    for s in SENTINELS:
+        assert s not in text
+    [err] = [x for x in caplog.records if x.getMessage() == "unhandled error"]
+    assert err.exc_info is None and err.json_fields["exception"].startswith("ValueError at")
+    assert "main.py" in err.json_fields["exception"]
+
+
+def test_sentinel_uvicorn_traceback_is_sanitized(caplog):
+    """Starlette re-raises after the 500 handler; uvicorn logs "Exception in ASGI application" with exc_info."""
+    caplog.set_level(logging.INFO)
+    try:
+        try:
+            raise KeyError("; ".join(SENTINELS))
+        except KeyError as inner:
+            raise RuntimeError("; ".join(SENTINELS)) from inner
+    except RuntimeError:
+        logging.getLogger("uvicorn.error").error("Exception in ASGI application", exc_info=True)
+    text = all_log_text(caplog)
+    for s in SENTINELS:
+        assert s not in text
+    assert "RuntimeError at" in text and "caused by KeyError" in text
+
+
+def test_followup_sentinel_question_and_search_errors(monkeypatch, caplog, capsys):
+    from test_protection import FakeGenai
+
+    def leaky(prompt, schema):
+        raise LeakyError(503)
+
+    FakeGenai(leaky).install(monkeypatch)
+    caplog.set_level(logging.INFO)
+    q = "When was it built? " + SENTINELS[2]
+    r = client.post("/v1/followup", json=body("case1") | {"question": q, "history": []})
+    assert r.status_code in (200, 502, 503)
+    text = all_log_text(caplog, capsys)
+    for s in SENTINELS:
+        assert s not in text

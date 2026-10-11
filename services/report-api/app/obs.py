@@ -1,8 +1,11 @@
 """Structured logs for Cloud Logging (Codex F07): single-line JSON on stdout, one completion record per
 /v1/report and /v1/followup request, and one WARNING per failed Gemini call with its error category.
 
-Never logged: prompts, the question, history, Search answer text, the user's amounts or income, API keys. The
-completion record has counts, timings, the model name and categories only.
+Never logged: prompts, the question, history, Search answer text, the user's amounts or income, API keys, and
+exception messages (Codex R7): a failed Gemini call logs its exception class, category, HTTP status and the
+provider's request id; any logged traceback (ours, or uvicorn's "Exception in ASGI application") keeps only the
+exception classes and the file:line:function of each frame. The completion record has counts, timings, the model
+name and categories only.
 """
 from __future__ import annotations
 
@@ -13,6 +16,7 @@ import os
 import re
 import sys
 import time
+import traceback
 import uuid
 from dataclasses import dataclass, field
 from typing import Any, Optional
@@ -25,6 +29,40 @@ TIMEOUT, QUOTA, HTTP_4XX, HTTP_5XX, SCHEMA, OTHER, NONE = "timeout", "quota", "h
 CONFIG = "config"  # GEMINI_API_KEY is not set
 ALLOWANCE = "allowance"  # protection.admit refused the call (allowance, REPORT_DEGRADED, prompt size): drafts
 SEARCH_ALLOWANCE = "search_allowance"  # the daily Search allowance is used up: only that search is skipped
+DEADLINE = "deadline"  # no time left for a model call (before it, or after its reservation)
+MODEL_ERROR = "model_error"
+# X-Report-Degraded-Reason values (Codex R3): only on a response that fell back to drafts
+DEGRADED_REASONS = ("allowance_daily", "allowance_event", "disabled", "backend_error", "prompt_too_large",
+                    MODEL_ERROR, DEADLINE)
+_MODEL_ERRORS = {TIMEOUT, QUOTA, HTTP_4XX, HTTP_5XX, SCHEMA, OTHER, CONFIG}
+
+
+def safe_traceback(exc_info) -> str:
+    """A traceback without any exception message: the exception classes (chained ones too) and file:line in
+    function for each frame. Messages can echo request content (Codex R7)."""
+    etype, value, tb = exc_info if isinstance(exc_info, tuple) else (type(exc_info), exc_info, exc_info.__traceback__)
+    out: list[str] = []
+    seen: set[int] = set()
+    while value is not None and id(value) not in seen:
+        seen.add(id(value))
+        frames = traceback.extract_tb(value.__traceback__ if value is not None else tb)
+        out.append(type(value).__name__ + " at " + " < ".join(
+            f"{os.path.basename(f.filename)}:{f.lineno}:{f.name}" for f in reversed(frames)))
+        value = value.__cause__ or value.__context__
+    return " | caused by ".join(out) or (etype.__name__ if etype else "")
+
+
+class SanitizeExceptions(logging.Filter):
+    """For loggers we do not format (uvicorn.error logs "Exception in ASGI application" with the traceback): the
+    traceback is replaced by safe_traceback before any handler formats it."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.exc_info:
+            safe = safe_traceback(record.exc_info)
+            record.exc_info, record.exc_text = None, None
+            record.msg = f"{record.getMessage()} [{safe}]"
+            record.args = ()
+        return True
 
 
 class JsonFormatter(logging.Formatter):
@@ -38,7 +76,7 @@ class JsonFormatter(logging.Formatter):
             out["request_id"] = st.request_id
         out.update(getattr(record, "json_fields", None) or {})
         if record.exc_info:
-            out["exception"] = self.formatException(record.exc_info)
+            out["exception"] = safe_traceback(record.exc_info)  # never the message (Codex R7)
         return json.dumps(out, ensure_ascii=False, default=str)
 
 
@@ -51,6 +89,10 @@ def setup_logging(level: int = logging.INFO) -> None:
         h._obs_json = True  # type: ignore[attr-defined]
         root.addHandler(h)
     root.setLevel(level)
+    for name in ("uvicorn.error", "uvicorn"):
+        lg = logging.getLogger(name)
+        if not any(isinstance(f, SanitizeExceptions) for f in lg.filters):
+            lg.addFilter(SanitizeExceptions())
 
 
 @dataclass
@@ -67,6 +109,7 @@ class Stats:
     allowance: str = "ok"      # protection: ok, or the last reason a Gemini call was refused
     busy: bool = False         # refused with 503 busy (no free generation slot)
     cache: str = "none"        # /v1/report cache: none (not cacheable), miss, hit (stored or from a duplicate in flight)
+    degraded_reason: Optional[str] = None  # last reason a model call was refused or failed (DEGRADED_REASONS)
 
 
 _stats: contextvars.ContextVar[Optional[Stats]] = contextvars.ContextVar("obs_stats", default=None)
@@ -108,6 +151,23 @@ def note_error(category: str) -> None:
     st = _stats.get()
     if st is not None:
         st.error = category
+    if category in _MODEL_ERRORS:
+        note_degraded(MODEL_ERROR)
+
+
+def note_degraded(reason: str) -> None:
+    """Why the response may be drafts (X-Report-Degraded-Reason); the last reason recorded wins."""
+    st = _stats.get()
+    if st is not None and reason in DEGRADED_REASONS:
+        st.degraded_reason = reason
+
+
+def degraded_reason(st: Optional[Stats] = None) -> Optional[str]:
+    """The X-Report-Degraded-Reason value: only when the response is drafts and a reason was recorded."""
+    st = st or _stats.get()
+    if st is None or mode(st) != "drafts":
+        return None
+    return st.degraded_reason
 
 
 def note_allowance(reason: str) -> None:
@@ -151,14 +211,44 @@ def classify(exc: BaseException) -> str:
     return OTHER
 
 
-def gemini_failed(logger: logging.Logger, what: str, exc: BaseException, key: str) -> tuple[str, str]:
-    """Records and logs (WARNING, with the category) a failed Gemini call. Returns the error text with the key
-    masked, at most 300 characters, and the category, for the exception the caller raises."""
+def http_status(exc: BaseException) -> Optional[int]:
+    code = getattr(exc, "code", None)
+    code = code if isinstance(code, int) else getattr(exc, "status_code", None)
+    return code if isinstance(code, int) and 100 <= code <= 599 else None
+
+
+_REQUEST_ID_HEADERS = ("x-goog-request-id", "x-request-id", "x-cloud-trace-context")
+
+
+def provider_request_id(exc: BaseException) -> Optional[str]:
+    """The provider's request id from the error's HTTP response headers, if any (safe characters only)."""
+    headers = getattr(getattr(exc, "response", None), "headers", None)
+    if headers is None:
+        return None
+    for name in _REQUEST_ID_HEADERS:
+        try:
+            v = headers.get(name)
+        except Exception:
+            return None
+        if v:
+            return re.sub(r"[^A-Za-z0-9._/-]", "", str(v))[:64] or None
+    return None
+
+
+def gemini_failed(logger: logging.Logger, what: str, exc: BaseException) -> tuple[str, str]:
+    """Records and logs (WARNING) a failed Gemini call: exception class, category, HTTP status and the provider's
+    request id only, never the exception's message (it can echo the prompt, a URL or model text; Codex R7).
+    Returns that safe description and the category, for the exception the caller raises."""
     category = classify(exc)
     note_error(category)
-    msg = (str(exc).replace(key, "***") if key else str(exc))[:300]
-    logger.warning("%s failed: %s: %s", what, type(exc).__name__, msg,
-                   extra={"json_fields": {"error": category, "exception": type(exc).__name__}})
+    status, rid = http_status(exc), provider_request_id(exc)
+    fields: dict[str, Any] = {"error": category, "exception": type(exc).__name__}
+    if status is not None:
+        fields["http_status"] = status
+    if rid:
+        fields["provider_request_id"] = rid
+    msg = f"{type(exc).__name__} ({category}" + (f", HTTP {status}" if status is not None else "") + ")"
+    logger.warning("%s failed: %s", what, msg, extra={"json_fields": fields})
     return msg, category
 
 
@@ -200,6 +290,7 @@ def completion_fields(st: Stats, status: int) -> dict[str, Any]:
         "sentences": sentence_counts(st), "mode": mode(st),
         "remaining_s": round(st.budget.left(), 1) if st.budget is not None else None,
         "allowance": st.allowance, "busy": st.busy, "cache": st.cache,
+        "degraded_reason": degraded_reason(st),
     }
     lang = _get(st.debug, "language")
     if st.endpoint == "followup":
