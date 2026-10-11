@@ -419,7 +419,10 @@ def compute_with_raw(
         # No loan: LVR and DTI stay null (both limits apply to new lending; the warning above says why).
         if income is not None:
             if loan > 0:
-                dti = raw.dti = (debts + loan) / income
+                dti = (debts + loan) / income
+                if not math.isfinite(dti):  # serialized as null otherwise; the schema's MIN_AMOUNT prevents it
+                    raise InputError("household_income", "is too small to compute a debt-to-income ratio")
+                raw.dti = dti
                 out.dti = round(dti, 2)
                 if dti > 6:
                     flags.append(Flag(id="dti_over_6", source_ids=["rbnz_dti"]))

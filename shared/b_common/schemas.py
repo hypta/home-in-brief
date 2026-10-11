@@ -86,14 +86,15 @@ class ChatSupplied(_Lenient):
 
 
 MAX_AMOUNT = 1e10
+MIN_AMOUNT = 0.01  # one cent: a smaller price or income makes LVR/DTI overflow to infinity
 MAX_RATE_PCT = 30
 Amount = Annotated[float, Field(allow_inf_nan=False)]
 
 
 class UserInputs(_Lenient):
-    price_override: Optional[Amount] = Field(None, gt=0, le=MAX_AMOUNT)
+    price_override: Optional[Amount] = Field(None, ge=MIN_AMOUNT, le=MAX_AMOUNT)
     deposit: Optional[Amount] = Field(None, ge=0, le=MAX_AMOUNT)
-    household_income: Optional[Amount] = Field(None, gt=0, le=MAX_AMOUNT)
+    household_income: Optional[Amount] = Field(None, ge=MIN_AMOUNT, le=MAX_AMOUNT)
     existing_debts: Optional[Amount] = Field(None, ge=0, le=MAX_AMOUNT)
     rate_pct: Optional[Amount] = Field(None, ge=0, le=MAX_RATE_PCT)
     household_type: Optional[
