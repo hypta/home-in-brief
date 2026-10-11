@@ -64,6 +64,9 @@ def classify_prompt(question: str, history: list[dict], links: list[dict]) -> st
 You sort one follow-up question about a property report for first-home buyers in Auckland, New Zealand.
 {_UNTRUSTED}
 The QUESTION may be in any language; understand it as asked. Use HISTORY only to see what a short QUESTION refers to.
+A short QUESTION that only reacts to the last answer in HISTORY ("are you sure?", "why?", "tell me more", in any
+language) is about what the question before it asked: give "out_of_scope" and "searchable" the values that earlier
+question gets.
 Return JSON with these keys:
 - "language": BCP 47 code of the QUESTION's language, e.g. "en", "zh-Hant", "zh-Hans", "ja", "ko".
 - "out_of_scope": true when the question is about something this report does not cover. The report covers: this
@@ -167,7 +170,9 @@ looking at {json.dumps(address, ensure_ascii=False)}. Answer the QUESTION using 
 {_UNTRUSTED} HISTORY is the conversation so far; use it only to see what the QUESTION refers to.
 
 Steps:
-1. Work out what the QUESTION asks, using HISTORY for words such as "it", "there" or "the nearest one".
+1. Work out what the QUESTION asks, using HISTORY for words such as "it", "there" or "the nearest one". A QUESTION
+   that only reacts to the last answer ("are you sure?", "why?", "tell me more") asks for that answer to be checked or
+   added to: it is the question before it, asked again.
 2. Always run a Google Search for it, with the place names involved. Never answer without search results.
 3. Answer that QUESTION, and only it, from the pages found.
 
