@@ -303,7 +303,11 @@ Per deploy run:
 3. `roles/run.invoker` for the runtime service account on every private service (idempotent).
 4. Smoke test: every deployed service and job must report `Ready=True` in `gcloud run ... describe`. For web, without a
    token: `GET /` and `GET /config.json` must return 200, and `GET /api/rates/latest` (through the relay to rules-api)
-   must not return 502 (a 502 `upstream_auth` means a missing `run.invoker` binding). Private services are not called;
+   must return 200 with banks whose oldest `captured_at` is at most 30 days old (a 502 `upstream_auth` means a missing
+   `run.invoker` binding). When report-api, rules-api or web was deployed, `POST /api/report` (address 2100210, fixed
+   inputs, real Gemini) must return 200 with at least one summary sentence and `POST /api/followup` (one English
+   question) 200; report-api's `X-Report-Mode` header (`gemini`, `drafts`, `mock`) must be `gemini` when present (web's
+   relay does not pass it on yet). Latency and mode go to the job summary. Private services are not called;
    if you check them by hand use `/health`, not `/healthz` (Cloud Run reserves some paths ending in `z`,
    [known issues](https://docs.cloud.google.com/run/docs/known-issues)).
 5. A table of what was deployed and why goes to the job summary.

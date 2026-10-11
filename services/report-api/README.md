@@ -16,6 +16,11 @@ Private Cloud Run service; only web calls it.
 | POST | `/v1/followup?refusal_mode=exempt\|strict` | Follow-up answer (below) |
 | GET | `/health` | `{"status": "ok"}`; calls nothing |
 
+Both POST routes set the header `X-Report-Mode`: `gemini` (at least one Gemini rewrite passed, or a Search answer),
+`drafts` (only program drafts and fixed sentences, e.g. after a Gemini failure) or `mock` (`REPORT_MOCK`). Logs: one
+JSON completion record per request (`app/obs.py`: request id, status, latency, model, call and Search counts, error
+category, sentence counts, mode; never the question, history, prompts or amounts).
+
 Request body: `{"property_context": {...}, "user_inputs": {...}, "rules_output": {...}}`. All three keys
 are required JSON objects and are kept whole (`b_common.report_schemas.ReportRequest`).
 

@@ -115,3 +115,20 @@ def test_model_failure_is_logged_as_drafts(monkeypatch, caplog):
     f = records(caplog)[0].json_fields
     assert f["mode"] == "drafts" and f["error"] == "quota" and f["gemini_calls"] == 1
     assert f["sentences"]["passed"] == 0 and f["sentences"]["drafts"] >= 1
+
+
+def test_report_mode_header(monkeypatch):
+    monkeypatch.setattr(gemini, "gemini_generate", fake_report(GOOD))
+    r = client.post("/v1/report", json=body("case1"))
+    assert r.headers["X-Report-Mode"] == "gemini"
+    assert "mode" not in r.json()  # the JSON contract is unchanged
+    monkeypatch.setattr(gemini, "gemini_generate", fake_report(gemini.ModelUnavailable("x", "quota")))
+    assert client.post("/v1/report", json=body("case1")).headers["X-Report-Mode"] == "drafts"
+    monkeypatch.setenv("REPORT_MOCK", "true")
+    assert client.post("/v1/report", json=body("case1")).headers["X-Report-Mode"] == "mock"
+
+
+def test_followup_mode_header(monkeypatch):
+    monkeypatch.setattr(followup, "gemini_json", fake_followup(cls(), [ans(FLOOD_EN)]))
+    r = client.post("/v1/followup", json=body("case1") | {"question": "Flood risk?", "history": []})
+    assert r.status_code == 200 and r.headers["X-Report-Mode"] == "gemini"

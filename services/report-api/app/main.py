@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 from typing import Literal, Optional
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -61,15 +61,19 @@ def health() -> dict:
 
 
 @app.post("/v1/report", response_model=Report, responses=ERRORS)
-def report(req: ReportRequest) -> Report:
-    return build_report(req, debug=obs.attach(Debug()))
+def report(req: ReportRequest, response: Response) -> Report:
+    rep = build_report(req, debug=obs.attach(Debug()))
+    response.headers["X-Report-Mode"] = obs.mode()  # gemini | drafts | mock (deploy smoke test, Codex F06)
+    return rep
 
 
 FOLLOWUP_ERRORS = ERRORS | {504: {"model": ErrorResponse, "description": "Request deadline exceeded"}}
 
 
 @app.post("/v1/followup", response_model=FollowupResponse, response_model_exclude_none=True, responses=FOLLOWUP_ERRORS)
-def followup(req: FollowupRequest, refusal_mode: Literal["exempt", "strict"] = "exempt") -> FollowupResponse:
+def followup(req: FollowupRequest, response: Response,
+             refusal_mode: Literal["exempt", "strict"] = "exempt") -> FollowupResponse:
     resp = answer_followup(req, refusal_mode, debug=obs.attach({}), web_search=True)
     obs.note_web(resp.web is not None)
+    response.headers["X-Report-Mode"] = obs.mode()
     return resp

@@ -160,14 +160,45 @@ done
 if [ -n "$PUBLIC" ] && [ -n "$(describe service "$PUBLIC")" ]; then
   url=$(service_url "$PUBLIC")
   code() { curl -s -o "$WORK/body" -w '%{http_code}' --max-time 30 --retry 3 --retry-all-errors "$url$1" || true; }
+  # ISO 8601 time (e.g. 2026-10-10T20:20:00+13:00) -> epoch seconds (GNU date on the runner; BSD date locally)
+  rates_epoch() { date -d "$1" +%s 2>/dev/null || date -j -f '%Y-%m-%dT%H:%M:%S%z' "${1%:*}${1##*:}" +%s; }
+  # POST JSON once (no retry: each call spends Gemini quota); sets c (status), secs (latency), mode (X-Report-Mode)
+  smoke_post() {
+    local out
+    out=$(curl -s -o "$WORK/body" -D "$WORK/headers" -w '%{http_code} %{time_total}' --max-time 60 \
+      -H 'content-type: application/json' --data "$2" "$url$1" || true)
+    out=${out:-000 0}; c=${out% *}; secs=${out#* }
+    mode=$(tr -d '\r' < "$WORK/headers" 2>/dev/null | awk -F': ' 'tolower($1) == "x-report-mode" {print $2}' | tail -n1)
+  }
   for path in / /config.json; do
     c=$(code "$path")
     echo "- $PUBLIC GET $path: $c" >> "$SUMMARY"
     [ "$c" = 200 ] || { echo "::error::$PUBLIC GET $path returned $c"; fail=1; }
   done
-  # Through the relay to rules-api. 404 is fine before rates are seeded; 502 upstream_auth means a missing invoker binding.
+  # Through the relay to rules-api: 200 with banks, the oldest captured_at at most 30 days old (rules-api's
+  # STALE_DAYS). A 502 upstream_auth means a missing invoker binding.
   c=$(code /api/rates/latest)
-  echo "- $PUBLIC GET /api/rates/latest (relay to rules-api): $c" >> "$SUMMARY"
-  if [ "$c" = 502 ]; then echo "::error::relay returned 502: $(head -c 300 "$WORK/body")"; fail=1; fi
+  oldest=$(jq -r '[.banks[]?.captured_at // empty] | min // empty' "$WORK/body" 2>/dev/null || true)
+  age=$(( $(date +%s) - $(rates_epoch "$oldest" 2>/dev/null || echo 0) ))
+  echo "- $PUBLIC GET /api/rates/latest (relay to rules-api): $c, oldest captured_at ${oldest:-none}" >> "$SUMMARY"
+  if [ "$c" != 200 ] || [ -z "$oldest" ]; then
+    echo "::error::rates returned $c without a snapshot: $(head -c 300 "$WORK/body")"; fail=1
+  elif [ "$age" -gt $(( 30 * 86400 )) ]; then
+    echo "::error::rates snapshot is older than 30 days ($oldest)"; fail=1
+  fi
+
+  # Report and follow-up through web with a public address (740 Sandringham Road Extension), real Gemini. Only when
+  # a target on that path was deployed, so other deploys cost no Gemini calls. web's relay does not pass report-api's
+  # X-Report-Mode header on (2026-10-11): when it is missing, 200 and at least one summary sentence are required.
+  if grep -qxE 'report-api|rules-api|web' <<<"$TO_DEPLOY"; then
+    smoke_post /api/report '{"address_id": 2100210, "user_inputs": {"deposit": 34000, "household_income": 130000}}'
+    n=$(jq -r '.summary | length' "$WORK/body" 2>/dev/null || echo 0)
+    echo "- $PUBLIC POST /api/report: $c, ${secs}s, $n sentences, model $(jq -r '.model // "?"' "$WORK/body" 2>/dev/null), mode ${mode:-header not passed}" >> "$SUMMARY"
+    if [ "$c" != 200 ] || [ "${n:-0}" -lt 1 ]; then echo "::error::report returned $c with ${n:-0} sentences"; fail=1
+    elif [ -n "$mode" ] && [ "$mode" != gemini ]; then echo "::error::report mode is $mode, not gemini"; fail=1; fi
+    smoke_post /api/followup '{"address_id": 2100210, "user_inputs": {"deposit": 34000, "household_income": 130000}, "question": "What is the flood risk for this address?", "history": []}'
+    echo "- $PUBLIC POST /api/followup: $c, ${secs}s, mode ${mode:-header not passed}" >> "$SUMMARY"
+    [ "$c" = 200 ] || { echo "::error::followup returned $c: $(head -c 300 "$WORK/body")"; fail=1; }
+  fi
 fi
 exit $fail
