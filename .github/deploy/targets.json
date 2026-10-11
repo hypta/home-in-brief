@@ -37,7 +37,7 @@
       "public": false,
       "env": {"PROTECTION_BACKEND": "firestore", "GEMINI_DAILY_CALLS": "100", "SEARCH_DAILY_CALLS": "30",
               "GEMINI_EVENT_CALLS": "3000", "GENERATION_SLOTS": "2", "GEMINI_MAX_OUTPUT_TOKENS": "2048",
-              "GEMINI_INPUT_MAX_BYTES": "32000", "REPORT_DEGRADED": "false"},
+              "GEMINI_INPUT_MAX_BYTES": "32000", "REPORT_DEGRADED": "false", "PROTECTION_TIMEOUT_S": "3"},
       "secrets": {"GEMINI_API_KEY": "GEMINI_API_KEY:latest"},
       "url_env": {"RULES_API_URL": "rules-api"},
       "flags": ["--max-instances=2"]
