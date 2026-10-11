@@ -85,13 +85,15 @@ def test_cladding_program_fact_without_a_source_in_chinese(monkeypatch, no_rules
 def test_translation_that_changes_the_sentence_falls_back_to_english(monkeypatch, no_rules, bad):
     out = ask(monkeypatch, council_off({"year_built": 1998, "cladding": "monolithic"}, LEAKY), "這間房子是哪一年蓋的？",
               fake("zh-Hant", lambda texts: [bad]))
-    assert out["answer"][0]["text"] == "Based on what you told us, " + YEAR_EN  # whole sentence English, no mix
+    # no usable translation: the fixed-language decision (Chinese asker, no code-written Chinese for this sentence)
+    assert out["language"] == "zh-Hant"
+    assert [s["text"] for s in out["answer"]] == [followup.FALLBACK_NONE["zh-Hant"]]  # no English sentence, no mix
 
 
 def test_wrong_number_of_translations_or_a_failed_call_keeps_english(monkeypatch, no_rules):
     b = council_off({"year_built": 1998, "cladding": "monolithic"}, LEAKY)
     out = ask(monkeypatch, b, "這間房子是哪一年蓋的？", fake("zh-Hant", lambda texts: [YEAR_ZH, YEAR_ZH, YEAR_ZH]))
-    assert out["answer"][0]["text"] == "Based on what you told us, " + YEAR_EN
+    assert [s["text"] for s in out["answer"]] == [followup.FALLBACK_NONE["zh-Hant"]]
 
     def broken(texts):
         raise AssertionError  # never reached: the call itself fails below
@@ -103,7 +105,7 @@ def test_wrong_number_of_translations_or_a_failed_call_keeps_english(monkeypatch
             raise gemini.ModelUnavailable("quota")
         return gen(p, schema, timeout_s)
     out = ask(monkeypatch, b, "這間房子是哪一年蓋的？", failing)
-    assert out["answer"][0]["text"] == "Based on what you told us, " + YEAR_EN
+    assert [s["text"] for s in out["answer"]] == [followup.FALLBACK_NONE["zh-Hant"]]
 
 
 def test_japanese_program_fact_and_translated_prefix(monkeypatch, no_rules):
@@ -128,7 +130,9 @@ def test_japanese_comparison_with_a_changed_year_stays_english(monkeypatch, no_r
     ja = "ご入力の建築年は 1986 年ですが、市議会の記録は 1990 年代（1990–1999）で、この回答は市議会の記録を使います。"
     out = ask(monkeypatch, body("case5"), "この家は1985年に建てられました。",
               fake("ja", lambda texts: [ja], year_built="1985"))
-    assert out["answer"][0]["text"] == ("You gave the year built as 1985; the council records the 1990s (1990–1999), "
+    # the translation failed the checks: English content, so `language` is en (fixed-language decision)
+    assert out["language"] == "en" and out["answer"][0]["text"] == followup.FALLBACK_LEAD["en"]
+    assert out["answer"][1]["text"] == ("You gave the year built as 1985; the council records the 1990s (1990–1999), "
                                         "and this answer uses the council's record.")
 
 
@@ -198,7 +202,10 @@ def test_translation_keeps_the_values_as_written(monkeypatch, no_rules, zh, kept
     b = council_off({"year_built": 1998, "cladding": "monolithic"}, LEAKY)
     out = ask(monkeypatch, b, "外牆是什麼材質？",
               fake("zh-Hant", lambda texts: [zh if "cladding you gave" in t else t for t in texts]))
-    assert out["answer"][0]["text"] == ("依你提供的資訊，" + zh if kept else CLAD_USER_EN)
+    if kept:
+        assert out["answer"][0]["text"] == "依你提供的資訊，" + zh
+    else:  # the translated value is not used and there is no other translation: the fixed Chinese decision
+        assert [s["text"] for s in out["answer"]] == [followup.FALLBACK_NONE["zh-Hant"]]
 
 
 def test_number_words_in_a_translation_are_blocked():
@@ -331,4 +338,16 @@ def test_japanese_retry_returning_nothing_is_the_same_decision(monkeypatch, no_r
     gen = _bad_then(None)  # the retry call answers with an empty list, i.e. no usable translation
     out = ask(monkeypatch, council_off({"year_built": 1998, "cladding": "monolithic"}, LEAKY),
               "この家は何年に建てられましたか？", gen)
+    assert out["language"] == "en" and out["answer"][0]["text"] == followup.FALLBACK_LEAD["en"]
+
+
+def test_japanese_first_translation_timeout_is_the_same_decision(monkeypatch, no_rules):
+    inner = fake("ja", lambda texts: texts)
+
+    def timing_out(p, schema, timeout_s):
+        if p.startswith(fp.TASK_TRANSLATE):
+            raise gemini.ModelUnavailable("ReadTimeout", "timeout")
+        return inner(p, schema, timeout_s)
+    out = ask(monkeypatch, council_off({"year_built": 1998, "cladding": "monolithic"}, LEAKY),
+              "この家は何年に建てられましたか？", timing_out)
     assert out["language"] == "en" and out["answer"][0]["text"] == followup.FALLBACK_LEAD["en"]

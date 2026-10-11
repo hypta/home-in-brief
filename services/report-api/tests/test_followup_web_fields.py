@@ -817,10 +817,12 @@ def test_other_language_is_translated_or_falls_back_to_english(monkeypatch, sear
     assert out["user_supplied"] == {} and rules == [] and len(out["answer"]) == 3
     assert [s["text"] for s in out["answer"]][1:] == ok[1:]
     assert out["answer"][0]["text"].startswith("Selon une recherche web (non vérifiée par ce service), ")
-    # a translation that fails the checks (a number it must not have) leaves the English
+    # a translation that fails the checks (a number it must not have) and no other translation: fixed-language
+    # decision, English content with language en
     monkeypatch.setattr(followup, "gemini_json", fake(cls("fr"), translate=lambda t: ["x 99"] * len(t)))
     out = post("case1", b=with_title("Unit Title"), search_field="year_built", language="fr").json()
-    assert out["answer"][1]["text"].startswith("This is a unit title property")
+    assert out["language"] == "en" and out["answer"][0]["text"] == followup.FALLBACK_LEAD["en"]
+    assert out["answer"][2]["text"].startswith("This is a unit title property")
 
 
 def test_mock_mode_also_skips_the_form(monkeypatch, search, rules):

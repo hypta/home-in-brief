@@ -928,15 +928,15 @@ def finish(parts: list[Part], language: str, ev: Evidence,
         copy = sorted({w for p in retry for w in (*_TR_NUM.findall(p.sentence.text), *p.keep,
                                                   *(k for k in fp.KEEP_ENGLISH if k in p.sentence.text))})
         again = translate([strip_prefix(p.sentence.text) for p in retry], copy)
-        if not done and (not again or len(again) != len(retry)):
-            # the retry was refused, timed out or failed, and nothing was translated: same fixed-language decision
-            # as when the first call is refused, so `language` matches the content
-            return fixed_answer(parts, language, ev, debug, web_part)
         for n, p in enumerate(retry if again and len(again) == len(retry) else []):
             fails = check_translation(p.sentence, again[n], language, ev, p.base, p.keep)
             debug["translations"].append({"en": p.sentence.text, "text": again[n], "fails": fails, "retry": True})
             if not fails:
                 done[id(p)] = Sentence(text=tidy(again[n], language), source_ids=p.sentence.source_ids)
+    if english and not done and not getattr(translate, "mock", False):
+        # no usable model translation at all (call failed or timed out, checks failed, retry refused or failed): the
+        # same fixed-language decision as when the first call is refused, so `language` matches the content
+        return fixed_answer(parts, language, ev, debug, web_part)
     if is_zh(language):
         prefix = {False: PREFIXES.get(language, PREFIXES["zh-Hant"]),
                   True: WEB_PREFIXES.get(language, WEB_PREFIXES["zh-Hant"])}
@@ -1152,7 +1152,7 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
         """Sees only the fixed sentences, the language code and (on the retry) the words to copy, which come from
         those sentences (fp.translate_prompt)."""
         if mock:
-            return None
+            return None  # mock mode does not translate; finish keeps the English parts (translate.mock)
         if halted() or not clock.can_call():
             if not halted():
                 obs.note_degraded(obs.DEADLINE)
@@ -1169,6 +1169,8 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
 
     def unavailable() -> bool:
         return no_call["translate"]
+
+    translate.mock = mock  # type: ignore[attr-defined]
 
     # 1. classify (web's search button skips it: the question is optional and only gives the language)
     button = req.search_field
