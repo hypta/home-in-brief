@@ -48,8 +48,9 @@ The page calls web's `POST /api/report` and `POST /api/followup`; web fetches th
 
 ## How Gemini is used
 
-Gemini (Google AI) is used in three places, always behind code that owns the facts: report-api (summary and follow-up),
-and `jobs/rates-refresh` (extracting rates from a bank page, when a bank's terms allow it). The default model is
+Gemini (Google AI) is used in three places: report-api (summary and follow-up) and `jobs/rates-refresh` (extracting
+rates from a bank page, when a bank's terms allow it). Code owns the facts, except Google Search answers in follow-ups,
+which are shown as returned and marked as not checked (below). The default model is
 `gemini-3.5-flash-lite` (`GEMINI_MODEL`). Details: `services/report-api/README.md`.
 
 **Summary: code writes the facts, Gemini only rewords them.**
@@ -70,11 +71,14 @@ overriding a value the council records, **re-calls rules-api** with it, and Gemi
 Answers go through the same validator (at most 3 sentences). An out-of-scope question that public web pages can
 answer is answered with Gemini's Google Search grounding, shown as returned with its search suggestions and sources
 and marked as not checked by this service (the Gemini API terms do not allow it to be edited); advice, verdicts and
-predictions get one fixed refusal and links. Question history is treated as untrusted data and never becomes
-evidence.
+predictions get one fixed refusal and links. When the records lack the year built, cladding or last sale and the
+question asks for it, report-api searches for that field the same way; a year or cladding found there fills the
+inputs as "found online", except at addresses with several owners (Unit Title, Cross Lease, several title types),
+where it is shown but not filled in. web relays the report and follow-ups; its "Search the web" button for these
+fields is not wired yet. Question history is treated as untrusted data and never becomes evidence.
 
 **Languages.** The report is in English. A follow-up is answered in the language of the question, with terms such as
-LVR, DTI and First Home Loan kept in English; fixed program sentences are translated under checks (numbers, terms
+LVR, DTI and First Home Loan, publisher and layer names kept in English; fixed program sentences are translated under checks (numbers, terms
 and negation kept) or left in English, so an answer never mixes languages within a sentence.
 
 **Why this design.** Home-buying numbers must be right and traceable. A language model is good at plain wording and

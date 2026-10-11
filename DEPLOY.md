@@ -283,21 +283,23 @@ being deployed (`git diff`). So a deploy that failed is retried on the next push
 |---|---|---|---|---|
 | rules-api | service | private (`--no-allow-unauthenticated`) | `services/rules-api/`, `shared/`, `kb/`, `data/` | `DATA_BACKEND=firestore` |
 | property-api | service | private | `services/property-api/`, `shared/` | secret `LINZ_API_KEY` |
-| web | service | **public** (`--allow-unauthenticated`) | `services/web/`, `shared/` | `RULES_API_URL`, `PROPERTY_API_URL` |
+| report-api | service | private, `--max-instances=2` | `services/report-api/`, `shared/` | `RULES_API_URL`, secret `GEMINI_API_KEY` |
+| web | service | **public** (`--allow-unauthenticated`) | `services/web/`, `shared/` | `RULES_API_URL`, `PROPERTY_API_URL`, `REPORT_API_URL` |
 | kb-refresh | job | - | `jobs/kb-refresh/`, `kb/`, `shared/` | `DATA_BACKEND=firestore` |
 | rates-refresh | job | - | `jobs/rates-refresh/`, `shared/` | `DATA_BACKEND=firestore`, `GEMINI_MODEL`, secret `GEMINI_API_KEY` |
 
 The list lives in `.github/deploy/targets.json` and is deployed in that order (web after the private services). The
-paths follow what each Dockerfile copies; `shared/` triggers every Python target. To add a service (for example the
-future report-api): add an entry there, and if web calls it, a `url_env` line on web (plus a relay route in web's code).
+paths follow what each Dockerfile copies; `shared/` triggers every Python target. To add a service: add an entry
+there, and if web calls it, a `url_env` line on web (plus a relay route in web's code).
 
 Per deploy run:
 1. Seed scripts when their inputs changed (section 3b).
 2. For each target: `docker build -f <Dockerfile> .` on the runner, push `REGION-docker.pkg.dev/PROJECT/REPO/<name>:<git sha>`,
    then `gcloud run deploy` (services) or `gcloud run jobs deploy` (jobs). No `--service-account`: the default runtime
    service account is used. Service env vars and secrets use `--update-env-vars` / `--update-secrets`, so values set
-   by hand (`LINZ_BASEMAPS_KEY`, `INCLUDE_DRAFT`, `--min-instances`) survive a deploy. web gets `RULES_API_URL` and
-   `PROPERTY_API_URL` from `gcloud run services describe ... --format='value(status.url)'`.
+   by hand (`LINZ_BASEMAPS_KEY`, `INCLUDE_DRAFT`, `--min-instances`) survive a deploy. Each `url_env` entry (web:
+   `RULES_API_URL`, `PROPERTY_API_URL`, `REPORT_API_URL`; report-api: `RULES_API_URL`) is read from
+   `gcloud run services describe ... --format='value(status.url)'`.
 3. `roles/run.invoker` for the runtime service account on every private service (idempotent).
 4. Smoke test: every deployed service and job must report `Ready=True` in `gcloud run ... describe`. For web, without a
    token: `GET /` and `GET /config.json` must return 200, and `GET /api/rates/latest` (through the relay to rules-api)

@@ -3,7 +3,8 @@
 The Gemini layer. web sends the three documents it fetched server-side (PropertyContext from
 property-api, the user's inputs, RulesOutput from rules-api); report-api asks Gemini for a short
 plain-language summary, checks every sentence against the sources, and builds the rest of the
-report by code. Contract: `out/gemini_layer/INTERFACE_DRAFT.md` (team notes, not in git).
+report by code. Contract: the request and response models (`shared/b_common/report_schemas.py`,
+`app/followup.py`) and the endpoint sections below.
 
 Private Cloud Run service; only web calls it.
 
@@ -106,8 +107,9 @@ report (`/v1/report`) stays English. An answer from a Google Search (step 3) als
 Request: the three documents plus `question` (1-1000 characters) and `history` (at most 6 entries of
 `{role: "user"|"assistant", text}`, text at most 2000 characters; web sends the last 3 turns). No server state.
 Query `refusal_mode`: `exempt` (default) or `strict`. Optional `search_field`: `"year_built"`, `"cladding"` or
-`"last_sale"` (the "Search the web for this" button; `question` may then be empty; see "Fields the records do not
-have" below). Optional `language` (BCP 47, e.g. `"zh-Hant"`, `"zh-TW"`, `"ja"`; default `en`): for a button request
+`"last_sale"` (for a "Search the web for this" button; `question` may then be empty; see "Fields the records do not
+have" below). web does not forward `search_field` or `language` yet (teammate A's work), so through the public page
+only the question trigger searches. Optional `language` (BCP 47, e.g. `"zh-Hant"`, `"zh-TW"`, `"ja"`; default `en`): for a button request
 **without** a question, the page's language, used for the search answer and the derived sentences; ignored when
 a question is sent (its language is detected as usual). A malformed code is a 422 `validation_error`.
 
