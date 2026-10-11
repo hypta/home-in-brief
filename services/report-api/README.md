@@ -282,6 +282,19 @@ chose plan C). For `year_built`, `cladding` and `last_sale` (`app/web_fields.py`
   comes from the new facts ("The year built found online is 1987."). The fixed program sentence of a searched field
   is left out next to the search answer. The button with nothing to fill in (last sale, ambiguous, none found), or
   less than 11 s left, or an answer step that fails: `answer: []` and `web` only.
+- **Several owners: shown, not filled in** (user decision 10/11; `followup.multi_unit_kind`). When `title_type` is
+  Unit Title or Cross Lease (whitespace-normalised and case-folded, like rules-api's `title_type` match), or its
+  `reason` is `multiple_title_types` (several title types at the address, `value` null), a search answer cannot say
+  which unit or share a year or a price belongs to (it may describe another unit or the whole building). The search
+  runs as usual and `web` (`text`, `sources`, `search_suggestions`, `extracted`) is returned as always, but a
+  `year_built` / `cladding` value is **not** put in `user_supplied`, `user_supplied_source` is absent and rules-api
+  is not called. `web.autofill_skipped: "multi_unit_title"` is added (only when a value was held back; the key is
+  absent otherwise, so old clients are unaffected). `answer` holds three code-written sentences: what was found
+  (with the web prefix), why it was not added to the form ("This is a unit title property, so the result may
+  describe another unit or the whole building."; cross lease and multiple-title wording differ), and that the user
+  may enter it if it matches their unit (home, property). Chinese is written by code, other languages use the
+  restricted translation (English when a check fails); every sentence passes the validator and the length limit.
+  Freehold, Leasehold and all other cases fill the form as above. The same in `REPORT_MOCK` mode.
 - **Prefix.** A sentence that depends on a value found online gets "Based on a web search (not checked by this
   service), " / `依網路搜尋結果（未經本系統核對），` / `依网络搜索结果（未经本系统核对），`; other languages translate the
   English phrase (at most 70 characters). Each fact records the chat-supplied fields it depends on (`Fact.fields`:

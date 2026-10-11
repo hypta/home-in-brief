@@ -105,6 +105,10 @@ class WebAnswer(BaseModel):
     # `text` itself is never changed.
     fields: list[str] = Field(default_factory=list)
     extracted: dict[str, Any] = Field(default_factory=dict)
+    # Only when a value in `extracted` (year_built, cladding) was NOT put in user_supplied because the property has
+    # several owners ("multi_unit_title": Unit Title, Cross Lease, or several title types at the address). Absent
+    # otherwise (the route leaves out null keys).
+    autofill_skipped: Optional[Literal["multi_unit_title"]] = None
 
 
 class FollowupResponse(BaseModel):
@@ -377,8 +381,8 @@ def is_zh(language: str) -> bool:
     return language.lower().startswith("zh")
 
 
-_TO_HANS = str.maketrans("議會資記錄說為內準與牆這個問題蓋範圍連結許幫詢調錯與據時間準鍵戶稱開關東區層單樣嗎實際處筆價貸額屬權產圖齡庫訊標準舊歲牠網尋",
-                         "议会资记录说为内准与墙这个问题盖范围连结许帮询调错与据时间准键户称开关东区层单样吗实际处笔价贷额属权产图龄库讯标准旧岁它网寻")
+_TO_HANS = str.maketrans("議會資記錄說為內準與牆這個問題蓋範圍連結許幫詢調錯與據時間準鍵戶稱開關東區層單樣嗎實際處筆價貸額屬權產圖齡庫訊標準舊歲牠網尋賃樓塊類輸質",
+                         "议会资记录说为内准与墙这个问题盖范围连结许帮询调错与据时间准键户称开关东区层单样吗实际处笔价贷额属权产图龄库讯标准旧岁它网寻赁楼块类输质")
 
 
 def _zh(text: str, language: str) -> str:
@@ -942,6 +946,73 @@ def _sources_out(supplied: dict[str, Any], sources: dict[str, str]) -> Optional[
     return out if WEB_SEARCH in out.values() else None
 
 
+# ---- multi-owner titles: a search value is shown, never filled in (user decision 10/11) -----------
+MULTI_UNIT = "multi_unit_title"
+
+
+def multi_unit_kind(req: ReportRequest) -> Optional[str]:
+    """"unit" (Unit Title), "cross" (Cross Lease) or "multi" (reason multiple_title_types: several title types at the
+    address, no value) when the property has several owners, else None. Values compare like rules-api's title_type
+    (whitespace-normalised, case-folded)."""
+    f = req.property_fields().get("title_type")
+    if f is None:
+        return None
+    if f.value is not None:
+        return {"unit title": "unit", "cross lease": "cross"}.get(" ".join(str(f.value).split()).casefold())
+    return "multi" if f.reason == "multiple_title_types" else None
+
+
+_SKIP_EN = {"unit": ("This is a unit title property, so the result may describe another unit or the whole building.",
+                     "your unit"),
+            "cross": ("This is a cross lease property, so the result may describe another home on the same site.",
+                      "your home"),
+            "multi": ("This address has more than one title type, so the result may describe another title or the "
+                      "whole building.", "your property")}
+_SKIP_ZH = {"unit": ("這是分戶產權（Unit Title）物業，搜尋結果可能描述其他單位或整棟大樓。", "你的單位"),
+            "cross": ("這是交叉租賃（Cross Lease）物業，搜尋結果可能描述同一地塊上的其他住宅。", "你的住宅"),
+            "multi": ("這個地址有多種產權類型，搜尋結果可能描述其他產權或整棟大樓。", "你的物業")}
+
+
+def skipped_answer(kind: str, found: dict[str, Any], language: str,
+                   translate: Callable[..., Optional[list[str]]], debug: dict) -> list[Sentence]:
+    """Code-written sentences for a search value that was not filled in: what was found, why it was not added, and
+    that the user may enter it. Chinese is written by code; other languages are translated under the usual checks
+    (English when a check fails). Each sentence passes the validator against the found values only."""
+    year, cladding = found.get("year_built"), found.get("cladding")
+    en_bits, zh_bits, nums, terms = [], [], [], set()
+    if year is not None:
+        decade = bool(re.fullmatch(r"\d{4}s", str(year)))
+        en_bits.append(f"the year built found online is {'the ' if decade else ''}{year}")
+        zh_bits.append(f"建造年份是 {str(year)[:4]} 年代" if decade else f"建造年份是 {year} 年")
+        nums += _year_numbers(year)
+    if cladding is not None:
+        label = cladding_table.label(str(cladding))
+        en_bits.append(f"the cladding found online is {label}")
+        zh_bits.append(f"外牆材質是 {label}")
+        terms.add(label)
+    ev = Evidence(known_ids={"web_search"}, allowed={"web_search": [Allowed(Decimal(n)) for n in nums]},
+                  latin_terms={*terms, "Unit Title", "Cross Lease"})
+    base: BaseCheck = lambda s, mw: check_sentence(Sentence(text=s.text, source_ids=["web_search"]), ev, mw)  # noqa: E731
+    reason_en, mine = _SKIP_EN[kind]
+    en = [(" and ".join(en_bits)).capitalize() + ".", reason_en,
+          f"The result has not been added to the form; you can enter it yourself if it matches {mine}."]
+    reason_zh, mine_zh = _SKIP_ZH[kind]
+    zh = ["網路搜尋找到的" + "，".join(zh_bits) + "。", reason_zh, f"搜尋結果尚未填入表單；若與{mine_zh}相符，可自行輸入。"]
+    parts = []
+    for n, text in enumerate(en):
+        s = Sentence(text=text, source_ids=[])
+        if check_answer(s, ev, "en", base):
+            continue  # not expected; a sentence that fails its own check is left out
+        native = None
+        if is_zh(language):
+            z = Sentence(text=tidy(_zh(zh[n], language), language), source_ids=[])
+            if not check_answer(z, ev, language, base, text):
+                native = z
+        parts.append(Part(native or s, native=native is not None, user=n == 0, base=base,
+                          keep=tuple(terms), web=True if n == 0 else None))
+    return finish(parts, language, ev, translate, debug, lambda p: True)
+
+
 # ---- main flow ----------------------------------------------------------------------------------
 def answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
                     generate: Optional[JsonGenerator] = None, debug: Optional[dict] = None,
@@ -1174,9 +1245,21 @@ def answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
                            language if button and not req.question.strip() else "")
         if web:
             chat = req.chat_supplied()  # values only add: a value the user already gave is never replaced
+            kind = multi_unit_kind(req)
+            held: dict[str, Any] = {}
             for k in web_fields.FILLABLE:  # council data > the user's values > search values
                 if k in web.extracted and k not in supplied and k not in chat and missing_field(req, k):
-                    supplied[k], sources[k] = web.extracted[k], WEB_SEARCH
+                    if kind:  # several owners: the value may be another unit's or the whole building's
+                        held[k] = web.extracted[k]
+                    else:
+                        supplied[k], sources[k] = web.extracted[k], WEB_SEARCH
+            if held:  # shown, not filled in: no user_supplied value, no rules-api call
+                web = web.model_copy(update={"autofill_skipped": MULTI_UNIT})
+                return FollowupResponse(language=language, answer=skipped_answer(kind, held, language, translate, debug),
+                                        out_of_scope=False, user_supplied=supplied,
+                                        user_supplied_source=_sources_out(supplied, sources),
+                                        links=links or fallback_links(question, link_ids), dropped=0,
+                                        warnings=warnings, web=web)
             only_web = FollowupResponse(language=language, answer=[], out_of_scope=False, user_supplied=supplied,
                                         user_supplied_source=_sources_out(supplied, sources),
                                         links=links or fallback_links(question, link_ids), dropped=0,

@@ -734,3 +734,98 @@ def test_sent_deadline_is_at_least_10000_ms(monkeypatch):
     gemini.gemini_generate("p", 0.4)
     assert sent[2:] == [10000, 10000]
     assert gemini.timeout_ms(9.999998) == 10000 and gemini.timeout_ms(12.5) == 12500
+
+
+# ---- multi-owner titles: the search result is shown, never filled in ------------------------------------
+def with_title(value, reason=None):
+    b = copy.deepcopy(body("case1"))
+    b["property_context"]["property"]["title_type"] = {"value": value, "status": "found" if value else "not_found",
+                                                       "reason": reason, "source_id": "linz_titles"}
+    return b
+
+
+@pytest.mark.parametrize("value, reason, phrase", [
+    ("Unit Title", None, "unit title property"),
+    (" cross  LEASE ", None, "cross lease property"),
+    (None, "multiple_title_types", "more than one title type"),
+])
+@pytest.mark.parametrize("how", ["question", "button"])
+def test_multi_owner_title_shows_the_search_value_but_does_not_fill_it(monkeypatch, search, rules, value, reason,
+                                                                       phrase, how):
+    search.reply = web("Homes.co.nz lists this home as built in 1987 with brick walls.")
+    monkeypatch.setattr(followup, "gemini_json", fake(cls() if how == "question" else None))
+    b = with_title(value, reason)
+    r = post("case1", "When was this place built?", b) if how == "question" else post("case1", b=b,
+                                                                                    search_field="year_built")
+    assert r.status_code == 200, r.text
+    out = r.json()
+    assert out["user_supplied"] == {} and "user_supplied_source" not in out and rules == []
+    assert out["web"]["extracted"]["year_built"] == 1987 and out["web"]["autofill_skipped"] == "multi_unit_title"
+    assert out["web"]["text"] == "Homes.co.nz lists this home as built in 1987 with brick walls."
+    assert out["web"]["sources"] and out["web"]["search_suggestions"]
+    texts = [s["text"] for s in out["answer"]]
+    assert texts[0] == "Based on a web search (not checked by this service), the year built found online is 1987."
+    assert phrase in texts[1] and "may describe" in texts[1]
+    assert "has not been added to the form" in texts[2] and "enter it yourself" in texts[2]
+
+
+def test_decade_and_cladding_are_both_held_back(monkeypatch, search, rules):
+    search.reply = web("It was built in the 1930s and the exterior is brick.")
+    monkeypatch.setattr(followup, "gemini_json", fake(cls()))
+    out = post("case1", "When was it built and what is the cladding?", with_title("Unit Title")).json()
+    assert out["user_supplied"] == {} and rules == []
+    assert out["web"]["extracted"] == {"year_built": "1930s", "cladding": "brick"}
+    assert out["answer"][0]["text"] == ("Based on a web search (not checked by this service), the year built found "
+                                        "online is the 1930s and the cladding found online is brick.")
+
+
+def test_freehold_is_still_filled_in(monkeypatch, search, rules):
+    search.reply = web("Homes.co.nz lists this home as built in 1987.")
+    monkeypatch.setattr(followup, "gemini_json", fake(cls(), [{"answer": [], "links": []}]))
+    out = post("case1", "When was this place built?", with_title("Freehold")).json()
+    assert out["user_supplied"] == {"year_built": 1987} and rules and "autofill_skipped" not in out["web"]
+
+
+def test_nothing_extracted_means_nothing_skipped(monkeypatch, search, rules):
+    search.reply = web("I could not find when it was built.")
+    monkeypatch.setattr(followup, "gemini_json", fake(None, [{"answer": [], "links": []}], extract={"values": []}))
+    out = post("case1", b=with_title("Unit Title"), search_field="year_built").json()
+    assert "autofill_skipped" not in out.get("web", {})
+
+
+def test_chinese_question_gets_chinese_sentences(monkeypatch, search, rules):
+    search.reply = web("根據 homes.co.nz，這棟房子建於 1987 年。")
+    monkeypatch.setattr(followup, "gemini_json", fake(cls("zh-Hant")))
+    out = post("case1", "這房子哪年蓋的？", with_title("Unit Title")).json()
+    assert out["language"] == "zh-Hant" and out["user_supplied"] == {} and rules == []
+    assert [s["text"] for s in out["answer"]] == [
+        "依網路搜尋結果（未經本系統核對），網路搜尋找到的建造年份是 1987 年。",
+        "這是分戶產權（Unit Title）物業，搜尋結果可能描述其他單位或整棟大樓。",
+        "搜尋結果尚未填入表單；若與你的單位相符，可自行輸入。"]
+    assert out["web"]["autofill_skipped"] == "multi_unit_title"
+
+
+def test_other_language_is_translated_or_falls_back_to_english(monkeypatch, search, rules):
+    search.reply = web("Homes.co.nz lists this home as built in 1987.")
+    ok = ["Le résultat indique 1987.", "Ceci est un bien en copropriété, le résultat peut décrire un autre lot.",
+          "Le résultat n'a pas été ajouté au formulaire."]
+    gen = fake(cls("fr"), translate=lambda t: [*ok, "Selon une recherche web (non vérifiée par ce service)"][:len(t)])
+    monkeypatch.setattr(followup, "gemini_json", gen)
+    r = post("case1", b=with_title("Unit Title"), search_field="year_built", language="fr")
+    assert r.status_code == 200, r.text
+    out = r.json()
+    assert out["user_supplied"] == {} and rules == [] and len(out["answer"]) == 3
+    assert [s["text"] for s in out["answer"]][1:] == ok[1:]
+    assert out["answer"][0]["text"].startswith("Selon une recherche web (non vérifiée par ce service), ")
+    # a translation that fails the checks (a number it must not have) leaves the English
+    monkeypatch.setattr(followup, "gemini_json", fake(cls("fr"), translate=lambda t: ["x 99"] * len(t)))
+    out = post("case1", b=with_title("Unit Title"), search_field="year_built", language="fr").json()
+    assert out["answer"][1]["text"].startswith("This is a unit title property")
+
+
+def test_mock_mode_also_skips_the_form(monkeypatch, search, rules):
+    monkeypatch.setenv("REPORT_MOCK", "true")
+    out = post("case1", b=with_title("Cross Lease"), search_field="year_built").json()
+    assert out["user_supplied"] == {} and rules == [] and out["web"]["extracted"] == {"year_built": 1985}
+    assert out["web"]["autofill_skipped"] == "multi_unit_title"
+    assert "cross lease property" in out["answer"][1]["text"]

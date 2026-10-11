@@ -431,7 +431,7 @@ def test_out_of_scope_question_the_web_can_answer_gets_a_search_answer(monkeypat
     monkeypatch.setattr(followup, "gemini_search", lambda prompt, timeout_s: asked.append(prompt) or WEB)
     history = [{"role": "user", "text": "Which schools are near?"}, {"role": "assistant", "text": "Wesley Primary School."}]
     out = post("case1", "How far is it on foot?", history=history).json()
-    assert out["out_of_scope"] is True and out["answer"] == [] and out["web"] == WEB.model_dump()
+    assert out["out_of_scope"] is True and out["answer"] == [] and out["web"] == WEB.model_dump(exclude_none=True)
     assert out["links"] == ["council_geomaps"]
     assert asked[0].startswith(fp.TASK_WEB) and "How far is it on foot?" in asked[0] and "Wesley Primary School." in asked[0]
     assert body("case1")["property_context"]["address"]["matched"] in asked[0]
