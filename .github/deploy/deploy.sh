@@ -194,7 +194,14 @@ if [ -n "$PUBLIC" ] && [ -n "$(describe service "$PUBLIC")" ]; then
     smoke_post /api/report '{"address_id": 2100210, "user_inputs": {"deposit": 34000, "household_income": 130000}}'
     n=$(jq -r '.summary | length' "$WORK/body" 2>/dev/null || echo 0)
     echo "- $PUBLIC POST /api/report: $c, ${secs}s, $n sentences, model $(jq -r '.model // "?"' "$WORK/body" 2>/dev/null), mode ${mode:-header not passed}" >> "$SUMMARY"
+    # drafts with the warning generation_degraded: report-api refused the Gemini call on purpose (daily or event
+    # allowance used up, protection/control.disabled, REPORT_DEGRADED; Codex F03). A warning, not a failed deploy:
+    # the smoke test itself may be the call that finds the day's allowance used up. Any other drafts fail.
+    degraded=$(jq -r '(.warnings // []) | index("generation_degraded") != null' "$WORK/body" 2>/dev/null || echo false)
     if [ "$c" != 200 ] || [ "${n:-0}" -lt 1 ]; then echo "::error::report returned $c with ${n:-0} sentences"; fail=1
+    elif [ "$mode" = drafts ] && [ "$degraded" = true ]; then
+      echo "::warning::report answered from drafts (generation_degraded: Gemini allowance used up or switched off); Gemini path not checked"
+      echo "  - report-api refused the Gemini call (generation_degraded): Gemini path **not checked** by this deploy" >> "$SUMMARY"
     elif [ -n "$mode" ] && [ "$mode" != gemini ]; then echo "::error::report mode is $mode, not gemini"; fail=1; fi
     smoke_post /api/followup '{"address_id": 2100210, "user_inputs": {"deposit": 34000, "household_income": 130000}, "question": "What is the flood risk for this address?", "history": []}'
     echo "- $PUBLIC POST /api/followup: $c, ${secs}s, mode ${mode:-header not passed}" >> "$SUMMARY"

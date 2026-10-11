@@ -106,7 +106,8 @@ same (find it with `gcloud projects get-iam-policy $PROJECT_ID --flatten=binding
 --member=serviceAccount:$RUNTIME_SA --role=roles/editor`; verify the flags):
 
 ```bash
-# Firestore: the jobs write it, rules-api reads it. One identity for all, so this is datastore.user, not viewer.
+# Firestore: the jobs write it, rules-api reads it, report-api reads and writes protection/* (Gemini allowance,
+# section 8d). One identity for all, so this is datastore.user, not viewer.
 gcloud projects add-iam-policy-binding $PROJECT_ID \
   --member=serviceAccount:$RUNTIME_SA --role=roles/datastore.user
 ```
@@ -283,7 +284,7 @@ being deployed (`git diff`). So a deploy that failed is retried on the next push
 |---|---|---|---|---|
 | rules-api | service | private (`--no-allow-unauthenticated`) | `services/rules-api/`, `shared/`, `kb/`, `data/` | `DATA_BACKEND=firestore` |
 | property-api | service | private | `services/property-api/`, `shared/` | secret `LINZ_API_KEY` |
-| report-api | service | private, `--max-instances=2` | `services/report-api/`, `shared/` | `RULES_API_URL`, secret `GEMINI_API_KEY` |
+| report-api | service | private, `--max-instances=2` | `services/report-api/`, `shared/` | `RULES_API_URL`, secret `GEMINI_API_KEY`, allowance env (section 8d) |
 | web | service | **public** (`--allow-unauthenticated`) | `services/web/`, `shared/` | `RULES_API_URL`, `PROPERTY_API_URL`, `REPORT_API_URL` |
 | kb-refresh | job | - | `jobs/kb-refresh/`, `kb/`, `shared/` | `DATA_BACKEND=firestore` |
 | rates-refresh | job | - | `jobs/rates-refresh/`, `shared/` | `DATA_BACKEND=firestore`, `GEMINI_MODEL`, secret `GEMINI_API_KEY` |
@@ -426,6 +427,50 @@ curl -s -o /dev/null -w '%{http_code}\n' $WEB_URL/api/anything-else             
 A 502 with `"code": "upstream_auth"` means a `run.invoker` binding for the runtime service account is missing on
 rules-api or property-api; rerun the workflow with `deploy_all`, or add it with
 `gcloud run services add-iam-policy-binding SERVICE --region=$REGION --member=serviceAccount:$RUNTIME_SA --role=roles/run.invoker`.
+
+## 8d. report-api: Gemini allowance and generation slots (Codex F03)
+
+report-api counts every outbound Gemini call (report rewrite, classify, answer, translation, value extraction, Google
+Search) in Firestore **before** sending it, and refuses calls over the allowance: the report and follow-up then answer
+from the program's checked drafts (200, warning `generation_degraded`, `X-Report-Mode: drafts`). Failed and timed-out
+calls count; nothing is refunded. Code: `services/report-api/app/protection.py`.
+
+Firestore documents (Native mode, default database; created on first use):
+
+| Document | Fields |
+|---|---|
+| `protection/control` | `disabled` (bool, set by hand), `event_calls` (int, whole judging period), `event_searches` (int), `updated_at` |
+| `protection/daily-YYYY-MM-DD` | `date`, `calls` (int; Search calls included), `searches` (int), `updated_at`. One per **UTC** day |
+
+Env (set by the deploy from `targets.json`; defaults in code are the same):
+
+| Env | Default | Meaning |
+|---|---|---|
+| `PROTECTION_BACKEND` | `firestore` on Cloud Run, else `memory` | `firestore`, `memory` (one process: local runs and tests) or `off` |
+| `GEMINI_DAILY_CALLS` | `100` | Gemini calls per UTC day, all instances together (Search included) |
+| `SEARCH_DAILY_CALLS` | `30` | Google Search calls per UTC day (inside the 100). Used up: only the search is skipped |
+| `GEMINI_EVENT_CALLS` | `3000` | Gemini calls in total (`protection/control.event_calls`); daily resets do not renew it |
+| `GENERATION_SLOTS` | `2` | /v1/report and /v1/followup requests at once per instance; more: 503 `busy`, `Retry-After: 5` |
+| `GEMINI_MAX_OUTPUT_TOKENS` | `2048` | `max_output_tokens` on every call (thinking tokens included) |
+| `GEMINI_INPUT_MAX_BYTES` | `32000` | Larger prompts (UTF-8 bytes) are not sent (drafts) and not counted |
+| `REPORT_DEGRADED` | `false` | `true`: never call Gemini, drafts only (no Firestore read) |
+| `PROTECTION_TIMEOUT_S` | `1` | Time for the allowance transaction; slower, unavailable or conflicting: the call is refused |
+| `REPORT_CACHE_SIZE`, `REPORT_CACHE_TTL_S` | `100`, `600` | /v1/report result cache per instance (not in `targets.json`; 0 turns it off). Only Gemini reports without web-search inputs |
+
+Firestore unavailable, missing permission or a slow transaction: **every call is refused** (drafts), never allowed.
+`$RUNTIME_SA` needs `roles/datastore.user` (section 3), which it already has for rules-api and the jobs.
+
+Operations:
+- Stop all Gemini calls at once, surviving deploys: set `disabled: true` on `protection/control` in the Firestore
+  console (back to `false` by hand). Preferred over `REPORT_DEGRADED`, because the deploy sets `REPORT_DEGRADED=false`
+  from `targets.json` (`--update-env-vars`) and would undo a value set by hand; change it in `targets.json` too.
+- Remaining today: `GEMINI_DAILY_CALLS` minus `calls` on today's UTC daily document. Raise a limit with
+  `gcloud run services update report-api --region=$REGION --update-env-vars=GEMINI_DAILY_CALLS=150` and in `targets.json`.
+- Logs: the completion record has `allowance` (`ok`, `daily_exhausted`, `event_exhausted`, `search_exhausted`,
+  `disabled`, `backend_error`, `degraded`, `prompt_too_large`) and `busy`; refused calls log `allowance_refused`,
+  busy refusals `busy_rejected`, Firestore failures `allowance_backend_error`.
+- The deploy smoke test treats a drafts report with `generation_degraded` as a warning (the allowance may be used up
+  for the day), any other drafts report as a failure.
 
 ## 9. Cloud Run jobs
 
