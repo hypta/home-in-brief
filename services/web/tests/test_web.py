@@ -191,7 +191,8 @@ def test_page_puts_the_address_and_the_summary_first_and_ships_its_fonts():
     assert order == sorted(order)
     fonts = re.findall(r"url\((fonts/[^)]+)\)", css)
     assert len(fonts) == 5 and all((STATIC / font).is_file() for font in fonts)
-    assert client.get("/" + fonts[0]).headers["cache-control"] == "public, max-age=2592000"
+    font = client.get("/" + fonts[0])
+    assert font.headers["cache-control"] == "public, max-age=2592000" and font.headers["content-type"] == "font/woff2"
 
 
 def test_config_hands_the_basemap_key_to_the_page(monkeypatch):

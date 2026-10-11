@@ -63,12 +63,16 @@ Plain HTML, CSS and JavaScript modules, no build step: `app.js` (page flow), `re
 Order: the address box, then the details the report was calculated with in one line each (the form is open until the
 first report and folded behind "Change" after it), then the summary, the next steps and what could not be found, then
 five folded sections with the records. The hazards section is open when a flood layer is mapped on the parcel. A next
-step on the summary's list is not repeated under the note it comes from. Each line opens its sources from one control.
+step on the summary's list is not repeated under the note it comes from. Each line opens its sources from one control: a source
+shown there is its name, and the words quoted from it, its credit line, licence and dates are in the list of section 5.
+While the form is open, choosing an address asks for nothing: the report starts when the visitor chooses "Summarise
+this address" (or "Update report"), so details can be added first. With the form folded behind a report, choosing another
+address starts the next report at once. The two steps above the summary end when the page
+sees their requests finish (the records with the figures calculated from them, then the summary); nothing is paced by a timer.
 The three typefaces are served from `app/static/fonts/` with their licence texts (SIL Open Font License).
 
 Questions sit in one panel: a bar at the bottom of a narrow screen that opens upward over the page, and a column
-beside the report from 1000 px. A folded list of the five sections with their one-line digests sits above the conversation. Each section
-ends with two starter questions. A summary sentence links to the section that holds its records. The explanation of
+beside the report from 1000 px. Until something has been asked it offers four questions to start with. A summary sentence links to the section that holds its records. The explanation of
 how the summary is made, and the handwritten margin notes, are open for the first report in a tab only.
 
 The summary block is drawn from `/api/report` after each calculation. The follow-up block

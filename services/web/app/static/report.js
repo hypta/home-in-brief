@@ -48,20 +48,25 @@ export const floodMapped = ctx => ctx.hazards.filter(h => h.priority === "primar
 const YEAR = /^\d{4}s?$/;  // a year or a decade, as opposed to a council property category typed in the same field
 const ratesText = r => r.status === "found" ? `${money(r.value)} for ${esc(r.rating_year)}` : null;
 
-let sources, banks, cited;  // sources and bank names by id; the sources cited in this render, in order of first use
+// sources and bank names by id; the sources cited in this render, in order of first use; and by source id, what the
+// lines that cite it add to its entry in the full list (the words quoted from it, the date of a layer's data)
+let sources, banks, cited, noted;
 const bank = id => banks[id] || id;
 
-// One source: its name as the link, then extra lines (data date, quote), credit line, licence.
+// One source where it is cited: its name as the link. `lines` go to its entry in the full list.
 function card(ref, lines = []) {
   const s = typeof ref === "string" ? sources[ref] : ref;
   if (!s) return `<li class="muted">Source unavailable</li>`;
   if (!cited.some(c => c.id === s.id)) cited.push(s);
-  const more = [...lines, s.attribution, s.licence && "Licence: " + s.licence, s.accessed_at && "Accessed " + s.accessed_at];
-  return `<li>${link(s.url, s.title)}<br><span>${more.filter(Boolean).map(esc).join("<br>")}</span></li>`;
+  for (const line of lines.filter(Boolean)) (noted[s.id] ??= new Set()).add(line);
+  return `<li>${link(s.url, s.title)}</li>`;
 }
+// The same source in the full list of section 5: what was quoted from it, its credit line, licence and dates.
+const credit = s => `<li>${link(s.url, s.title)}${[...(noted[s.id] || []), s.attribution, s.licence && "Licence: " + s.licence,
+  s.published_or_updated && "Published or updated " + s.published_or_updated, s.accessed_at && "Accessed " + s.accessed_at].filter(Boolean).map(l => `<br><span>${esc(l)}</span>`).join("")}</li>`;
 function kbCard(k) {
   const s = sources[k.source_id] || {id: k.source_id || k.id, title: k.source_title, url: k.source_url, licence: k.licence};
-  return card(s, [`Quoted: "${k.quote}"`, s.published_or_updated && "Published or updated " + s.published_or_updated]);
+  return card(s, [`Quoted: "${k.quote}"`]);
 }
 // The one control at the end of a line that opens its sources in place.
 const control = (cards, label, after = "") => !cards.length ? "" : `<details class="src"><summary>${label || (cards.length === 1 ? "Source" : cards.length + " sources")}</summary><ul class="cards">${cards.join("")}</ul>${after}</details>`;
@@ -82,8 +87,9 @@ function notes({rules, kb}, block, heading) {
     + Object.entries(FOLDS).map(([rule, title]) => { const inside = mine.filter(k => foldOf(k) === rule); return fold(`${title} (${count(inside.length, "note")})`, inside.map(note).join("")); }).join("");
 }
 
-// code: [block, text]. A code may carry a layer or bank id after a colon. CODES.md marks the hidden ones as not user-facing.
-const HIDDEN = /^(kb_hash_mismatch|kb_verification_incomplete|hazard_status_missing|hazard_status_unknown|hazard_priority_unknown)$/;
+// code: [block, text]. A code may carry a layer or bank id after a colon. CODES.md marks the hidden ones as not user-facing;
+// the last two are said once, where "This home" lists what the records lack.
+const HIDDEN = /^(kb_hash_mismatch|kb_verification_incomplete|hazard_status_missing|hazard_status_unknown|hazard_priority_unknown|year_built_unavailable|cladding_unavailable)$/;
 const WARNINGS = {
   hazards_unavailable: ["hazards", "No flood layer could be checked. " + NO_RISK_CAVEAT],
   hazards_partial: ["hazards", layer => `${layerName(layer)} could not be checked. ${NO_RISK_CAVEAT}`],
@@ -106,21 +112,17 @@ const WARNINGS = {
   title_type_unmapped: ["notes", "We have no guidance note for this type of title yet, so ask your lawyer what it means for you."],
   year_built_user_conflict: ["notes", "The year you gave differs from the council record, which we used; please check which is right."],
   cladding_user_conflict: ["notes", "The cladding you gave differs from the property record, which we used; please check which is right."],
-  year_built_unavailable: ["notes", (_, r, told) => told.year_built ? null : "The year built could not be found. Check the listing for it, then enter it " + IN_DETAILS + "."],
   year_built_unparseable: ["notes", "The year built could not be read. Check the listing for it."],
-  cladding_unavailable: ["notes", (_, r, told) => told.cladding ? null : "Cladding is not available from any free public source. Check the listing for it, then choose it " + IN_DETAILS + "."],
   chat_year_built_unparseable: ["notes", "The year built you entered could not be used. Enter a four-digit year or a decade such as 1990s."],
   kb_unavailable: ["notes", "Background notes are unavailable right now."],
 };
 
-// told: the year built and cladding the report was calculated with, not what is typed in the folded form
-function warnings({rules, inputs}, block) {
-  const told = inputs?.chat_supplied || {};
+function warnings({rules}, block) {
   return list((rules?.warnings || []).map(w => {
     const [code, arg] = w.split(":"), known = WARNINGS[code];
     if (HIDDEN.test(code)) return null;
     if (!known) return DEV && block === "loan" ? esc("Note: " + words(w)) : null;
-    return known[0] === block ? esc(typeof known[1] === "function" ? known[1](arg, rules, told) : known[1]) : null;
+    return known[0] === block ? esc(typeof known[1] === "function" ? known[1](arg, rules) : known[1]) : null;
   }).filter(Boolean));
 }
 
@@ -164,14 +166,14 @@ function hazards(state) {
     ${warnings(state, "hazards")}${notes(state, "hazards", "Notes on these hazards and insurance")}`;
 }
 
-function facts({ctx}) {
+function facts({ctx, inputs}) {
   const p = ctx.property, council = ctx.links.find(l => l.id === "council_valuation"), main = [], rest = [], lacking = [];
   const listings = ctx.links.filter(l => l.id === "homes" || l.id === "oneroof").map(l => link(l.url, l.label)).join(" or ");
-  const onListings = [p.year_built, p.cladding, p.last_sale];  // facts the listing sites show: a missing one points to them
-  // a value the records have goes to `to`; one they lack is listed with the reason and where to look
-  const add = (to, name, f, text) => text ? to.push(row(name, `${text} ${cite(f.source_id)}`)) : lacking.push(row(name, missing(f)
-    + (council && (f.source_id || "").startsWith("ac_") ? ` ${link(council.url, "Check the council property search")}.` : "")
-    + (listings && onListings.includes(f) ? ` Look for it on ${listings}.` : "") + " " + cite(f.source_id)));
+  const told = inputs?.chat_supplied || {};  // the year built and cladding the report was calculated with
+  // a value the records have goes to `to`; one they lack is listed with the reason, and where to look is said once for all of them
+  const add = (to, name, f, text) => (text ? to : lacking).push(row(name, `${text || missing(f)} ${cite(f.source_id)}`));
+  const look = `<p class="muted">Look for these on the listing${listings && `, on ${listings}`}${council ? `, or in the ${link(council.url, "council property search")}` : ""}.${
+    (!p.year_built.decade_range && !told.year_built) || (p.cladding.status !== "found" && !told.cladding) ? ` A year built or a cladding you find can be added ${IN_DETAILS}.` : ""}</p>`;
   const fact = (to, name, f, fmt = esc) => add(to, name, f, f.status === "found" ? fmt(f.value) : null);
   add(main, "Capital value (CV)", p.cv, p.cv.status === "found" ? `${money(p.cv.value)} as at ${esc(p.cv.valuation_date)}. A council rating valuation, not a market value.` : null);
   add(main, "Annual rates", p.annual_rates, ratesText(p.annual_rates));
@@ -183,7 +185,7 @@ function facts({ctx}) {
   fact(rest, "Rateability", p.rateability); fact(rest, "Improvements", p.improvement_description); fact(rest, "Land use", p.land_use);
   fact(rest, "Building site coverage", p.building_site_coverage_m2, m2); fact(rest, "Legal description", p.legal_description, code);
   fact(rest, "Record of title", p.record_of_title, code); fact(rest, "Valuation number", p.valuation_number, code); fact(rest, "Local board", p.local_board);
-  return (main.length ? `<h4>Main facts</h4>${main.join("")}` : "") + (lacking.length ? `<h4>Not in the records we checked</h4>${lacking.join("")}` : "")
+  return (main.length ? `<h4>Main facts</h4>${main.join("")}` : "") + (lacking.length ? `<h4>Not in the records we checked</h4>${look}${lacking.join("")}` : "")
     + fold(`More from the council record (${rest.length})`, rest.join(""));
 }
 
@@ -195,7 +197,7 @@ const FLAGS = {
   fhl_household_type_unknown: () => "First Home Loan eligibility depends on the household. Choose it " + IN_DETAILS + ".",
 };
 
-const stressRow = (r, detail) => row(`If rates were ${r.stress_add_pp} percentage points higher`, detail + " An illustration, not any bank's test rate.");
+const stressRow = (r, detail) => row(`If rates were ${r.stress_add_pp} percentage points higher`, detail);
 const table = (head, rows) => `<div class="scroll"><table><tr>${head.map(h => `<th>${h}</th>`).join("")}</tr>${rows.map(cells => `<tr>${cells.map(c => `<td>${c}</td>`).join("")}</tr>`).join("")}</table></div>`;
 // The monthly figure of each scenario, which leads the section: [amount, what it is]
 const MONTHLY = {bank_standard: s => [span(s.monthly_range, money), "a month at the banks' published 1-year rates"],
@@ -234,7 +236,7 @@ function loan(state) {
   if (r.loan_amount && r.dti != null) out.push(row("Debt-to-income ratio (DTI)", `${r.dti} times income (existing debts plus this loan, divided by income)`));
   out.push(...r.flags.map(f => `<div class="note">${esc(FLAGS[f.id] ? FLAGS[f.id](r) : "Note: " + words(f.id))} ${cite(f.source_ids)}</div>`));
   out.push(...r.scenarios.map(s => SCENARIOS[s.id] ? SCENARIOS[s.id](s, r) : `<h4>${esc(words(s.id))}</h4>`));
-  if (r.scenarios.length) out.push(`<div class="muted">Repayments are principal and interest over ${r.loan_term_years} years. They do not include council rates, insurance, utilities or maintenance.${r.rates_snapshot_date ? ` Bank rates were collected by hand from each bank's website; the oldest is from ${esc(r.rates_snapshot_date)}. ${cite("bank_rates_snapshot")}` : ""}</div>`);
+  if (r.scenarios.length) out.push(`<div class="muted">Repayments are principal and interest over ${r.loan_term_years} years. They do not include council rates, insurance, utilities or maintenance. The higher-rate figures are an illustration, not any bank's test rate.${r.rates_snapshot_date ? ` Bank rates were collected by hand from each bank's website; the oldest is from ${esc(r.rates_snapshot_date)}. ${cite("bank_rates_snapshot")}` : ""}</div>`);
   out.push(row("Council rates (not included above)", ratesText(rates) ? `${ratesText(rates)} ${cite(rates.source_id)}` : missing(rates)));
   return out.join("") + warnings(state, "loan") + notes(state, "loan", "Lending notes");
 }
@@ -270,29 +272,52 @@ function jump(s, items, ctx) {
 }
 const reworded = n => !n ? "" : `<p class="muted">${n === 1 ? "1 of these sentences is" : n + " of these sentences are"} in the program's own wording, because the model's version did not pass the check against the sources.</p>`;
 
-// How the summary is made, which is also its progress: `at` is the step under way, or the one that failed.
-const steps = (at, failed) => `<ol class="steps" aria-label="How this summary is made">${["Facts", "Wording", "Source check"].map((name, i) => {
-  const [mark, said] = i < at ? ["done", "done"] : i > at ? ["", "waiting"] : failed ? ["failed", "failed"] : ["doing", "in progress"];
-  return `<li class="${mark}">${name}<span class="sr">: ${said}</span></li>`; }).join("")}</ol>`;
+// How far the report has got: `at` is the step under way, or the one that failed. A step ends when the page sees its
+// request finish: the records, with the figures calculated from them a moment later, then report-api's one call, in which
+// the model words the summary and each sentence is checked against its sources. The step under way says what is being
+// done, in the place of its name and with the name's own words, so the eye follows one word through a state that often
+// lasts a moment only. Both are short enough for the two steps to share a line on a phone.
+const STEPS = [["Records", "Reading the records…"], ["Summary and check", "Writing and checking the summary…"]];
+const steps = (at, failed) => `<ol class="steps" aria-label="How far this report has got">${STEPS.map(([name, doing], i) => {
+  const said = i < at ? "done" : i > at ? "waiting" : failed ? "failed" : "";
+  return said ? `<li class="${i > at ? "" : said}">${name}<span class="sr">: ${said}</span></li>` : `<li class="doing">${doing}</li>`; }).join("")}</ol>`;
 
 // report-api only returns sentences that passed its check against the sources they cite.
 function summary({ctx, rules, rulesError, kb, report: r, reportError: err, done, first}) {
   if (!rules) return rulesError ? steps(0, true) + `<p class="problem">The summary is unavailable until the repayment figures can be calculated.</p>`
-    : steps(0) + `<p class="muted">Reading the records…</p>`;
-  if (err) return err.code === "validation_failed"
-    ? steps(2, true) + `<p class="problem">No summary sentence passed the check against its sources, so none is shown. The rest of the report is not affected.</p>`
-    : steps(1, true) + `<p class="problem">The summary is unavailable right now. The rest of the report is not affected.</p><button type="button" id="retry-summary">Try again</button>`;
-  if (!r) return steps(1) + `<p class="muted">Writing the summary…</p>`;
+    : steps(0);
+  if (err) return steps(1, true) + (err.code === "validation_failed"
+    ? `<p class="problem">No summary sentence passed the check against its sources, so none is shown. The rest of the report is not affected.</p>`
+    : `<p class="problem">The summary is unavailable right now. The rest of the report is not affected.</p><button type="button" id="retry-summary">Try again</button>`);
+  if (!r) return steps(1);
   const items = byId(kb || []);
-  return steps(3) + r.summary.map(s => checked(s, items, jump(s, items, ctx))).join("") + reworded(r.dropped)
+  return steps(2) + r.summary.map(s => checked(s, items, jump(s, items, ctx))).join("") + reworded(r.dropped)
     + `<details class="how"${first ? " open" : ""}><summary>How this summary is made</summary><ol>
       <li>The program collects the facts from council and LINZ records, your loan figures and the notes that apply.</li>
       <li>The model rewrites them as three to five plain sentences. It never sees a figure: the program fills those in.</li>
       <li>Each sentence is checked against the sources it cites. One that fails is replaced by the program's own wording.</li></ol>
       <p class="muted rec">Wording by ${esc(r.model)}.</p>
       <p class="muted">The check compares wording and figures. It cannot judge everything a sentence means, so open the sources of any sentence that matters to you.</p></details>`
-    + (r.next_steps.length ? `<h3>Next steps</h3><ul class="todo">${r.next_steps.map(s => `<li><label><input type="checkbox"${done.has(s.text) ? " checked" : ""}><span>${esc(s.text)}</span></label>${control(cardsOf(s, items))}</li>`).join("")}</ul>` : "")
-    + (r.not_found_notes.length ? `<h3>Could not be found</h3><div class="gap">${list(r.not_found_notes.map(n => esc(n.text)))}</div>` : "");
+    + (r.next_steps.length ? `<h3>Next steps</h3>${fold(`<span>${count(r.next_steps.length, "thing")} to ask or check<span id="ticked">${ticked(r.next_steps.filter(s => done.has(s.text)).length)}</span></span>`,
+        `<ul class="todo">${r.next_steps.map(s => `<li><label><input type="checkbox"${done.has(s.text) ? " checked" : ""}><span>${esc(s.text)}</span></label>${control(cardsOf(s, items))}</li>`).join("")}</ul>`)}` : "")
+    + notFound(r.not_found_notes);
+}
+export const ticked = n => n ? `, ${n} ticked` : "";  // said on the folded list's line
+// Before the records have arrived, the sheet has the address that was chosen and the first step.
+// The readout keeps its two lines meanwhile, so the sheet under it does not move when the report arrives: the loan details
+// as typed, and nothing yet about a home whose records are still being read.
+export function renderWait(address, failed, typed) {
+  $("matched").textContent = address; $("meta").textContent = "";
+  $("readout").innerHTML = `${loanLine(typed)}<br><b>This home</b> …`;
+  $("summary").innerHTML = steps(0, failed) + (failed ? `<p class="problem">The council and LINZ records could not be read. Choose the address again to retry.</p>` : "");
+}
+// What the records lack is named in one line, with report-api's sentence for each behind it. A hazard layer that could
+// not be checked keeps its sentence, and the caveat in it, in view.
+function notFound(notes) {
+  const layer = n => (n.field || "").startsWith("hazards."), fields = notes.filter(n => !layer(n));
+  const names = fields.flatMap(n => (n.field || "").split(",")).filter(Boolean).map(f => f === "cv" ? "council valuation" : words(f.replace(/_m2$/, "")));
+  return !notes.length ? "" : `<h3>Could not be found</h3><div class="gap">${list(notes.filter(layer).map(n => esc(n.text)))}
+    ${fold(`Not in the records: ${esc(names.join(", ") || count(fields.length, "note"))}`, list(fields.map(n => esc(n.text))))}</div>`;
 }
 
 const LINK_KIND = {direct: " (opens this property)", first_result: " (opens the first search result for this address on that site)", home: " (search for the address there)"};
@@ -303,9 +328,15 @@ const linkItem = l => `${link(l.url, l.label)}${LINK_KIND[l.kind] || ""}`;
 // own HTML and sit in a frame that runs no scripts.
 // The language of the text is not known here, so it does not inherit the page's.
 // The frame's document accepts both colour schemes: one that only knew light would be given an opaque white ground on a dark page.
-const webAnswer = w => `<div class="web"><p><b>Found by Gemini with Google Search. Not checked against this report's sources.</b></p>
+const webAnswer = w => `<div class="web">
   <div class="say" lang="">${w.text.split(/\n\s*\n/).map(p => `<p>${esc(p)}</p>`).join("")}</div>${list(w.sources.map(s => link(s.url, s.title || "Source")))}
-  ${w.search_suggestions ? `<iframe class="suggest" title="Google Search suggestions" sandbox="allow-popups allow-popups-to-escape-sandbox" srcdoc="${esc('<meta name="color-scheme" content="light dark"><base target="_blank">' + w.search_suggestions)}"></iframe>` : ""}</div>`;
+  ${w.search_suggestions ? `<iframe class="suggest" title="Google Search suggestions" sandbox="allow-popups allow-popups-to-escape-sandbox" srcdoc="${esc('<meta name="color-scheme" content="light dark"><base target="_blank">' + w.search_suggestions)}"></iframe>` : ""}
+  <p class="muted">Found by Gemini with Google Search. Not checked against this report's sources.</p></div>`;
+
+// While an answer is on its way: three dots and a few words that take turns. The words say that work is going on, not
+// which part of it: the page sends one request and cannot see inside it. A screen reader hears "Answering" once.
+const THINKING = `<p class="thinking muted"><span class="sr">Answering</span><span aria-hidden="true"><i></i><i></i><i></i></span><span class="verbs" aria-hidden="true">${
+  ["Thinking", "Reading the report", "Looking it up", "Putting it together", "Still working on it"].map(v => `<span>${v}</span>`).join("")}</span></p>`;
 
 // The conversation about this report, in order. A turn holds the question and, once settled, report-api's answer with
 // the knowledge-base items on the page at that time, or the error. The sentences carry the language the answer names.
@@ -314,7 +345,7 @@ function thread({ctx, rules, rulesError, kb: onPage, thread: turns}) {
   const answer = ({answer: a, error: err, added, kb}, items = byId(kb || onPage || [])) => err ? (err.code === "validation_failed"
       ? `<p class="problem">No answer sentence passed the check against its sources, so none is shown. Try asking in a different way.</p>`
       : `<p class="problem">The answer is unavailable right now. The rest of the report is not affected.</p><button type="button" id="retry-answer">Try again</button>`)
-    : !a ? `<p class="muted">Answering…</p>`
+    : !a ? THINKING
     : (a.web ? webAnswer(a.web) : `<div class="say${a.answer.some(s => s.source_ids.length) ? "" : " fixed"}"${a.language ? ` lang="${esc(a.language)}"` : ""}>${a.answer.map(s => checked(s, items)).join("")}</div>` + reworded(a.dropped))
       + list((a.links || []).map(id => ctx.links.find(l => l.id === id)).filter(Boolean).map(linkItem))
       + (a.out_of_scope && !a.web ? `<p class="muted rec">A fixed reply from the program.</p>` : "")
@@ -330,23 +361,34 @@ function draw(id, block, state) {
 }
 
 function listSources({ctx}) {
-  $("sources").innerHTML = cited.map(s => card(s)).join("");
-  $("d-originals").textContent = $("o-originals").textContent = `${ctx.links.length} sites to look at yourself, and the ${cited.length} sources cited on this page.`;
+  $("sources").innerHTML = cited.map(credit).join("");
+  $("d-originals").textContent = `${ctx.links.length} sites to look at yourself, and the ${cited.length} sources cited on this page with their licences.`;
 }
 
 // The summary and the answers arrive after the rest and are drawn on their own: redrawing the other blocks would close the sources a reader has opened.
 // A next step on the summary's list is not said again under the note it comes from; without the list, the notes keep theirs.
-export function renderSummary(state) {
+function drawSummary(state) {
   draw("summary", summary, state);
   const listed = new Set((state.report?.next_steps || []).map(s => s.text));
   for (const el of document.querySelectorAll("[data-step]")) el.hidden = listed.has(el.dataset.step);
   listSources(state);
 }
+// While the reader has the address at the top of the sheet in view, the browser must not hold a record or the footer in
+// place as the report is drawn above it: in Chrome that scrolled the address and the summary out of view. A reader who has
+// scrolled on is left to the browser, which keeps what they are reading where it is.
+function held(drawing) {
+  const {top} = $("matched").getBoundingClientRect(), hold = top > -1 && top < innerHeight;
+  if (hold) document.body.style.overflowAnchor = "none";
+  drawing();
+  if (hold) { void document.body.offsetHeight; document.body.style.overflowAnchor = ""; }  // laid out before the browser may hold anything again
+}
+export const renderSummary = state => held(() => drawSummary(state));
 
 // One question at a time, and only about a report that has its figures.
 export function renderThread(state) {
   draw("thread", thread, state);
   $("ask").disabled = !state.inputs || state.thread.some(t => !t.answer && !t.error);
+  $("starters").hidden = $("ask-note").hidden = state.thread.length > 0;  // both are for a reader who has not asked yet
   $("handle-count").textContent = state.thread.length; $("thread").scrollTop = $("thread").scrollHeight;  // the newest turn is in view
   listSources(state);
 }
@@ -372,13 +414,14 @@ export function typeAnswer() {
 
 // What the report on the page was calculated with, one line each, so the form can stay folded away.
 // A year or cladding is only said when the rules used it: not a council category code, and not a value the record overrode.
+const loanLine = i => `<b>Your loan</b> ${esc([[i.deposit, "deposit"], [i.household_income, "income"], [i.existing_debts, "debts"]]
+  .filter(([v]) => v != null).map(([v, word]) => `${money(v)} ${word}`).join(", ") || "no details yet")}`;
 function readout({rules: r, inputs: i}) {
-  const amount = (v, word) => v == null ? null : `${money(v)} ${word}`, price = r.price_used;
+  const price = r.price_used;
   const used = (field, ok = true) => ok && !r.warnings.includes(field + "_user_conflict") && i.chat_supplied[field], told = {year_built: used("year_built", YEAR.test(i.chat_supplied.year_built)), cladding: used("cladding")};
-  const loan = [amount(i.deposit, "deposit"), amount(i.household_income, "income"), amount(i.existing_debts, "debts")].filter(Boolean);
   const home = [price.value != null && `${money(price.value)} price${price.basis === "cv" ? " (the council valuation)" : ""}`,
     told.year_built && `built ${told.year_built}, as you told us`, told.cladding && `${words(told.cladding)} cladding, as you told us`].filter(Boolean);
-  return `<b>Your loan</b> ${esc(loan.join(", ") || "no details yet")}<br><b>This home</b> ${esc(home.join(", ") || "no price yet")}`;
+  return `${loanLine(i)}<br><b>This home</b> ${esc(home.join(", ") || "no price yet")}`;
 }
 
 // One line under each section title, from values the section shows with their sources.
@@ -397,20 +440,21 @@ function digests({ctx, rules: r, rulesError, inputs}) {
       : [bankLoan && `${span(bankLoan.monthly_range, money)} a month at bank rates.`, fhl && `${span(fhl.monthly_range, money)} a month with a First Home Loan.`,
         own && `${money(own.monthly)} a month at your rate.`].filter(Boolean).join(" ") || "No repayments are shown yet.",
     notes: [title, decade ? `Built ${decade[0] ? `${decade[0]}-${decade[1]}` : `before ${decade[1] + 1}`}.`
-      : told ? `Built ${told}, as you told us.` : "The year built is not known."].filter(Boolean).join(" "),
+      : told ? `Built ${told}, as you told us.` : "The year built is not known. Add it in your details to see the notes for its era."].filter(Boolean).join(" "),
   };
 }
 
 export function render(state) {
+  held(() => {
   const {ctx} = state;
-  sources = state.sources; banks = state.banks; cited = [];
+  sources = state.sources; banks = state.banks; cited = []; noted = {};
   draw("readout", () => state.inputs ? readout(state) : "<b>Your details</b>");
-  try { for (const [id, text] of Object.entries(digests(state))) $("d-" + id).textContent = $("o-" + id).textContent = text; } catch (e) { console.error(e); }
+  try { for (const [id, text] of Object.entries(digests(state))) $("d-" + id).textContent = text; } catch (e) { console.error(e); }
   $("matched").textContent = ctx.address.matched || "Address not found";
   $("meta").textContent = ctx.address.status !== "found" ? gone(ctx.address)
     : `Checked against ${ctx.parcel.spatial_method === "parcel" ? "the parcel boundary" : "the address point only, because no parcel was matched"}, ${ctx.generated_at.slice(0, 16).replace("T", " ")} New Zealand time.`;
   draw("hazards", hazards, state); draw("facts", facts, state); draw("loan", loan, state); draw("notes", buildNotes, state);
   draw("links", () => ctx.links.map(l => `<li>${linkItem(l)}</li>`).join(""));
-  renderSummary(state); renderThread(state);
-  $("disclaimer").textContent = state.rules?.disclaimer || "";
+  drawSummary(state); renderThread(state);
+  });
 }

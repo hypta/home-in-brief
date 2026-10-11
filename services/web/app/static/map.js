@@ -40,6 +40,7 @@ export async function drawMap(fetchMap, isCurrent) {
     const aerial = key && L.tileLayer(`https://basemaps.linz.govt.nz/v1/tiles/aerial/3857/{z}/{x}/{y}.webp?api=${encodeURIComponent(key)}`, {maxZoom: 21,
       attribution: '&copy; <a href="https://www.linz.govt.nz/linz-copyright">LINZ CC BY 4.0</a> &copy; <a href="https://www.linz.govt.nz/data/linz-data/linz-basemaps/data-attribution">Imagery Basemap contributors</a>' + CREDITS});
     (aerial || streets).addTo(map);
+    map.attributionControl.setPrefix(false);  // the credits are for the data; they stay on the map, where LINZ asks for them to be in view
     // an expired or refused basemap key must not leave the map blank
     if (aerial) aerial.once("tileerror", () => { map.removeLayer(aerial); streets.addTo(map); });
     edged(style => L.rectangle(checked, style), {color: "#333", weight: 1, dashArray: "2 5", fill: false, interactive: false}).addTo(map);
@@ -63,7 +64,6 @@ export async function drawMap(fetchMap, isCurrent) {
     // "none mapped" is only said when every layer loaded
     $("mapnote").textContent = (nearby.length ? `Shown within about ${g.pad_m} m: ` + nearby.join(", ") + "."
         : g.unavailable.length ? "" : `No flood, coastal or tsunami layer is mapped within about ${g.pad_m} m.`)
-      + (g.unavailable.length ? " Could not load: " + g.unavailable.map(layerName).join(", ") + "." : "")
-      + " The dotted box is the area checked; layers are cut off at its edge. Landslide and liquefaction can be switched on in the layer list (select an area for its class).";
+      + (g.unavailable.length ? " Could not load: " + g.unavailable.map(layerName).join(", ") + "." : "");
   } catch (e) { if (isCurrent()) $("mapnote").textContent = "The map could not be loaded (" + e.message + ")." + NOT_NEEDED; }
 }

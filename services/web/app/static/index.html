@@ -16,7 +16,10 @@
 <body>
 <header class="top">
 <h1><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="5" y="17.5" width="22" height="9" rx="3.5" fill="#ffe45c"/><path d="M4.5 14.8 16 5l11.5 9.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>Home Buyer Copilot</h1>
-<button type="button" id="theme" class="theme" aria-label="Switch between the light and the dark theme"></button>
+<button type="button" id="theme" class="theme" aria-label="Switch between the light and the dark theme">
+<svg class="moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 1 1 9.5 4a9 9 0 0 0 10.5 10.5z"/></svg>
+<svg class="sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/></svg>
+</button>
 </header>
 <main>
 <section class="entry" aria-label="Address and your details">
@@ -99,8 +102,8 @@
 </select>
 <p id="cladding-hint" class="tip" popover>Check the listing for it.</p>
 </div>
-<button type="submit" form="loan-form">Update report</button>
 </div>
+<div id="go-row"><button type="submit" form="loan-form" id="go">Summarise this address</button><span id="go-note" class="hand" aria-hidden="true"><svg viewBox="0 0 34 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M31 5c-8 7-17 9-27 7"/><path d="M11 7l-7 5 8 4"/></svg> it's free!</span></div>
 </div>
 </section>
 
@@ -123,16 +126,18 @@
 <div class="body">
 <div id="map" role="region" aria-label="Map of the parcel and nearby council hazard layers"></div>
 <p id="mapnote" class="muted"></p>
+<details class="more">
+<summary>About this map</summary>
+<p class="muted">The dotted box is the area checked; layers are cut off at its edge. Landslide and liquefaction can be switched on in the layer list (select an area for its class).</p>
 <p id="maplegend" class="muted"></p>
+</details>
 <div id="hazards"></div>
-<div class="starters"><span class="muted">Ask about this</span><button type="button">What do the mapped hazards mean for insurance?</button><button type="button">What should I ask the council about this land?</button></div>
 </div>
 </details>
 <details class="sec" id="sec-facts">
 <summary><span class="num">2</span><h3>This home</h3><span class="digest" id="d-facts"></span></summary>
 <div class="body">
 <div id="facts"></div>
-<div class="starters"><span class="muted">Ask about this</span><button type="button">Why is the council valuation not the market value?</button><button type="button">What does the title type mean for me?</button></div>
 </div>
 </details>
 <details class="sec" id="sec-loan">
@@ -140,14 +145,12 @@
 <div class="body">
 <p><a href="#details" id="edit-details" target="_self">Change the price or your loan details</a></p>
 <div id="loan" aria-live="polite"></div>
-<div class="starters"><span class="muted">Ask about this</span><button type="button">What does a low deposit change?</button><button type="button">What is a First Home Loan?</button></div>
 </div>
 </details>
 <details class="sec" id="sec-notes">
 <summary><span class="num">4</span><h3>Build era and title</h3><span class="digest" id="d-notes"></span></summary>
 <div class="body">
 <div id="notes"></div>
-<div class="starters"><span class="muted">Ask about this</span><button type="button">What should I check for a home of this age?</button><button type="button">What should my lawyer look at on the title?</button></div>
 </div>
 </details>
 <details class="sec" id="sec-originals">
@@ -156,7 +159,7 @@
 <h4>Check the originals</h4>
 <ul id="links"></ul>
 <details class="more">
-<summary>Sources cited on this page</summary>
+<summary>Sources cited on this page: credit lines, licences and dates</summary>
 <ul id="sources" class="cards"></ul>
 </details>
 </div>
@@ -165,30 +168,26 @@
 
 </div>
 <aside class="ask" id="ask-panel" aria-label="Questions about this report">
-<details class="outline">
-<summary>In this report</summary>
-<ol>
-<li><a href="#sec-hazards" target="_self"><span class="num">1</span><b>Mapped hazards</b><small id="o-hazards"></small></a></li>
-<li><a href="#sec-facts" target="_self"><span class="num">2</span><b>This home</b><small id="o-facts"></small></a></li>
-<li><a href="#sec-loan" target="_self"><span class="num">3</span><b>Money</b><small id="o-loan"></small></a></li>
-<li><a href="#sec-notes" target="_self"><span class="num">4</span><b>Build era and title</b><small id="o-notes"></small></a></li>
-<li><a href="#sec-originals" target="_self"><span class="num">5</span><b>Originals and sources</b><small id="o-originals"></small></a></li>
-</ol>
-</details>
+<div id="starters" class="starters"><span class="muted">Questions to start with</span>
+<button type="button">What do the mapped hazards mean for insurance?</button>
+<button type="button">Why is the council valuation not the market value?</button>
+<button type="button">What is a LIM report?</button>
+<button type="button">What should my lawyer look at on the title?</button>
+</div>
 <div id="thread" aria-live="polite" tabindex="0" aria-label="Your questions and the answers"></div>
 <form id="ask-form" class="field">
-<label for="question">Ask about this home <span class="hand first-only" aria-hidden="true">your own language is fine</span></label>
+<label for="question" class="sr">Ask about this home, in any language</label>
+<p id="ask-note" class="hand" aria-hidden="true">your own language is fine <svg viewBox="0 0 34 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4c10-2 20 3 25 15"/><path d="M20 15l8 5 3-9"/></svg></p>
 <button type="button" id="handle" aria-expanded="false" aria-controls="thread" aria-label="Show the answers"><span aria-hidden="true">&#9650;</span> <span id="handle-count">0</span></button>
-<input id="question" class="box" type="text" maxlength="1000" required placeholder="Ask in any language" autocomplete="off">
+<input id="question" class="box" type="text" maxlength="1000" required placeholder="Ask about this home" autocomplete="off">
 <button type="submit" id="ask">Ask</button>
 </form>
 </aside>
 </div>
 </main>
 <footer class="foot">
-<p>Home Buyer Copilot is a free, non-commercial information tool. It is not financial, legal or insurance advice, and it does not replace a LIM report, a building inspection or advice from your lawyer, lender or insurer.</p>
-<p id="disclaimer"></p>
-<p>Contains data sourced from the LINZ Data Service licensed for reuse under CC BY 4.0. Hazard layers and property records: Auckland Council (indicative only; not a substitute for a LIM or a site-specific assessment). Every line on the page opens its own source and licence.</p>
+<p>Home Buyer Copilot is a free information tool, not financial, legal or insurance advice. It does not replace a LIM report, a building inspection or advice from your lawyer, lender or insurer; confirm figures with them before you decide.</p>
+<p>Contains data sourced from the LINZ Data Service licensed for reuse under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>. Hazard layers and property records are from Auckland Council.</p>
 </footer>
 </body>
 </html>

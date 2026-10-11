@@ -40,30 +40,44 @@ red: beside a hazard they read as a verdict. The map keeps its own colours.
 ## Parts
 
 - **Entry.** The address box is the first control. Under it, the details the report was calculated with, one line
-  each, and "Change". The form is open until the first report is on the page.
-- **Steps.** Facts, Wording, Source check: how the summary is made and how far it has got. A failed step is dashed.
+  each, and "Change". The form is open until the first report is on the page. While the form is open, choosing an
+  address asks for nothing: the report starts with the button, which before the first report stays at the bottom of
+  the screen, on a band of the page's colour; beside it on a wide screen, in our hand, "it's free!". With the form folded behind a report, choosing another address starts the next report at once.
+- **Steps.** "Records", then "Summary and check": how far the report has got, on one line and in the report's own
+  type. The step under way says what is being done in the place of its name and with the name's own words ("Reading
+  the records…", "Writing and checking the summary…"), and its mark pulses. A step ends when the page sees its request
+  finish, never on a timer. A failed step is dashed.
 - **Checked sentence.** Highlighted, then one control, "Checked against N sources", that opens the source cards
   in place. A sentence with no source (a fixed sentence from the program) is plain.
-- **Source control.** Every other sourced line ends with "Source" or "N sources". A card is the source's name as
-  the link, then quote, dates, credit line and licence in the record voice.
-- **Next steps.** One tick list on the sheet. A note repeats its next step only when the list does not have it.
+- **Source control.** Every other sourced line ends with "Source" or "N sources", and the control stays where it is
+  when it is opened. A card is the source's name as
+  the link and nothing else. The words quoted from it, the date of a hazard layer's data, its credit line, licence and
+  dates are in the full list of section 5; the footer credits LINZ and Auckland Council on every page.
+- **Theme switch.** A plain line icon of the theme it switches to: a moon on a light page, a sun on a dark one.
+- **Next steps.** One tick list on the sheet, folded behind a line that says how many there are and how many are
+  ticked. A note repeats its next step only when the list does not have it.
+- **Map.** Its credits stay on its lower edge, always in view, in small type.
 - **Hazard layer.** The mark the layer has on the map, its name, what was found, a bar as long as the share of the
   parcel it covers, its source. Layers are grouped by what was found, and each group says its caveat once.
 - **Lead figure.** The figure a section opens with, large, with a few words saying what it is; said once.
 - **Fold.** A row that names what is inside and how many: "First Home Loan rules (8 notes)". Notes that are the
   same for every home, long rule lists and the rest of the council record are folded; a note about this property is not.
-- **Could not be found.** One dashed box. A layer that could not be checked keeps its caveat sentence.
+- **Could not be found.** One dashed box that names what the records lack in one line, with the reasons behind it.
+  A layer that could not be checked keeps its caveat sentence in view.
 - **Section.** A drawn number, the title, one line of digest from API values, a chevron. Closed by default; the
   hazards section is open when a flood layer is mapped on the parcel.
 - **Questions.** One panel: a bar at the bottom of a narrow screen that opens upward, a column beside the report
-  from 1000 px. A folded list of the five sections with their digests sits above the conversation. The box says "Ask in any language".
-  Each section ends with two starter questions.
-- **Answer from a web search.** Neutral wash, the label "Found by Gemini with Google Search. Not checked against
-  this report's sources." in bold, no highlighter, text and search suggestions as returned.
+  from 1000 px. Until something has been asked it offers four questions to start with; choosing one asks it. The box says "Ask about this home"; over it, in our hand until the first question is asked, "your own language is fine" and an arrow.
+- **Footer.** Two fixed lines, the same with or without a report: what the tool is not, and the LINZ and Auckland
+  Council credits with a link to the licence.
+- **Answer from a web search.** Neutral wash, no highlighter, text and search suggestions as returned. Under them,
+  inside the same box and in the report's own type, "Found by Gemini with Google Search. Not checked against this
+  report's sources."
 - **Fixed reply.** Dashed box, no highlighter, no source.
 - **First report.** The explanation of how the summary is made, and our margin notes, are open for the first
   report in a tab and folded or hidden after it. A caveat is never treated this way.
-- **Motion.** The step in progress pulses; a checked answer's words appear in order (a web-search answer is shown
+- **Motion.** The step in progress pulses; while an answer is on its way three dots pulse and a few words take
+  turns (they say that work is going on, never which part of it); a checked answer's words appear in order (a web-search answer is shown
   at once). Both are off under `prefers-reduced-motion`.
 
 ## Do

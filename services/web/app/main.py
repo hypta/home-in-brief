@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import mimetypes
 import os
 import re
 import time
@@ -42,6 +43,7 @@ _contexts: dict[str, tuple[float, bytes]] = {}
 # 2008, Table 21). 191 (before 1914), 192 (1914-1929) and XXX (mixed ages) are valid but are not a decade.
 _CATEGORY = re.compile(r"\s*(?:R[ACDFHNR]|LI)([0-9]{3}|XXX)[ABC]?\s*", re.I)
 log = logging.getLogger("web")
+mimetypes.add_type("font/woff2", ".woff2")  # the image's Python (3.12) does not know it and serves application/octet-stream
 
 app = FastAPI(openapi_url=None)
 app.add_middleware(GZipMiddleware, minimum_size=1024)

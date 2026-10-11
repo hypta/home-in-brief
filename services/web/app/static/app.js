@@ -1,6 +1,6 @@
 // Page flow: address search -> PropertyContext and map -> rules and knowledge-base notes -> render -> summary -> questions.
 // Each request fails on its own: a failed call only affects the block it feeds.
-import {$, byId, esc, floodMapped, link, render, renderSummary, renderThread, typeAnswer} from "./report.js";
+import {$, byId, esc, floodMapped, link, render, renderSummary, renderThread, renderWait, ticked, typeAnswer} from "./report.js";
 import {drawMap} from "./map.js";
 
 // kb: null means the notes could not be loaded; inputs: what the rules on the page were calculated with
@@ -8,7 +8,9 @@ const CLEARED = {rules: null, rulesError: null, inputs: null, kb: [], report: nu
 const state = {ctx: null, ...CLEARED, sources: {}, banks: {}, thread: [], done: new Set(), first: true};  // done: the next steps ticked for this address; first: the first report in this tab
 let timer, lastTyped = "", searchSeq = 0, lookupSeq = 0, calcSeq = 0, rulesSources, kbIds, kbItems;
 let asked = {};  // the summary last asked for: its key and the pending or settled answer
+let chosen = null;  // the address picked from the list; null once the box has been typed in again
 
+const num = id => $(id).value.trim() === "" ? null : Number($(id).value);  // a figure typed into the form, or null
 const show = id => { $(id).scrollIntoView(); $(id).focus({preventScroll: true}); };
 // The form is open until the first report is on the page; after that it is folded behind "Change" and the readout says what was used.
 function details(open) {
@@ -45,7 +47,6 @@ async function summarise() {
 
 async function calculate() {
   const mine = ++calcSeq, cv = state.ctx.property.cv, rules = inputs => api("rules", {property_context: state.ctx, user_inputs: inputs});
-  const num = id => $(id).value.trim() === "" ? null : Number($(id).value);
   const chat_supplied = {year_built: $("year-built").value.trim() || null, cladding: $("cladding").value || null};
   const built = categoryBuilt($("year-built").value);
   $("year-built-read").textContent = built && `Read as a council property category: built ${built}.`;
@@ -73,33 +74,62 @@ async function calculate() {
   if (update.rules) summarise();
 }
 
+// The sheet with the chosen address and the first step, while its records are read.
+function wait(a, failed) {
+  $("report").hidden = $("readout-row").hidden = false; $("report").classList.add("waiting");
+  $("change").disabled = !failed;  // nothing to change while the records are on their way; after a failure the form's button asks again
+  renderWait(a.full_address, failed, {deposit: num("deposit"), household_income: num("income"), existing_debts: num("debts")});
+  if (!failed) show("matched");
+}
+
+// The report for the records in state goes on the page.
+function reveal() {
+  const mine = lookupSeq, {ctx} = state;
+  $("status").textContent = "The report is below."; $("report").hidden = $("readout-row").hidden = false; $("report").classList.remove("waiting");
+  $("go").textContent = "Update report"; $("change").disabled = false;
+  // explanations are open, and our margin notes on show, for the first report in a tab only
+  try { state.first = !sessionStorage.getItem("seen"); sessionStorage.setItem("seen", "1"); } catch {}
+  document.body.dataset.seen = state.first ? "0" : "1";
+  $("sec-hazards").open = floodMapped(ctx).length > 0;  // the map is on show when a flood layer is mapped here
+  render(state);
+  show("matched");
+  drawMap(() => api("map?address_id=" + ctx.address.linz_address_id), () => mine === lookupSeq);
+  calculate();
+}
+
+// While the form is open, an address picked from the list only fills the box: nothing is asked for until the button is
+// pressed, so the visitor can add details first. Picked with the form folded away, behind a report, it is looked up at once.
+function choose(a) {
+  const before = chosen?.address_id ?? state.ctx?.address.linz_address_id;
+  clearTimeout(timer); ++searchSeq;  // drop any address search still pending
+  $("suggestions").innerHTML = ""; $("q").value = a.full_address; chosen = a;
+  if (before != null && String(before) !== String(a.address_id)) $("price").value = $("year-built").value = $("cladding").value = "";  // facts about the home before this one
+  if ($("details").hidden) lookup(a);
+  else $("status").textContent = `Add your details below if you like, then choose ${$("go").textContent}.`;
+}
+
 async function lookup(a) {
   const mine = ++lookupSeq;
-  clearTimeout(timer); ++searchSeq;  // drop any address search still pending
-  $("suggestions").innerHTML = ""; $("q").value = a.full_address; $("report").hidden = true;
-  $("status").textContent = "Looking up council and LINZ data…";
+  ++calcSeq;  // drop a calculation for the address before this one
+  details(false); wait(a);
+  $("status").textContent = "Reading the council and LINZ records…";
   try {
     const ctx = await api(`property-context?address_id=${a.address_id}&input=${encodeURIComponent(lastTyped)}`);
     if (mine !== lookupSeq) return;  // a newer lookup owns the page
-    if (state.ctx && state.ctx.address.linz_address_id !== a.address_id) $("year-built").value = $("cladding").value = "";  // facts about the previous home
     Object.assign(state, CLEARED, {ctx, sources: byId(ctx.sources), thread: [], done: new Set()});  // earlier answers were about another report
     const cv = ctx.property.cv, site = id => { const l = ctx.links.find(x => x.id === id); return l ? link(l.url, l.label) : id; };
-    $("price").value = cv.status === "found" ? cv.value : "";
-    $("price-hint").innerHTML = (cv.status === "found" ? `Filled in with the council valuation (CV) as at ${esc(cv.valuation_date)}, which is not a market value. `
-      : "The council valuation could not be found, so enter a price. ") + `Check a current estimate on ${site("homes")}, ${site("oneroof")} or the listing, then change this figure.`;
+    const typed = $("price").value !== "";  // a price typed before the records arrived is the visitor's
+    if (!typed) $("price").value = cv.status === "found" ? cv.value : "";
+    $("price-hint").innerHTML = (cv.status !== "found" ? "The council valuation could not be found, so enter a price. " : typed ? "The figure you entered. "
+      : `Filled in with the council valuation (CV) as at ${esc(cv.valuation_date)}, which is not a market value. `) + `Check a current estimate on ${site("homes")}, ${site("oneroof")} or the listing, then change this figure.`;
     $("year-built-hint").innerHTML = `Only used when the council records do not give a build decade. Check the listing, ${site("homes")} or ${site("oneroof")} for the decade, or copy the Property Category from the ${site("council_valuation")}. A year (1997), a decade (1990s) or the category code (for example RD199B) all work.`;
     $("cladding-hint").innerHTML = `Check the listing, ${site("homes")} or ${site("oneroof")} for it.`;
-    $("status").textContent = "The report is below."; $("report").hidden = $("readout-row").hidden = false;
-    $("intro").hidden = $("start-note").hidden = true; details(false);
-    // explanations are open, and our margin notes on show, for the first report in a tab only
-    try { state.first = !sessionStorage.getItem("seen"); sessionStorage.setItem("seen", "1"); } catch {}
-    document.body.dataset.seen = state.first ? "0" : "1";
-    $("sec-hazards").open = floodMapped(ctx).length > 0;  // the map is on show when a flood layer is mapped here
-    render(state);
-    show("matched");
-    drawMap(() => api("map?address_id=" + a.address_id), () => mine === lookupSeq);
-    calculate();
-  } catch (e) { if (mine === lookupSeq) { state.ctx = null; $("status").textContent = "Lookup failed: " + e.message; } }
+    reveal();
+  } catch (e) {
+    if (mine !== lookupSeq) return;
+    state.ctx = null; $("status").textContent = "Lookup failed: " + e.message;
+    wait(a, true);
+  }
 }
 
 // Loan details the visitor typed stay for this tab (sessionStorage), so they are entered once and used for every
@@ -109,7 +139,11 @@ try { for (const field of $("loan-form").elements) field.value = sessionStorage.
 $("loan-form").addEventListener("change", e => { try { sessionStorage.setItem("loan." + e.target.id, e.target.value); } catch {} });
 $("summary").addEventListener("click", e => { if (e.target.id === "retry-summary") summarise(); });
 // a tick survives the summary being written again for the same address
-$("summary").addEventListener("change", e => { if (e.target.matches(".todo input")) state.done[e.target.checked ? "add" : "delete"](e.target.closest("label").textContent); });
+$("summary").addEventListener("change", e => {
+  if (!e.target.matches(".todo input")) return;
+  state.done[e.target.checked ? "add" : "delete"](e.target.closest("label").textContent);
+  $("ticked").textContent = ticked($("summary").querySelectorAll(".todo input:checked").length);
+});
 
 // A year built or cladding stated in a question goes into the form when the report on the page was not calculated with
 // it, unless the records already have that fact: the rules then use the record, and report-api's answer says how the
@@ -157,7 +191,7 @@ addEventListener("keydown", e => { if (e.key === "Escape") panel(false); });
 document.addEventListener("click", e => {
   const to = e.target.closest('a[href^="#sec-"]'), starter = e.target.closest(".starters button");
   if (to) { $(to.hash.slice(1)).open = true; if (!wide.matches) panel(false); }  // a link to a folded section opens it
-  if (starter) { $("question").value = starter.textContent; $("question").focus(); }
+  if (starter) ask(starter.textContent);
 });
 $("ask-form").addEventListener("submit", e => {
   e.preventDefault();
@@ -168,9 +202,10 @@ $("thread").addEventListener("click", e => { if (e.target.id === "retry-answer")
 
 $("loan-form").addEventListener("submit", e => {
   e.preventDefault();
-  if (!state.ctx) { $("status").textContent = "Choose an address first."; $("q").focus(); return; }
-  calculate();
-  details(false); show("matched");
+  // with nothing picked from the list since, the button is about the report on the page
+  if (chosen && String(state.ctx?.address.linz_address_id) !== String(chosen.address_id)) lookup(chosen);  // no report for this address yet
+  else if (state.ctx) { calculate(); details(false); show("matched"); }
+  else { $("status").textContent = "Choose an address from the list first."; $("q").focus(); }
 });
 $("change").addEventListener("click", () => details($("details").hidden));
 // The theme follows the system until the visitor picks the other one; picking the system's own goes back to following it.
@@ -196,6 +231,7 @@ api("rates/latest").then(snap => {
 
 $("q").addEventListener("input", () => {
   clearTimeout(timer);
+  if ($("q").value !== chosen?.full_address) chosen = null;  // the box no longer names the address that was picked
   const q = $("q").value.trim();
   if (q.length < 3) { ++searchSeq; $("suggestions").innerHTML = ""; return; }
   timer = setTimeout(async () => {
@@ -207,7 +243,7 @@ $("q").addEventListener("input", () => {
       $("suggestions").innerHTML = "";
       for (const a of found) {
         const li = document.createElement("li"), b = document.createElement("button");
-        b.type = "button"; b.textContent = a.full_address; b.onclick = () => lookup(a);
+        b.type = "button"; b.textContent = a.full_address; b.onclick = () => choose(a);
         li.append(b); $("suggestions").append(li);
       }
     } catch (e) { if (mine === searchSeq) $("status").textContent = "Address search failed: " + e.message; }
