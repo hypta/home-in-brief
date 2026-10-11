@@ -153,9 +153,14 @@ class NextStep(BaseModel):
 
 
 class NotFoundNote(BaseModel):
-    field: str
+    field: str  # the codes, comma-separated, as before (for example "cv,year_built" or "hazards.flood_plain")
     text: str
     reason: Optional[str] = None
+    # Added later, additive: the same fields as lists, so a page need not split `field` or turn codes into names.
+    # `fields[i]` is a code, `labels[i]` its display name (sentence case, the words `text` uses, for example
+    # "Council valuation (CV)", "Year built", "Flood plains"). Same order and length.
+    fields: list[str] = []
+    labels: list[str] = []
 
 
 class Report(BaseModel):

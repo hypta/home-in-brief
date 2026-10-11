@@ -42,7 +42,7 @@ Response 200:
 | `model` | `GEMINI_MODEL` in use, or `mock` |
 | `summary` | `[{text, source_ids}]`. Gemini rewrites a fact list built by code into 3-5 sentences (see "Summary: fact list and rewrite"); rewrites that fail the checks are replaced by the facts' draft sentences, and every must-mention fact is always present (at most 5). With no loan (`price_missing`, `deposit_exceeds_price`, `cash_purchase_no_loan`) code appends one fixed sentence with `source_ids: []`. Sentences that use chat-supplied facts get the prefix "Based on what you told us, " from code |
 | `next_steps` | `[{text, source_ids, kb_item}]`: `next_step_en` of selected KB items, verbatim. Items cited in the summary first, then a fixed program order (flood insurance whenever a primary flood layer intersects, other intersecting-hazard items, build era/cladding, RBNZ LVR/DTI, LIM, title, First Home Loan, the rest). Identical texts are merged (`kb_item` = first, `source_ids` = all). At most 6. No lending items when there is no loan |
-| `not_found_notes` | `[{field, text, reason}]`: property fields and primary hazard layers with status `not_found` or `unavailable`. Fields that share the same wording and reason are merged into one note; `field` is then a comma-separated list (for example `cv,year_built,...`, `hazards.flood_plain,hazards.flood_prone_area`). Hazard notes end with "This does not mean there is no hazard." |
+| `not_found_notes` | `[{field, text, reason, fields, labels}]` (`fields` and `labels` added later, additive: `fields` is `field` split into codes, `labels` the display name of each, same order, for example `["Title type", "Year built"]`): property fields and primary hazard layers with status `not_found` or `unavailable`. Fields that share the same wording and reason are merged into one note; `field` is then a comma-separated list (for example `cv,year_built,...`, `hazards.flood_plain,hazards.flood_prone_area`). Hazard notes end with "This does not mean there is no hazard." |
 | `warnings` | `rules_output.warnings` without panel-level and internal codes (`lem_base_unverified:*`, `bank_skipped:*`, `kb_hash_mismatch:*`, `kb_verification_incomplete:*`, `hazard_status_*`, `hazard_priority_unknown:*`), plus `kb_includes_draft` when `rules_output.kb_includes_draft` is true. report-api adds one code of its own, last: `generation_degraded` when protection refused the Gemini call (allowance used up, `REPORT_DEGRADED`, prompt too large; see "Abuse and cost protection"); the summary is then the checked drafts. Other meanings are in CODES.md |
 | `dropped` | Number of Gemini sentences blocked by the checks (their facts fall back to drafts) |
 
@@ -177,6 +177,10 @@ Steps (INTERFACE_DRAFT 5 and 6.1):
    `council_geomaps`; other hazards: `council_geomaps`, `council_flood_viewer`; anything else: `council_geomaps`),
    keeping only ids PropertyContext has (else its first link). `exempt`: the refusal has `source_ids: []` and skips
    the validator; `strict`: it goes through the validator, is dropped, and the response is 502.
+   A question about the loan or the First Home Loan (and nothing else the report has facts for) when the fact list has
+   no fact about it (no price, deposit or income entered, or a cash purchase) is not sent to the model: the answer is
+   two fixed sentences, "This report does not have enough data to answer this question." and what is missing, with
+   `source_ids: []` and `out_of_scope: false` (Chinese by code, other languages translated or English with `language: "en"`).
 4. Merge: values only add to `user_inputs.chat_supplied`. A field PropertyContext has with status `found`
    wins: the value is not used and is still returned in `user_supplied`. Code writes the first answer
    sentence comparing both values and cites the field's `source_id`, e.g. "You gave the year built as 1985; the council records the 1990s

@@ -1113,6 +1113,72 @@ def skipped_answer(kind: str, found: dict[str, Any], language: str,
     return finish(parts, language, ev, translate, debug, lambda p: True, unavailable)
 
 
+# ---- a loan question the report has no loan facts for ------------------------------------------------------
+# The model is told to say what the facts do show when none answers; with no loan, deposit or income entered the facts
+# are about hazards and the title, so a First Home Loan question got an unrelated sentence. Code decides instead: a
+# question about the loan or the First Home Loan, no fact about it in the list, and no other topic in the question
+# -> a fixed answer that says so and names what is missing. No model call.
+_FHL_Q = re.compile(r"first[- ]home[- ](?:loan|buyer|scheme)|\bFHL\b|k[aā]inga ora|首購貸款|首购贷款|首購房貸|首次購屋貸款|首次置業貸款|"
+                    r"ファーストホームローン|첫 ?주택 ?대출", re.I)
+_LOAN_Q = re.compile(r"\bloans?\b|mortgage|borrow|repayments?|\bLVR\b|\bDTI\b|deposit|interest rate|lender|lending|"
+                     r"貸款|贷款|房貸|房贷|還款|还款|月供|頭期款|头期款|首付|利率|借多少|ローン|返済|頭金|대출|상환", re.I)
+_LOAN_TOPICS = frozenset({"lending", "lending_debts", "first_home_loan", "user_input", "kb:lending"})
+INSUFFICIENT_EN = "This report does not have enough data to answer this question."
+INSUFFICIENT_ZH = ("這份報告沒有足夠的資料可以回答這個問題。", "这份报告没有足够的资料可以回答这个问题。")
+_NEED = {"price": ("the price", "价格", "價格"), "deposit": ("the deposit", "头期款", "頭期款"),
+         "income": ("the household income", "家庭收入", "家庭收入")}
+
+
+def loan_topic(question: str) -> Optional[str]:
+    """"fhl" or "loan" when the question is about the First Home Loan or the loan and about nothing else the report
+    has facts for (hazards, property fields); else None."""
+    if _FLOOD_Q.search(question) or _HAZARD_Q.search(question) or any(rx.search(question) for rx in _FIELD_Q.values()):
+        return None
+    if _FHL_Q.search(question):
+        return "fhl"
+    return "loan" if _LOAN_Q.search(question) else None
+
+
+def loan_facts(fs: list, kind: str) -> list:
+    """The facts that can answer a question of this kind: any fact about the loan, or for "fhl" one about the
+    First Home Loan (its own program fact, or one that cites a First Home Loan source)."""
+    fhl = [f for f in fs if f.topic == "first_home_loan" or any("fhl" in i or "kainga" in i for i in f.source_ids)]
+    return fhl if kind == "fhl" else [f for f in fs if f.topic in _LOAN_TOPICS] + fhl
+
+
+def missing_loan_inputs(req: ReportRequest) -> list[str]:
+    """Which of price, deposit and household income the user has not given (keys of _NEED), in that order."""
+    u = req.user_inputs
+    return [k for k, gone in (("price", "price_missing" in req.warnings()), ("deposit", u.get("deposit") is None),
+                              ("income", u.get("household_income") is None)) if gone]
+
+
+def insufficient_texts(req: ReportRequest, kind: str) -> tuple[list[str], list[str], list[str]]:
+    """The fixed answer in English, Traditional and Simplified Chinese: that the report cannot answer, then what
+    is missing (the loan details not entered, a deposit that covers the price, or no result for these inputs)."""
+    gone = missing_loan_inputs(req)
+    cash = any(w in req.warnings() for w in ("cash_purchase_no_loan", "deposit_exceeds_price"))
+    what_en, what_t, what_s = ("First Home Loan", "First Home Loan", "First Home Loan") if kind == "fhl" else \
+        ("the loan", "貸款", "贷款")
+    if cash:
+        en = f"It cannot assess {what_en} because the deposit covers the whole price, so there is no loan."
+        zh = (f"無法評估{what_t}，因為頭期款已涵蓋全部價格，沒有貸款。", f"无法评估{what_s}，因为头期款已涵盖全部价格，没有贷款。")
+    elif gone:
+        names = [_NEED[k] for k in gone]
+        joined = _join_words([n[0] for n in names])
+        en = f"It cannot assess {what_en} because {joined} {'was' if len(names) == 1 else 'were'} not entered in the form."
+        zh = (f"無法評估{what_t}，因為表單中沒有填寫{'、'.join(n[2] for n in names)}。",
+              f"无法评估{what_s}，因为表单中没有填写{'、'.join(n[1] for n in names)}。")
+    else:
+        en = f"The report has no {what_en} result for the details entered."
+        zh = (f"報告中沒有根據目前填寫的資料得出的{what_t}結果。", f"报告中没有根据目前填写的资料得出的{what_s}结果。")
+    return [INSUFFICIENT_EN, en], [INSUFFICIENT_ZH[0], zh[0]], [INSUFFICIENT_ZH[1], zh[1]]
+
+
+def _join_words(items: list[str]) -> str:
+    return items[0] if len(items) == 1 else ", ".join(items[:-1]) + " and " + items[-1]
+
+
 # ---- main flow ----------------------------------------------------------------------------------
 def answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
                     generate: Optional[JsonGenerator] = None, debug: Optional[dict] = None,
@@ -1202,6 +1268,29 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
     sources = {k: USER for k in supplied}
     links = [i for i in dict.fromkeys(c.links) if i in link_ids][:3]
 
+    def insufficient_answer(eff: ReportRequest, kind: str) -> Optional[tuple[list[Sentence], str]]:
+        """The fixed "not enough data" answer in the asker's language (English or code-written Chinese; another
+        language by restricted translation, else English with language "en"), or None if a sentence fails its check."""
+        en, zh_t, zh_s = insufficient_texts(eff, kind)
+        probe = Evidence()
+        no_ids = lambda p, mw: [f for f in check_sentence(p, probe, mw) if f != "no_source_ids"]  # noqa: E731
+        sents = lambda texts, lang: [Sentence(text=tidy(t, lang), source_ids=[]) for t in texts]  # noqa: E731
+        if is_zh(language):
+            out, lang = sents(zh_s if language == "zh-Hans" else zh_t, language), language
+        else:
+            out, lang = sents(en, "en"), "en"
+            if not is_english(language):
+                got = translate(en)
+                if got and len(got) == len(en) and not any(
+                        check_translation(o, t, language, probe, no_ids) for o, t in zip(out, got)):
+                    out, lang = sents(got, language), language
+                elif mock:
+                    lang = language  # mock mode keeps the English parts (translate.mock)
+        if any(check_answer(o, probe, lang, no_ids) for o in out):
+            log.warning("insufficient-data answer failed its own check")
+            return None
+        return out, lang
+
     def in_scope(question: str, supplied: dict[str, Any], sources: dict[str, str],
                  skip: frozenset = frozenset()) -> FollowupResponse:
         """Steps 3-4 for an in-scope question. `sources`: "web_search" for values extracted from a search answer;
@@ -1284,6 +1373,15 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
         dropped, out_links = 0, []
         last: Optional[ReportError] = None
         limit = max(0, MAX_ANSWER - len(fixed))
+        all_facts = facts_prompt.followup_facts(eff, ev, data.items, said)
+        kind = loan_topic(question)
+        if kind and not fixed and not used and not loan_facts(all_facts, kind):
+            got = insufficient_answer(eff, kind)
+            if got:
+                debug["insufficient"] = kind
+                return FollowupResponse(language=got[1], answer=got[0], out_of_scope=False, user_supplied=supplied,
+                                        user_supplied_source=_sources_out(supplied, sources), links=links,
+                                        dropped=0, warnings=warnings)
         if mock:
             sentences, dropped = mock_answer(ev, data.items, used, language)
             if fixed and not used:
@@ -1291,7 +1389,7 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
             passed = [Part(s, native=is_english(language) or script_matches(s.text, language),
                            user=bool(set(s.source_ids) & ev.user_kb)) for s in sentences[:limit]]
         else:
-            fs = [f for f in facts_prompt.followup_facts(eff, ev, data.items, said)
+            fs = [f for f in all_facts
                   if not (f.program and f.topic.removeprefix("program:") in skip)]
             ev.latin_terms |= latin_terms(eff, fs)
             for f in fs:

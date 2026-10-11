@@ -40,8 +40,8 @@ Each flag is `{id, source_ids}`. A flag is only listed when it applies.
 |---|---|---|---|
 | `cv_unavailable` | CV not used | `property.cv.status` is not `found` | Say the council valuation could not be retrieved. |
 | `title_type_unavailable` | Title type not used | status is not `found` | Say the title type could not be confirmed. |
-| `year_built_unavailable` | Year built not used | status is not `found` | Ask the user for the year built; do not guess. |
-| `cladding_unavailable` | Cladding not used | status is not `found` | Ask the user for the cladding; do not guess. |
+| `year_built_unavailable` | Year built not used | status is not `found` | Do not guess. The page says once, in the This home section, that the year built was not found and that the user can enter it in the form; it does not ask again in each answer. |
+| `cladding_unavailable` | Cladding not used | status is not `found` | Do not guess. The page says once, in the This home section, that the cladding was not found and that the user can enter it in the form; it does not ask again in each answer. |
 | `cv_invalid` | CV value present but unusable | CV `found` but not a finite number in (0, 1e10] | Treat as no CV. |
 | `year_built_unparseable` | Year information is unusable | `year_built.value` is not a year (1000-2200) or a decade such as `1990s`, or `decade_range` is malformed | Treat as unknown. |
 | `title_type_unresolved` | LINZ lists title types but none was chosen | `title_type.value` is null while `linz_types` is not empty | No title-type notes are selected. Say the title type needs confirming (see `linz_types`); do not guess. |

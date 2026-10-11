@@ -1,6 +1,7 @@
 """The parts of a report built by code: not_found_notes, next_steps, warnings and fixed sentences."""
 from __future__ import annotations
 
+import re
 from typing import Optional
 
 from b_common.report_schemas import NextStep, NotFoundNote, ReportRequest, Sentence
@@ -167,7 +168,8 @@ def not_found_notes(req: ReportRequest) -> list[NotFoundNote]:
             label = _join([labels[0]] + [lab if lab[1:2].isupper() or "(" in lab else lab[:1].lower() + lab[1:]
                                          for lab in labels[1:]])
             out = f"{label}: {text}"
-        notes.append(NotFoundNote(field=",".join(g["fields"]), text=out, reason=g["reason"]))
+        notes.append(NotFoundNote(field=",".join(g["fields"]), text=out, reason=g["reason"],
+                                  fields=list(g["fields"]), labels=list(labels)))
     return notes
 
 
@@ -198,6 +200,38 @@ def _rank(item_id: str, item: dict, req: ReportRequest, layers: set[str]) -> int
     return 8
 
 
+# Words every First Home Loan step has (or that only frame it): left out, what remains is what the step is about
+# ("criteria", "premium", "income", ...).
+_STEP_STOP = frozenset("a an the to of for and or with your you it its how what which that this their about at on in "
+                       "is are be would will if any each ask check first home loan lender participating lending "
+                       "application applications".split())
+SIMILAR_STEP = 0.3  # share of topic words two First Home Loan steps have in common to count as the same advice
+
+
+def _step_words(text: str) -> set[str]:
+    return {w for w in re.findall(r"[a-z0-9]+", text.lower()) if w not in _STEP_STOP}
+
+
+def _merge_similar(steps: list[NextStep]) -> list[NextStep]:
+    """Merge First Home Loan steps that say nearly the same thing ("Check the First Home Loan criteria with a
+    participating lender" and "... income criteria ..."; each KB item has its own wording). The earlier step keeps
+    its place; it takes the more complete text (more content words), `kb_item` follows the text, `source_ids` is
+    the union. Other steps are untouched: identical texts were merged already."""
+    out: list[NextStep] = []
+    for step in steps:
+        words = _step_words(step.text)
+        twin = next((o for o in out if "First Home Loan" in o.text and "First Home Loan" in step.text
+                     and words and len(words & _step_words(o.text)) / len(words | _step_words(o.text)) >= SIMILAR_STEP),
+                    None)
+        if twin is None:
+            out.append(step)
+            continue
+        twin.source_ids.extend(i for i in step.source_ids if i not in twin.source_ids)
+        if len(words) > len(_step_words(twin.text)):
+            twin.text, twin.kb_item = step.text, step.kb_item
+    return out
+
+
 def next_steps(req: ReportRequest, kb_items: dict[str, dict], summary: list[Sentence],
                no_loan: bool) -> list[NextStep]:
     """next_step_en of selected KB items, verbatim; items cited in the summary first, then program
@@ -218,7 +252,7 @@ def next_steps(req: ReportRequest, kb_items: dict[str, dict], summary: list[Sent
             merged[text].source_ids.append(i)
         else:
             merged[text] = NextStep(text=text, source_ids=[i], kb_item=i)
-    steps = list(merged.values())
+    steps = _merge_similar(list(merged.values()))
 
     # Items that must be shown: flood insurance when a flood layer intersects, and a leaky-building item the
     # user's own input triggered (the summary must mention it). Each one past the cap takes the last free slot.
