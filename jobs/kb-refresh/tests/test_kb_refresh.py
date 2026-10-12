@@ -124,7 +124,7 @@ def test_ok_page_uses_honest_user_agent_and_finds_quote():
     client = httpx.Client(transport=httpx.MockTransport(site(pages)), headers=checker.HEADERS)
     run = check_item(make_item(quote="an insurer may limit cover"), fetch=Fetcher(client), now="t")
     assert run["quote_found"] is True
-    assert uas and all(u.startswith("home-buyer-copilot/0.1 (+https://github.com/") for u in uas)
+    assert uas and all(u.startswith("home-in-brief/0.1 (+https://github.com/") for u in uas)
     assert "Mozilla" not in checker.USER_AGENT
 
 

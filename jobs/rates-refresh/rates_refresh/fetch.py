@@ -13,8 +13,8 @@ from urllib.parse import urlsplit
 
 import httpx
 
-USER_AGENT = "home-buyer-copilot/0.1 (+https://github.com/hypta/home-buyer-copilot)"
-ROBOTS_TOKEN = "home-buyer-copilot"
+USER_AGENT = "home-in-brief/0.1 (+https://github.com/hypta/home-in-brief)"
+ROBOTS_TOKEN = "home-in-brief"
 MIN_TEXT_LEN = 1500
 MIN_RATES_ON_PAGE = 8
 RATE_RE = re.compile(r"\b(\d{1,2}\.\d{2})\s*%")

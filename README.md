@@ -1,4 +1,4 @@
-# Home Buyer Copilot
+# Home in Brief
 
 A free pre-offer report for first-time home buyers in Auckland, New Zealand. Enter an address and your loan details
 (deposit, income, debts) and get a plain-English view of what the property could really cost and where the risks

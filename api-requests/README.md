@@ -5,7 +5,7 @@ Ready-made requests for both local services.
 | File | Use with |
 |---|---|
 | `rules-api.http`, `property-api.http` | VS Code [REST Client](https://marketplace.visualstudio.com/items?itemName=humao.rest-client) extension: open the file and click "Send Request" above a block |
-| `home-buyer-copilot.postman_collection.json` | Postman: Import → File. Collection variables `rules` (http://localhost:8080) and `property` (http://localhost:8081) |
+| `home-in-brief.postman_collection.json` | Postman: Import → File. Collection variables `rules` (http://localhost:8080) and `property` (http://localhost:8081) |
 | `bodies/*.json` | `POST /v1/rules` bodies built from property-api's real fixtures (740 Sandringham Road Extension, 44 Lorne Street) |
 
 ## Start the services

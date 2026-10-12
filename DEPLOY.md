@@ -68,7 +68,7 @@ Shell variables used by every command below:
 export PROJECT_ID=your-project-id
 export REGION=australia-southeast1
 export REPO=nz-buyer-report                 # Artifact Registry repo name (GCP_AR_REPO)
-export GITHUB_REPO=hypta/home-buyer-copilot
+export GITHUB_REPO=hypta/home-in-brief
 gcloud config set project $PROJECT_ID
 # after the project exists:
 export PROJECT_NUMBER=$(gcloud projects describe $PROJECT_ID --format='value(projectNumber)')
@@ -158,7 +158,7 @@ gcloud iam workload-identity-pools create github \
 
 gcloud iam workload-identity-pools providers create-oidc home-buyer-copilot \
   --location=global --workload-identity-pool=github \
-  --display-name="hypta/home-buyer-copilot" \
+  --display-name="hypta/home-in-brief" \
   --issuer-uri="https://token.actions.githubusercontent.com" \
   --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository,attribute.ref=assertion.ref" \
   --attribute-condition="assertion.repository == '${GITHUB_REPO}' && assertion.ref == 'refs/heads/main'"
@@ -593,7 +593,7 @@ from a review of its website terms and robots.txt on 2026-10-03 (not legal advic
 marked `allowed`. As of that review none is: NZHL is `prohibited` (its terms name scraping and automation), the other
 ten are `unclear` (no written permission, no explicit ban). Those rows are updated by hand, see `RATES_UPDATE.md`.
 
-Fetch behaviour for allowed banks: honest `User-Agent` (`home-buyer-copilot/0.1 (+repo URL)`), robots.txt is read first
+Fetch behaviour for allowed banks: honest `User-Agent` (`home-in-brief/0.1 (+repo URL)`), robots.txt is read first
 and a Disallow means no request, and a 401/403/429 or an Imperva/Incapsula/Cloudflare challenge page is final (the
 bank is recorded as blocked and keeps its old data; there is no retry through a browser). Playwright is used only for a
 bank that is `allowed` and sets `render: browser` because its rates need JavaScript.

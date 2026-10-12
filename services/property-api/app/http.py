@@ -14,7 +14,7 @@ _SCRIPT = re.compile(r"<script.*?</script>", re.S)
 _SESSION = requests.Session()
 # Auckland Council answers 406 to default client user agents.
 _SESSION.headers.update({
-    "User-Agent": "home-buyer-copilot/0.1 (+https://github.com/hypta/home-buyer-copilot; non-commercial)",
+    "User-Agent": "home-in-brief/0.1 (+https://github.com/hypta/home-in-brief; non-commercial)",
     "Accept": "application/json, text/html"})
 
 

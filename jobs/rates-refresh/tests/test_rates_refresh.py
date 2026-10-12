@@ -182,7 +182,7 @@ def test_robots_parsing():
     url = "https://x.example/rates/"
     assert robots_allows(url, getter=lambda u: (200, "User-agent: *\nDisallow: /rates/"))[0] is False
     assert robots_allows(url, getter=lambda u: (200, "User-agent: *\nDisallow: /admin/"))[0] is True
-    assert robots_allows(url, getter=lambda u: (200, "User-agent: home-buyer-copilot\nDisallow: /"))[0] is False
+    assert robots_allows(url, getter=lambda u: (200, "User-agent: home-in-brief\nDisallow: /"))[0] is False
     assert robots_allows(url, getter=lambda u: (404, ""))[0] is True
     assert robots_allows(url, getter=lambda u: (403, ""))[0] is False
     assert robots_allows(url, getter=lambda u: (503, ""))[0] is False
@@ -190,7 +190,7 @@ def test_robots_parsing():
 
 def test_user_agent_is_honest():
     from rates_refresh.fetch import USER_AGENT
-    assert USER_AGENT.startswith("home-buyer-copilot/") and "Mozilla" not in USER_AGENT
+    assert USER_AGENT.startswith("home-in-brief/") and "Mozilla" not in USER_AGENT
 
 
 def test_not_allowed_banks_skipped_without_any_request():

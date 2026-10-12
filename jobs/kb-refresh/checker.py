@@ -15,8 +15,8 @@ import httpx
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "kb"))
 from content_hash import content_hash, effective_status  # noqa: E402
 
-USER_AGENT = "home-buyer-copilot/0.1 (+https://github.com/hypta/home-buyer-copilot)"
-ROBOTS_AGENT = "home-buyer-copilot"
+USER_AGENT = "home-in-brief/0.1 (+https://github.com/hypta/home-in-brief)"
+ROBOTS_AGENT = "home-in-brief"
 HEADERS = {
     "User-Agent": USER_AGENT,
     "Accept": "text/html,application/xhtml+xml,application/pdf;q=0.9,*/*;q=0.5",
