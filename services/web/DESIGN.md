@@ -22,7 +22,7 @@ each with one job:
 | `--pen` / `--on-pen` | `#1b45b4` / `#fff` | `#9db9ff` / `#0f131b` | Links, buttons, hand-drawn marks, focus ring |
 | `--hl` | `#ffe45c` | `#5a5000` | Highlighter |
 | `--heed` / `--heed-wash` | `#8a3b00` / `#ffe3c7` | `#ffc58a` / `#3d2a14` | Mapped here, a condition, a part that failed |
-| `--quiet` | `#e4e8ee` | `#222a36` | Neutral wash: not found, an answer from a web search |
+| `--quiet` | `#e4e8ee` | `#222a36` | Neutral wash: a tag, a hovered option |
 
 Text pairs are 5.8:1 or better and borders and marks 4:1 or better in both themes (calculated). No green and no
 red: beside a hazard they read as a verdict. The map keeps its own colours.
@@ -70,10 +70,12 @@ red: beside a hazard they read as a verdict. The map keeps its own colours.
   from 1000 px. Until something has been asked it offers four questions to start with; choosing one asks it. The box says "Ask about this home"; over it, in our hand until the first question is asked, "your own language is fine" and an arrow.
 - **Footer.** Two fixed lines, the same with or without a report: what the tool is not, and the LINZ and Auckland
   Council credits with a link to the licence.
-- **Answer from a web search.** Neutral wash, no highlighter, text and search suggestions as returned. Under them,
-  inside the same box and in the report's own type, "Found by Gemini with Google Search. Not checked against this
-  report's sources."
-- **Fixed reply.** Dashed box, no highlighter, no source.
+- **Answer from a web search.** Plain text, no highlighter and no box: the text, its sources and the search
+  suggestions as returned and in that order, the sources on one small line. Under them, in the report's own
+  type, one small paragraph: "Found by Gemini with Google Search. Not checked by this tool." and the official pages
+  to check it on.
+- **Fixed reply.** Plain text, no highlighter, no source. The conversation has two looks only: a checked sentence
+  is highlighted, everything else is plain.
 - **First report.** The explanation of how the summary is made, and our margin notes, are open for the first
   report in a tab and folded or hidden after it. A caveat is never treated this way.
 - **Motion.** The step in progress pulses; while an answer is on its way three dots pulse and a few words take

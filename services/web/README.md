@@ -76,7 +76,7 @@ five folded sections with the records. The hazards section is open when a flood 
 step on the summary's list is not repeated under the note it comes from. Each line opens its sources from one control: a source
 shown there is its name, and the words quoted from it, its credit line, licence and dates are in the list of section 5.
 While the form is open, choosing an address asks for nothing: the report starts when the visitor chooses "Summarise
-this address" (or "Update report"), so details can be added first. With the form folded behind a report, choosing another
+this address" (or "Update"), so details can be added first. With the form folded behind a report, choosing another
 address starts the next report at once. The two steps above the summary end when the page
 sees their requests finish (the records with the figures calculated from them, then the summary); nothing is paced by a timer.
 The three typefaces are served from `app/static/fonts/` with their licence texts (SIL Open Font License).

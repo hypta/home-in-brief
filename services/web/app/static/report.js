@@ -285,30 +285,30 @@ const reworded = n => !n ? "" : `<p class="muted">${n === 1 ? "1 of these senten
 // done, in the place of its name and with the name's own words, so the eye follows one word through a state that often
 // lasts a moment only. Both are short enough for the two steps to share a line on a phone.
 const STEPS = [["Records", "Reading the records…"], ["Summary and check", "Writing and checking the summary…"]];
-const steps = (at, failed) => `<ol class="steps" aria-label="How far this report has got">${STEPS.map(([name, doing], i) => {
+const steps = (at, failed) => `<ol class="steps" aria-label="How far this page has got">${STEPS.map(([name, doing], i) => {
   const said = i < at ? "done" : i > at ? "waiting" : failed ? "failed" : "";
   return said ? `<li class="${i > at ? "" : said}">${name}<span class="sr">: ${said}</span></li>` : `<li class="doing">${doing}</li>`; }).join("")}</ol>`;
 
 // What is said when the summary or an answer did not come: asked too often (web) or too many at once (report-api) is
 // said as such, and nothing is asked again until the reader chooses to.
 const unavailable = (what, err) => err.code === "rate_limited" || err.code === "busy" ? "Too many requests at the moment. Wait a few seconds, then try again."
-  : `The ${what} is unavailable right now. The rest of the report is not affected.`;
+  : `The ${what} is unavailable right now. The rest of the page is not affected.`;
 // report-api only returns sentences that passed its check against the sources they cite.
 function summary({ctx, rules, rulesError, kb, report: r, reportError: err, done, first}) {
   if (!rules) return rulesError ? steps(0, true) + `<p class="problem">The summary is unavailable until the repayment figures can be calculated.</p>`
     : steps(0);
   if (err) return steps(1, true) + (err.code === "validation_failed"
-    ? `<p class="problem">No summary sentence passed the check against its sources, so none is shown. The rest of the report is not affected.</p>`
+    ? `<p class="problem">No summary sentence passed the check against its sources, so none is shown. The rest of the page is not affected.</p>`
     : `<p class="problem">${unavailable("summary", err)}</p><button type="button" id="retry-summary">Try again</button>`);
   if (!r) return steps(1);
   const items = byId(kb || []), drafts = r.model === "code-draft";  // report-api wrote every sentence itself: no model call could be made
   return steps(2) + r.summary.map(s => checked(s, items, jump(s, items, ctx))).join("")
-    + (drafts ? `<p class="muted">The model was not used for this summary. These sentences are the program's own, written from the same facts.</p>` : reworded(r.dropped))
+    + (drafts ? `<p class="muted">The model was not used for this summary. These sentences are the program's own, written from the same facts.</p>` : "")
     + `<details class="how"${first ? " open" : ""}><summary>How this summary is made</summary><ol>
       <li>The program collects the facts from council and LINZ records, your loan figures and the notes that apply.</li>
       <li>The model rewrites them as three to five plain sentences. It never sees a figure: the program fills those in.</li>
       <li>Each sentence is checked against the sources it cites. One that fails is replaced by the program's own wording.</li></ol>
-      <p class="muted rec">Wording by ${drafts ? "the program" : esc(r.model)}.</p>
+      ${drafts ? "" : reworded(r.dropped)}
       <p class="muted">The check compares wording and figures. It cannot judge everything a sentence means, so open the sources of any sentence that matters to you.</p></details>`
     + (r.next_steps.length ? `<h3>Next steps</h3>${fold(`<span>${count(r.next_steps.length, "thing")} to ask or check<span id="ticked">${ticked(r.next_steps.filter(s => done.has(s.text)).length)}</span></span>`,
         `<ul class="todo">${r.next_steps.map(s => `<li><label><input type="checkbox"${done.has(s.text) ? " checked" : ""}><span>${esc(s.text)}</span></label>${control(cardsOf(s, items))}</li>`).join("")}</ul>`)}` : "")
@@ -332,7 +332,7 @@ function notFound(notes) {
     ${fold(`Not in the records: ${esc(names.join(", ") || count(fields.length, "note"))}`, list(fields.map(n => esc(n.text))))}</div>`;
 }
 
-const LINK_KIND = {direct: " (opens this property)", first_result: " (opens the first search result for this address on that site)", home: " (search for the address there)"};
+const LINK_KIND = {direct: " (opens this property)", first_result: " (first search result)", home: " (search for the address there)"};
 const linkItem = l => `${link(l.url, l.label)}${LINK_KIND[l.kind] || ""}`;
 
 // An answer Gemini found with Google Search, for a question the report does not cover or a field the records lack. The Gemini API terms ask for
@@ -340,15 +340,18 @@ const linkItem = l => `${link(l.url, l.label)}${LINK_KIND[l.kind] || ""}`;
 // own HTML and sit in a frame that runs no scripts.
 // The language of the text is not known here, so it does not inherit the page's.
 // The frame's document accepts both colour schemes: one that only knew light would be given an opaque white ground on a dark page.
-const webAnswer = w => `<div class="web">
-  <div class="say" lang="">${w.text.split(/\n\s*\n/).map(p => `<p>${esc(p)}</p>`).join("")}</div>${list(w.sources.map(s => link(s.url, s.title || "Source")))}
+// Google's part stays together and in Google's order: the text, the pages it rests on, the search suggestions. Ours comes
+// after it, in one small paragraph: what this is, and `own`, the official pages report-api names for checking it.
+const webAnswer = (w, own) => `<div class="web">
+  <div class="say" lang="">${w.text.split(/\n\s*\n/).map(p => `<p>${esc(p)}</p>`).join("")}</div>
+  ${w.sources.length ? `<p class="muted">Sources: ${w.sources.map(s => link(s.url, s.title || "Source")).join(" &middot; ")}</p>` : ""}
   ${w.search_suggestions ? `<iframe class="suggest" title="Google Search suggestions" sandbox="allow-popups allow-popups-to-escape-sandbox" srcdoc="${esc('<meta name="color-scheme" content="light dark"><base target="_blank">' + w.search_suggestions)}"></iframe>` : ""}
-  <p class="muted">Found by Gemini with Google Search. Not checked against this report's sources.</p></div>`;
+  <p class="muted">Found by Gemini with Google Search. Not checked by this tool.${own.length ? ` Check it yourself: ${own.join("; ")}.` : ""}</p></div>`;
 
 // While an answer is on its way: three dots and a few words that take turns. The words say that work is going on, not
 // which part of it: the page sends one request and cannot see inside it. A screen reader hears "Answering" once.
 const THINKING = `<p class="thinking muted"><span class="sr">Answering</span><span aria-hidden="true"><i></i><i></i><i></i></span><span class="verbs" aria-hidden="true">${
-  ["Thinking", "Reading the report", "Looking it up", "Putting it together", "Still working on it"].map(v => `<span>${v}</span>`).join("")}</span></p>`;
+  ["Thinking", "Reading the records", "Looking it up", "Putting it together", "Still working on it"].map(v => `<span>${v}</span>`).join("")}</span></p>`;
 
 // The conversation about this report, in order. A turn holds the question and, once settled, report-api's answer with
 // the knowledge-base items on the page at that time, or the error. The sentences carry the language the answer names.
@@ -361,20 +364,20 @@ function addedLine(added, web) {
   return line(mine.filter(a => !a.removed), false) + line(mine.filter(a => a.removed), true);
 }
 function thread({ctx, rules, rulesError, kb: onPage, thread: turns}) {
+  // in the conversation a link's label loses its own bracketed description: the line already says what the link opens
+  const linked = a => (a.links || []).map(id => ctx.links.find(l => l.id === id)).filter(Boolean)
+    .map(l => linkItem({...l, label: l.label.replace(/\s*\([^)]*\)$/, "")}));
   const answer = ({answer: a, error: err, added, kb}, items = byId(kb || onPage || [])) => err ? (err.code === "validation_failed"
       ? `<p class="problem">No answer sentence passed the check against its sources, so none is shown. Try asking in a different way.</p>`
       : `<p class="problem">${unavailable("answer", err)}</p><button type="button" id="retry-answer">Try again</button>`)
     : !a ? THINKING
-    // a search answer stays whole in its own box; what the program says about it comes after, in a box of its own
-    : (a.web ? webAnswer(a.web) : "")
-      + (a.answer.length ? `<div class="say${a.answer.some(s => s.source_ids.length) ? "" : " fixed"}"${a.language ? ` lang="${esc(a.language)}"` : ""}>${a.answer.map(s => checked(s, items)).join("")}</div>` + reworded(a.dropped) : "")
-      + list((a.links || []).map(id => ctx.links.find(l => l.id === id)).filter(Boolean).map(linkItem))
-      + (a.out_of_scope && !a.web ? `<p class="muted rec">A fixed reply from the program.</p>` : "")
+    // a search answer stays whole, with its sources and its caveat; what the program says about it comes after
+    : (a.web ? webAnswer(a.web, linked(a)) : "")
+      + (a.answer.length ? `<div class="say"${a.language ? ` lang="${esc(a.language)}"` : ""}>${a.answer.map(s => checked(s, items)).join("")}</div>` : "")
+      + (a.web ? "" : list(linked(a)))
       + ((a.warnings || []).includes("generation_degraded") ? `<p class="muted rec">The model was not used for this answer. These sentences are the program's own.</p>` : "")
       + ((a.warnings || []).includes("search_unavailable") ? `<p class="muted rec">A web search for this gave no answer just now. You can ask again later.</p>` : "")
-      + addedLine(added, false) + addedLine(added, true)
-      + (a.web?.autofill_skipped ? `<p class="muted rec"><a href="#details" target="_self">Open your details</a> to enter it yourself.</p>`
-        : (a.web?.fields || []).some(f => Object.values(FIELD_OF).includes(f)) && !added?.some(x => x.web) ? `<p class="muted rec">Nothing was added to your details from this search.</p>` : "");
+      + addedLine(added, false) + addedLine(added, true);
   return turns.map(t => `<div class="msg you">${esc(t.question)}</div><div class="msg">${answer(t)}</div>`).join("")
     + (!rules && rulesError ? `<p class="problem">Questions are unavailable until the repayment figures can be calculated.</p>` : "");
 }

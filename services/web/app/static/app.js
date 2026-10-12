@@ -93,8 +93,8 @@ function wait(a, failed) {
 // The report for the records in state goes on the page.
 function reveal() {
   const mine = lookupSeq, {ctx} = state;
-  $("status").textContent = "The report is below."; $("report").hidden = $("readout-row").hidden = false; $("report").classList.remove("waiting");
-  $("go").textContent = "Update report"; $("change").disabled = false;
+  $("status").textContent = "The results are below."; $("report").hidden = $("readout-row").hidden = false; $("report").classList.remove("waiting");
+  $("go").textContent = "Update"; $("change").disabled = false;
   // explanations are open, and our margin notes on show, for the first report in a tab only
   try { state.first = !sessionStorage.getItem("seen"); sessionStorage.setItem("seen", "1"); } catch {}
   document.body.dataset.seen = state.first ? "0" : "1";

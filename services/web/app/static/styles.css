@@ -217,7 +217,6 @@ body[data-seen="1"] .first-only { display:none }
 .msg { margin-top:18px }
 .msg.you { width:fit-content; max-width:86%; margin:30px 0 0 auto; padding:8px 14px; background:var(--ink); color:var(--paper); border-radius:16px 16px 4px 16px }
 .say .s { font-size:1rem }
-.web { padding:12px 14px; background:var(--quiet); border:1px solid var(--edge); border-radius:10px }
 .web > .muted { margin-top:10px; color:inherit }  /* a caveat: smaller, but in ink */
 /* an answer on its way: dots that pulse in turn, and words that take turns */
 .thinking { display:flex; align-items:center; gap:10px }
@@ -233,7 +232,6 @@ body[data-seen="1"] .first-only { display:none }
 @keyframes dot { 0%, 60%, 100% { opacity:.25; transform:none } 30% { opacity:1; transform:translateY(-3px) } }
 @keyframes verb { 0%, 20%, 100% { opacity:0 } 2%, 18% { opacity:1 } }
 @media (prefers-reduced-motion: reduce) { .thinking i, .verbs span { animation:none } .verbs span:first-child { opacity:1 } }
-.fixed { padding:10px 16px; border:2px dashed var(--edge); border-radius:var(--box) }
 .suggest { display:block; width:100%; height:64px; border:0 }
 #ask-form { display:grid; grid-template-columns:auto 1fr auto; gap:6px 8px; padding:10px 16px 14px }
 #ask-note { grid-column:1 / -1; margin:0 0 2px 4px }  /* our note sits over the box it is about */

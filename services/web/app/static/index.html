@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <base target="_blank">
-<title>Home Buyer Copilot - Auckland property report</title>
+<title>Home Buyer Copilot - Auckland property summary</title>
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="preload" href="fonts/figtree-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
@@ -41,7 +41,7 @@
 <div class="field">
 <label for="deposit">Deposit ($) <button type="button" class="hint" popovertarget="deposit-hint" aria-label="About the deposit">?</button></label>
 <input id="deposit" type="number" inputmode="decimal" step="any" placeholder="e.g. 60000" min="0" aria-describedby="deposit-hint">
-<p id="deposit-hint" class="tip" popover>The money you already have for this purchase. With it the report shows the loan amount and repayments.</p>
+<p id="deposit-hint" class="tip" popover>The money you already have for this purchase. With it this page shows the loan amount and repayments.</p>
 </div>
 <div class="field">
 <label for="income">Household income ($) <button type="button" class="hint" popovertarget="income-hint" aria-label="About household income">?</button></label>
@@ -168,7 +168,7 @@
 </section>
 
 </div>
-<aside class="ask" id="ask-panel" aria-label="Questions about this report">
+<aside class="ask" id="ask-panel" aria-label="Questions about this property">
 <div id="starters" class="starters"><span class="muted">Questions to start with</span>
 <button type="button">What do the mapped hazards mean for insurance?</button>
 <button type="button">Is the council valuation the market value?</button>
