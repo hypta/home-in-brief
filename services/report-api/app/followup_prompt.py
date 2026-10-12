@@ -76,7 +76,7 @@ Return JSON with these keys:
   insurance and EQC/NHC notes, loan and deposit rules (LVR, DTI, First Home Loan), bank rates, buying process
   (auction, LIM, building inspection). Out of scope: schools, school zones, crime, commute, neighbours, future prices,
   investment returns, other properties, anything unrelated to buying this property.
-- "searchable": true when the QUESTION asks for a fact that public web pages can state, whether or not the tool
+- "searchable": true only when the QUESTION asks for a fact that public web pages can state, whether or not the tool
   covers the topic: schools and school zones, commute and public transport, shops and services nearby, published
   crime statistics, council plans, what stands at this address (how many homes or units, what the building is used
   for), what a term or document is. false for anything that asks for advice, a verdict or a prediction (whether to
@@ -84,8 +84,13 @@ Return JSON with these keys:
   or personal financial advice, or that is unrelated to this property.
 - "advice": true when the QUESTION asks whether to buy, offer or bid, whether the price or the deal is good, for a
   recommendation or a verdict about the property or the purchase, or for legal or personal financial advice, in any
-  language ("Should I buy this house?", "Is this a good price?", "我該買嗎"), even when it also asks a factual
-  question. false for a plain question of fact.
+  language and however it is worded ("Should I buy this house?", "Is this a good price?", "Would you go ahead with
+  this one?", "我該買嗎", "你覺得我入手這套房合適嗎？", "この物件の購入を勧めますか？"), even when it also asks a factual
+  question. false for a plain question of fact, and false for these questions of fact: what a word or term means
+  ("What does overpriced mean?"), what to check or look out for ("What should I look out for?", "要注意什麼？"), whether
+  to get or read a document or an inspection ("Should I check the LIM?"), whether to worry about a hazard ("Should I
+  worry about flooding?" asks for the hazard facts and their limits), what an item on the report means for this
+  property.
 - "reaction": true when the QUESTION only reacts to the last answer in HISTORY ("are you sure?", "why?", "tell me
   more", "really?", in any language) and asks nothing new; false for any question with content of its own.
 - "year_built": the year or decade the asker states the building was built, copied exactly as written in the
@@ -160,8 +165,12 @@ How to answer:
   answered by a fact that states it, or says it could not be checked: true. When unsure about such a question: true.
   "What is my LVR?" asks for this buyer's own figure: only a fact that gives it answers it (not the Reserve Bank
   threshold, and not a fact that only says the loan is or is not high-LVR).
-  A question that asks what a term, a document or a map layer is or means, or how two of them differ ("What is
-  LVR?", "What is a LIM report?", "What is a flood plain?") is answered only by a fact that says what it is. A fact
+  A question about what this property's items mean for it ("What do the hazard maps and the title type mean for this
+  property?"), or what to check or look out for given them ("要注意什麼？", "Should I check the LIM?", "Should I worry
+  about flooding?"), is answered by the facts about those items and their limits: true. Never call anything safe and
+  never reassure.
+  A question that asks what a term, a document or a map layer is or means in general, or how two of them differ ("What
+  is LVR?", "What is a LIM report?", "What is a flood plain?") is answered only by a fact that says what it is. A fact
   that only uses the term, gives this property's or this buyer's figure for it, or states a rule or a next step
   about it does not answer it: false.
 - No advice or verdicts. Never call anything safe or risk-free, never recommend, never say should/must/will/likely.

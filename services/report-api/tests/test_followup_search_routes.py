@@ -107,10 +107,8 @@ def run(monkeypatch, question, classify, case="case1", history=(), b=None, **kw)
     # Codex's first case: classify says in scope and not searchable, the answer step says nothing answers it
     ("Should I buy this house?", cls(out_of_scope=False, searchable=False)),
     ("Is this a good price?", cls()),
-    # Codex's second case: out of scope, not searchable, and the question names a field the records lack
-    ("Should I buy this house given when it was built?", cls(out_of_scope=True, searchable=False)),
-    # classify wrongly says the question is searchable: the keywords stop it
-    ("Should I buy this house given when it was built?", cls(out_of_scope=False, searchable=True)),
+    # (a purchase question that also names a report topic, "... given when it was built?", gets the facts and the
+    # decline sentence instead: test_a_purchase_question_with_a_report_topic_gets_the_facts_and_the_decline)
     ("Should I make an offer on this one?", cls(out_of_scope=True, searchable=True)),
     # no keyword: classify's own advice flag stops it
     ("Would you go ahead with this one?", cls(advice=True, searchable=True)),
@@ -199,14 +197,21 @@ def test_a_chinese_search_answer_keeps_the_chinese_label(monkeypatch):
     text = "奧克蘭市議會說明，LIM 報告列出市議會對一處物業持有的資料。"
     out, _ = run(monkeypatch, ZH_QUESTION, cls("zh-Hant"), search_text=text)
     assert out["web"]["text"] == text and out["language"] == "zh-Hant"
+    # the label is the variant the answer is written in, not the asker's: traditional text is zh-Hant
     out, _ = run(monkeypatch, "什么是 LIM 报告？", cls("zh-Hans"), search_text=text)
-    assert out["language"] == "zh-Hans"  # the asker's variant
+    assert out["language"] == "zh-Hant"
+    out, _ = run(monkeypatch, "什么是 LIM 报告？", cls("zh-Hans"), search_text="奥克兰市议会说明，LIM 报告列出市议会持有的资料。")
+    assert out["language"] == "zh-Hans"
+    # characters that do not tell the variants apart: the asker's variant
+    out, _ = run(monkeypatch, "什么是 LIM 报告？", cls("zh-Hans"), search_text="LIM 是一份文件。")
+    assert out["language"] == "zh-Hans"
 
 
 def test_a_french_question_with_an_english_answer_is_labelled_english(monkeypatch):
-    out, _ = run(monkeypatch, "Qu'est-ce qu'un rapport LIM ?", cls("fr"))
+    # code does not read French definitions: classify's searchable flag is the affirmative reason to search
+    out, _ = run(monkeypatch, "Qu'est-ce qu'un rapport LIM ?", cls("fr", searchable=True))
     assert out["language"] == "en"
-    out, _ = run(monkeypatch, "Qu'est-ce qu'un rapport LIM ?", cls("fr"),
+    out, _ = run(monkeypatch, "Qu'est-ce qu'un rapport LIM ?", cls("fr", searchable=True),
                  search_text="Un rapport LIM est un document établi par le conseil sur une propriété donnée.")
     assert out["language"] == "fr"
 
@@ -233,9 +238,9 @@ LIM_HISTORY = [{"role": "user", "text": "What is a LIM report?"}, {"role": "assi
 
 def test_a_reaction_to_a_searched_definition_is_searched_again(monkeypatch):
     out, fake = run(monkeypatch, "Are you sure?", cls(reaction=True), history=LIM_HISTORY)
-    # the facts are asked the earlier question (a definition they do not hold), then the search is
-    assert fake.tasks == ["classify", "answer", "search"] and fake.searches == 1
-    assert 'QUESTION: "What is a LIM report?"' in fake.prompts("answer")[0]
+    # the earlier answer came from a search (a definition, not a fixed sentence): the search is asked again directly,
+    # so a fact about something else cannot replace it
+    assert fake.tasks == ["classify", "search"] and fake.searches == 1
     assert 'QUESTION: "What is a LIM report?"' in fake.prompts("search")[0]
     assert out["web"]["text"] == DEFINITION_WEB and out["language"] == "en"
 
@@ -263,9 +268,9 @@ def test_only_a_short_reaction_is_resolved(monkeypatch):
     long_q = "Are you sure the flood plain covers half of the parcel, given the maps I looked at?"
     _, fake = run(monkeypatch, long_q, cls(reaction=True), history=LIM_HISTORY)
     assert json.dumps(long_q) in fake.prompts("answer")[0]  # classify's flag alone does not replace a real question
-    # no reaction flag: the question is the question
+    # code, not classify's flag, decides what is a bare reaction: without the flag it is resolved all the same
     _, fake = run(monkeypatch, "Are you sure?", cls(), history=LIM_HISTORY)
-    assert 'QUESTION: "Are you sure?"' in fake.prompts("answer")[0]
+    assert 'QUESTION: "What is a LIM report?"' in fake.prompts("search")[0]
 
 
 # ---- 2. "What is my LVR?" ----------------------------------------------------------------------------------------------
@@ -283,27 +288,47 @@ def test_my_lvr_is_the_computed_ratio_with_its_source_and_is_never_searched(monk
     answer = {"answered": True, "answer": [{"text": f"Your LVR is {{{{{f.id}.lvr_pct}}}}.", "fact_ids": [f.id]}], "links": []}
     out, fake = run(monkeypatch, "What is my LVR?", cls(), answers=[answer])
     assert fake.tasks == ["classify", "answer"] and fake.searches == 0
-    assert [s["text"] for s in out["answer"]] == ["Your LVR is 90%."]
+    # the model only names the fact: the sentence shown is the program's own (prompt.PERSONAL_LVR_TEXT)
+    assert [s["text"] for s in out["answer"]] == [LVR_SENTENCE]
     assert out["answer"][0]["source_ids"] == ["rbnz_lvr"] and out["warnings"] == []
-    assert f"{{{{{f.id}.lvr_pct}}}}" in fake.prompts("answer")[0]
-    # in Chinese, same ratio
+    # in Chinese, the same ratio in the sentence code writes
     zh = {"answered": True, "answer": [{"text": f"你的 LVR 是{{{{{f.id}.lvr_pct}}}}。", "fact_ids": [f.id]}], "links": []}
     out, fake = run(monkeypatch, "我的 LVR 是多少？", cls("zh-Hant"), answers=[zh])
-    assert fake.searches == 0 and "90%" in out["answer"][0]["text"] and out["language"] == "zh-Hant"
+    assert fake.searches == 0 and out["language"] == "zh-Hant"
+    assert [s["text"] for s in out["answer"]] == [facts_prompt.PERSONAL_LVR_ZH[0].format(v="90%")]
 
 
-def test_the_ratio_is_the_only_computed_number_that_gets_through():
+LVR_SENTENCE = "Your LVR, the loan as a share of the price, is 90%, calculated from the price and deposit you entered."
+
+
+def test_the_ratio_is_allowed_only_in_the_program_sentence():
     f, ev = lvr_fact()
+    assert f.program and not ev.typed_computed  # nothing is added to the request's shared evidence
     s = lambda text: V.check_sentence(V.Sentence(text=text, source_ids=["rbnz_lvr"]), ev)  # noqa: E731
-    assert not s("Your LVR is 90%.")
-    assert V.COMPUTED_VALUE in s("Your DTI is 5.6.") or V.NUMBER_NOT_IN_CITED_SOURCES in s("Your DTI is 5.6.")
+    # under the source id in general, the computed ratio stays blocked whatever the words around it
+    for text in ("Your LVR is 90%.", "Your LVR is 90% and your DTI is 90%.", "Your DTI is 90.",
+                 "Your annual income is $90."):
+        assert V.COMPUTED_VALUE in s(text), text
     assert V.NUMBER_NOT_IN_CITED_SOURCES in s("Your LVR is 91%.")
-    assert V.COMPUTED_VALUE in V.check_sentence(V.Sentence(text="Your loan would be $720,000.", source_ids=["rbnz_lvr"]), ev)
-    # without the typed fact (the question is not about the buyer's own LVR) the ratio stays blocked, as before
-    req = ReportRequest.model_validate(body("case1"))
-    data = kb.load(req.selected_kb_ids())
-    plain = V.build_evidence(req, data.items, data.sources.keys(), source_urls=data.sources.urls)
-    assert V.COMPUTED_VALUE in V.check_sentence(V.Sentence(text="Your LVR is 90%.", source_ids=["rbnz_lvr"]), plain)
+    # the program check allows it in the code-written sentence, with the fact's own slots
+    prog = lambda text: facts_prompt.check_program(V.Sentence(text=text, source_ids=["rbnz_lvr"]), ev, f.slots)  # noqa
+    assert f.draft() == LVR_SENTENCE and not prog(LVR_SENTENCE)
+    assert V.COMPUTED_VALUE in prog("Your loan would be $720,000.")
+    assert V.NUMBER_NOT_IN_CITED_SOURCES in prog("Your LVR is 91%.")
+
+
+def test_a_model_sentence_that_gives_the_ratio_another_meaning_is_never_shown(monkeypatch):
+    # Codex's re-review case: the same placeholder twice, the second labelled DTI. Naming the program fact gives its own
+    # sentence; citing another fact cannot fill the placeholder; a typed number is a computed value
+    f, _ = lvr_fact()
+    for text, ids in ((f"Your LVR is {{{{{f.id}.lvr_pct}}}} and your DTI is {{{{{f.id}.lvr_pct}}}}.", [f.id]),
+                      (f"Your LVR is {{{{{f.id}.lvr_pct}}}} and your DTI is {{{{{f.id}.lvr_pct}}}}.", ["F2"]),
+                      ("Your LVR is 90% and your DTI is 90%.", ["F2"])):
+        answer = {"answered": True, "answer": [{"text": text, "fact_ids": ids}], "links": []}
+        out, fake = run(monkeypatch, "What is my LVR?", cls(), answers=[answer])
+        texts = [s["text"] for s in out["answer"]]
+        assert not any("DTI is 90" in t for t in texts), texts
+        assert LVR_SENTENCE in texts and fake.searches == 0  # a blocked sentence's facts give their drafts
 
 
 def test_lvr_questions_that_are_not_about_the_buyers_own_figure(monkeypatch):

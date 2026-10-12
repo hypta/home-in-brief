@@ -58,7 +58,7 @@ def test_a_loan_question_without_loan_details_is_searched_for_first(monkeypatch,
 
 def test_first_home_loan_question_without_loan_details_says_it_cannot_answer(monkeypatch, no_rules):
     # the model would answer with the hazard fact F1: the program must not even ask it
-    gen = fake(cls(), [ans(("The council could not check these hazard layers.", ["F1"]))])
+    gen = fake(cls(searchable=True), [ans(("The council could not check these hazard layers.", ["F1"]))])
     monkeypatch.setattr(followup, "gemini_json", gen)
     r = post_body(no_loan_details(), "Can I get a First Home Loan?")
     assert r.status_code == 200, r.text

@@ -94,8 +94,9 @@ class Evidence:
     kb_topics: dict[str, str] = field(default_factory=dict)
     allowed: dict[str, list[Allowed]] = field(default_factory=dict)
     computed: set[Decimal] = field(default_factory=set)
-    # follow-up only: a value rules-api calculated that one typed fact may show, bound to the source id it cites (the
-    # buyer's own LVR, prompt.PERSONAL_LVR). Everything else in `computed` stays blocked.
+    # follow-up only, never on the request's shared Evidence: the one computed value a code-written program sentence may
+    # show, bound to the source id it cites (the buyer's own LVR; prompt.check_program sets it for that sentence alone).
+    # Everything else in `computed` stays blocked.
     typed_computed: dict[str, list[Allowed]] = field(default_factory=dict)
     user_kb: set[str] = field(default_factory=set)
     no_loan: bool = False

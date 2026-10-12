@@ -642,20 +642,26 @@ PERSONAL_LVR = "personal_lvr"  # Fact.topic of the buyer's own LVR
 
 
 def _personal_lvr(req: ReportRequest, ev: Evidence) -> Optional[_Topic]:
-    """The buyer's own LVR as a typed fact: the ratio rules-api calculated (rules_output.lvr_pct, one decimal), cited to
-    the Reserve Bank LVR source it is measured against. Only with loan data. It is the one computed value a follow-up
-    may show: ev.typed_computed binds it to that source id alone, so the number check stays as strict as before for
-    every other figure. Not the 80% threshold (a different slot, a different fact) and not a definition of LVR."""
+    """The buyer's own LVR as a program fact: the ratio rules-api calculated (rules_output.lvr_pct, one decimal), cited to
+    the Reserve Bank LVR source it is measured against. Only with loan data. Its sentence is written by code and shown
+    as written (followup.program_sentences); the model only names it. The computed ratio is allowed in that sentence
+    alone (check_program with PERSONAL_LVR_SLOT), never in a model sentence or under the source id in general. Not the
+    80% threshold (a different fact) and not a definition of LVR."""
     lvr = to_decimal(req.rules_output.get("lvr_pct"))
     if lvr is None or ev.no_loan or lvr <= 0 or "rbnz_lvr" not in ev.known_ids:
         return None
     lvr = lvr.quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
     t = _Topic(95, P_EXTRA, PERSONAL_LVR)
-    v = t.slot("lvr_pct", lvr, "pct", "the buyer's own LVR (loan as a percentage of the price), calculated from the "
-               "price and deposit entered", "rbnz_lvr", label="LVR")
-    ev.typed_computed["rbnz_lvr"] = [Allowed(lvr)]
-    return t.set(f"Your LVR, the loan as a share of the price, is {v}, calculated from the price and deposit you entered.",
-                 ["rbnz_lvr"], keep=["Your LVR"])
+    v = t.slot(PERSONAL_LVR_SLOT, lvr, "pct", "the buyer's own LVR (loan as a percentage of the price), calculated from "
+               "the price and deposit entered", "rbnz_lvr", label="LVR")
+    return t.set(PERSONAL_LVR_TEXT.format(v=v), ["rbnz_lvr"], keep=["Your LVR"])
+
+
+PERSONAL_LVR_SLOT = "lvr_pct"
+PERSONAL_LVR_TEXT = "Your LVR, the loan as a share of the price, is {v}, calculated from the price and deposit you entered."
+# The same sentence in Chinese, written by code (zh-Hant, zh-Hans): {v} is the ratio as code renders it ("90%").
+PERSONAL_LVR_ZH = ("你的 LVR（貸款占價格的比例）是 {v}，依你輸入的價格與頭期款計算。",
+                   "你的 LVR（贷款占价格的比例）是 {v}，依你输入的价格与头期款计算。")
 
 
 def followup_facts(req: ReportRequest, ev: Evidence, kb_items: dict[str, dict],
@@ -734,8 +740,8 @@ def followup_facts(req: ReportRequest, ev: Evidence, kb_items: dict[str, dict],
             out.append(_fact(t, len(out) + 1, program=True))
     # last, so no other fact's id moves; only when the question asks for the buyer's own LVR (followup.personal_lvr_question)
     t = _personal_lvr(req, ev) if personal_lvr else None
-    if t and not check_sentence(Sentence(text=t.rendered(), source_ids=t.cite), ev, max_words=None):
-        out.append(_fact(t, len(out) + 1))
+    if t and not check_program(Sentence(text=t.rendered(), source_ids=t.cite), ev, t.slots, max_words=None):
+        out.append(_fact(t, len(out) + 1, program=True))
     return out
 
 
@@ -802,5 +808,9 @@ def check_program(s: Sentence, ev: Evidence, slots: Optional[dict[str, Slot]] = 
     years = [to_decimal(sl.value) for sl in (slots or {}).values() if sl.kind in ("year", "decade")]
     for sid in s.source_ids:
         allowed.setdefault(sid, []).extend(Allowed(y) for y in years if y is not None)
-    fails = check_sentence(s, replace(ev, allowed=allowed), max_words)
+    # the buyer's own LVR (_personal_lvr): the computed ratio, in this code-written sentence only, under its one source
+    typed = {sl.source_id: [Allowed(Decimal(str(sl.value)))] for sl in (slots or {}).values()
+             if sl.name == PERSONAL_LVR_SLOT and sl.kind == "pct" and sl.source_id == "rbnz_lvr"
+             and isinstance(sl.value, (Decimal, int, float))}
+    fails = check_sentence(s, replace(ev, allowed=allowed, typed_computed=typed), max_words)
     return [f for f in fails if not (f == NO_SOURCE_IDS and not s.source_ids)]

@@ -176,9 +176,13 @@ def hard_checks(req: ReportRequest, rep: dict, kb_items: dict, ev) -> list[str]:
         bad.append(f"{len(steps)} next steps")
     selected = set(req.selected_kb_ids())
     for st in steps:
+        # assemble merges steps with the same or nearly the same text (identical texts; similar First Home Loan steps,
+        # assemble._merge_similar): the text is one source's next_step_en verbatim and every source is selected
         for i in st["source_ids"]:
-            if i not in selected or kb_items.get(i, {}).get("next_step_en") != st["text"]:
-                bad.append(f"next step not verbatim from a selected item: {i}")
+            if i not in selected:
+                bad.append(f"next step cites an item that is not selected: {i}")
+        if not any(kb_items.get(i, {}).get("next_step_en") == st["text"] for i in st["source_ids"]):
+            bad.append(f"next step not verbatim from a selected item: {st['source_ids']}")
     if len({st["text"] for st in steps}) != len(steps):
         bad.append("duplicate next step text")
     if not set(rep.get("warnings", [])) <= set(req.warnings()) | {"kb_includes_draft"}:
@@ -345,6 +349,8 @@ FOLLOWUP_QUESTIONS = [
     ("definition", "What is a LIM report?"),
     ("advice", "Should I buy this house?"),
     ("my_lvr", "What is my LVR?"),
+    ("mixed_advice", "Should I buy this house? It's in a flood plain."),
+    ("diligence", "Should I worry about flooding here?"),
 ]
 # What each default question should do, scored apart from the answer's wording. `route`: the route prefix expected
 # (debug["route"]); `search`: whether the question is one the program would send to a Google Search. This eval never
@@ -357,6 +363,8 @@ FOLLOWUP_EXPECT = {
     "definition": {"route": "insufficient", "search": True},
     "advice": {"route": "refusal:advice", "search": False},
     "my_lvr": {"route": "facts", "search": False},
+    "mixed_advice": {"route": "facts", "search": False},  # the flood facts, after the sentence that the tool cannot decide
+    "diligence": {"route": "facts", "search": False},
 }
 
 

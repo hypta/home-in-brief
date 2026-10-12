@@ -79,7 +79,10 @@ suggested links). Code checks the extracted year or cladding value, merges it in
 overriding a value the council records, **re-calls rules-api** with it, and Gemini answers from the new fact list.
 Answers go through the same validator (at most 3 sentences). An out-of-scope question that public web pages can answer
 is answered with Gemini's Google Search grounding, shown exactly as returned with its search suggestions and sources,
-and marked as not checked by this tool; advice, verdicts and predictions get one fixed refusal and links. When the
+and marked as not checked by this tool; a search answer that gives a purchase or price verdict is not shown. Advice,
+verdicts and predictions are never searched and get one fixed refusal and links; a purchase question that also names a
+report topic ("should I buy, it's in a flood plain") gets the checked facts on that topic after a fixed sentence saying
+the tool cannot decide for the buyer. When the
 records lack the year built, cladding or last sale and the question asks for it, report-api searches for that field
 the same way; a year or cladding found there fills the inputs, marked "from a web search, not checked", except where
 the address is one of several units on a site (Unit Title, Cross Lease, or more than one title type), where it is

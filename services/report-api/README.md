@@ -200,6 +200,19 @@ Steps:
    below is returned instead. Only the route searches: `answer_followup` called directly (the eval script) does
    not, because an eval run stores what it gets.
 
+   Who may be searched (`followup.search_eligible`): only a question of fact with an affirmative reason (classify's
+   `searchable`, or code recognises a question about what a term or document is, `term_question`); never advice
+   (`asks_advice`: the keywords, or classify's `advice` flag unless code recognises a question of fact such as what a
+   word means, what to check or look out for, or what a report item means for this property), a prediction, a worth or
+   the buyer's own LVR. A field search (button or question) sends a fixed query for the field in the asker's language,
+   never the question or the history. A search answer with a purchase or price verdict (`followup.web_advice`) is not
+   shown, and not edited; the reply is then as if the search gave nothing (`search_unavailable`). A short reaction with
+   nothing new ("Are you sure?", "你確定嗎") is replaced by the earlier user question when that turn reads as a question,
+   not an instruction; when the earlier answer is inferred to be a search answer (a definition question whose answer is
+   not a fixed sentence), the search is asked again. A purchase question that also names a report topic (hazards,
+   title, year built or cladding, loan, LIM) is answered from the facts on that topic after `DECLINE_EN` (Chinese
+   written by code, `DECLINE_ZH`); with no such topic, or only the price, the fixed refusal below.
+
    Otherwise the answer is one fixed refusal chosen by code: English, Chinese written by code (`REFUSAL_ZH`,
    zh-Hans by character mapping), or for other languages a restricted translation of the English (step 7; English
    when it fails). `links` are

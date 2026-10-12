@@ -159,7 +159,8 @@ def test_found_year_is_answered_from_the_records_without_any_search(monkeypatch,
 def test_an_empty_answer_for_a_found_field_is_searched_for_when_the_question_is_eligible(monkeypatch, search):
     monkeypatch.setattr(followup, "call_rules", lambda *a: pytest.fail("no rules re-run"))
     search.reply = web("Auckland Council describes the home as built in the 1960s.")
-    monkeypatch.setattr(followup, "gemini_json", fake(cls(), [{"answer": [], "links": []}]))
+    # eligible: classify says web pages can state it (not being advice is not enough on its own)
+    monkeypatch.setattr(followup, "gemini_json", fake(cls(searchable=True), [{"answer": [], "links": []}]))
     r = post("case3", "When was this place built?")
     assert r.status_code == 200, r.text
     out = r.json()
@@ -167,11 +168,13 @@ def test_an_empty_answer_for_a_found_field_is_searched_for_when_the_question_is_
     assert len(search.prompts) == 1 and search.prompts[0].startswith(fp.TASK_WEB)
     assert not any(p.startswith(fp.TASK_FIELDS) for p in search.prompts)
     assert out["web"]["text"] == search.reply.text and out["answer"] == [] and out["language"] == "en"
-    # the same empty answer to a question that asks for advice is not searched for
+    # the same empty answer to a question that asks for advice is not searched for; it names the year built, so the
+    # reply is the facts about it with the sentence saying the tool cannot decide (not a refusal)
     search.prompts.clear()
-    monkeypatch.setattr(followup, "gemini_json", fake(cls(), [{"answer": [], "links": []}]))
+    monkeypatch.setattr(followup, "gemini_json", fake(cls(searchable=True), [{"answer": [], "links": []}]))
     out = post("case3", "Is this a good price given when it was built?").json()
-    assert search.prompts == [] and "web" not in out and out["out_of_scope"] is True
+    assert search.prompts == [] and "web" not in out and out["out_of_scope"] is False
+    assert out["answer"][0]["text"] == followup.DECLINE_EN and len(out["answer"]) > 1
 
 
 def test_statement_with_a_year_or_value_given_earlier_does_not_search(monkeypatch, search, rules):
@@ -878,7 +881,7 @@ def test_a_question_the_facts_cannot_answer_is_answered_from_a_search(monkeypatc
 @pytest.mark.parametrize("language, text", [("en", followup.INSUFFICIENT_EN), ("zh-Hant", followup.INSUFFICIENT_ZH[0])])
 def test_with_no_search_answer_the_reply_says_the_report_cannot_answer(monkeypatch, search, rules, language, text):
     search.reply = None
-    monkeypatch.setattr(followup, "gemini_json", fake(cls(language), [UNANSWERED]))
+    monkeypatch.setattr(followup, "gemini_json", fake(cls(language, searchable=True), [UNANSWERED]))
     # the Chinese case asks with a Chinese sentence the program already has: only its script matters to the fake model
     out = post("case1", DEFINITION if language == "en" else followup.REFUSAL_ZH).json()
     assert [s["text"] for s in out["answer"]] == [text] and "web" not in out
@@ -985,7 +988,7 @@ def test_an_answer_that_cannot_be_put_into_the_askers_language_is_searched_for(m
     # in English, so no sentence is left in Chinese
     blocked = {"answer": [{"text": "A LIM report is a key document to get before making an offer.", "fact_ids": [lim.id]}],
                "links": []}
-    monkeypatch.setattr(followup, "gemini_json", fake(cls("zh-Hant"), [blocked]))
+    monkeypatch.setattr(followup, "gemini_json", fake(cls("zh-Hant", searchable=True), [blocked]))
     out = post("case1", followup.REFUSAL_ZH).json()  # a Chinese sentence the program already has, as the question
     # the search text is shown as returned and is English, so the response says "en", not the question's language
     assert out["answer"] == [] and out["web"]["text"] == search.reply.text and out["language"] == "en"
