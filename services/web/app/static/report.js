@@ -47,6 +47,11 @@ const unchecked = h => h.status === "unavailable" || h.status === "not_found";
 export const floodMapped = ctx => ctx.hazards.filter(h => h.priority === "primary" && h.status === "intersects");
 const YEAR = /^\d{4}s?$/;  // a year or a decade, as opposed to a council property category typed in the same field
 const ratesText = r => r.status === "found" ? `${money(r.value)} for ${esc(r.rating_year)}` : null;
+// A year built or cladding the records lack is the visitor's own, or was found by a web search and is not checked: the
+// inputs the report was calculated with say which, and every place that states the value says so too.
+const searched = (inputs, field) => inputs?.chat_supplied_source?.[field] === "web_search";
+const how = (inputs, field) => searched(inputs, field) ? "from a web search, not checked" : "as you told us";
+const FIELD_OF = {build_era: "year_built", cladding: "cladding"};  // the detail a note selected by it depends on, by the note's topic
 
 // sources and bank names by id; the sources cited in this render, in order of first use; and by source id, what the
 // lines that cite it add to its entry in the full list (the words quoted from it, the date of a layer's data)
@@ -73,12 +78,12 @@ const control = (cards, label, after = "") => !cards.length ? "" : `<details cla
 const cite = (refs, lines) => control([].concat(refs ?? []).map(ref => card(ref, lines)));
 const kbCite = k => control([kbCard(k)]);
 
-function notes({rules, kb}, block, heading) {
+function notes({rules, kb, inputs}, block, heading) {
   const mine = (kb || []).filter(k => (TOPIC_BLOCK[k.topic] || "notes") === block), told = new Set(rules?.kb_items_from_user_input);
   const note = k => `<div class="note">${esc(k.claim_en)} ${kbCite(k)}
       ${k.source_type === "secondary" ? `<span class="tag">secondary source</span>` : ""}
       ${k.status === "verified" ? "" : `<span class="tag draft">draft, not yet checked</span>`}
-      ${told.has(k.id) ? `<div class="muted">Based on what you told us.</div>` : ""}
+      ${told.has(k.id) ? `<div class="muted">Based on ${searched(inputs, FIELD_OF[k.topic]) ? "a web search, not checked" : "what you told us"}.</div>` : ""}
       ${k.next_step_en ? `<div data-step="${esc(k.next_step_en)}"><b>Next step:</b> ${esc(k.next_step_en)}</div>` : ""}</div>`;
   // A note about this property stays in view. Notes that are the same for every home, and the two long lists of lending rules, are folded with a count.
   const FOLDS = {always: "Background for any Auckland home", fhl_eligible: "First Home Loan rules", lvr_over: "Low-deposit lending rules"};
@@ -170,17 +175,19 @@ function facts({ctx, inputs}) {
   const p = ctx.property, council = ctx.links.find(l => l.id === "council_valuation"), main = [], rest = [], lacking = [];
   const listings = ctx.links.filter(l => l.id === "homes" || l.id === "oneroof").map(l => link(l.url, l.label)).join(" or ");
   const told = inputs?.chat_supplied || {};  // the year built and cladding the report was calculated with
-  // a value the records have goes to `to`; one they lack is listed with the reason, and where to look is said once for all of them
-  const add = (to, name, f, text) => (text ? to : lacking).push(row(name, `${text || missing(f)} ${cite(f.source_id)}`));
+  // a value the records have goes to `to`; one they lack is listed with the reason, and where to look is said once for all of them.
+  // `search`: the field report-api can search the web for, offered while the records and the details have no value for it
+  const add = (to, name, f, text, search) => (text ? to : lacking).push(row(name, `${text || missing(f)} ${cite(f.source_id)}${
+    !text && search && f.status !== "found" && !told[search] ? `<button type="button" class="search" data-search="${search}">Search the web</button>` : ""}`));
   const look = `<p class="muted">Look for these on the listing${listings && `, on ${listings}`}${council ? `, or in the ${link(council.url, "council property search")}` : ""}.${
     (!p.year_built.decade_range && !told.year_built) || (p.cladding.status !== "found" && !told.cladding) ? ` A year built or a cladding you find can be added ${IN_DETAILS}.` : ""}</p>`;
-  const fact = (to, name, f, fmt = esc) => add(to, name, f, f.status === "found" ? fmt(f.value) : null);
+  const fact = (to, name, f, fmt = esc, search) => add(to, name, f, f.status === "found" ? fmt(f.value) : null, search);
   add(main, "Capital value (CV)", p.cv, p.cv.status === "found" ? `${money(p.cv.value)} as at ${esc(p.cv.valuation_date)}. A council rating valuation, not a market value.` : null);
   add(main, "Annual rates", p.annual_rates, ratesText(p.annual_rates));
   add(main, "Title type", p.title_type, p.title_type.value ? esc(p.title_type.value) : (p.title_type.linz_types || []).length ? `LINZ records: ${p.title_type.linz_types.map(esc).join(", ")}${dev(p.title_type.reason)}` : null);
   const r = p.year_built.decade_range;
-  add(main, "Decade built", p.year_built, r ? (r[0] ? `${r[0]}-${r[1]}` : `Before ${r[1] + 1}`) + " (from the council property category)" : null);
-  fact(main, "Land area", p.land_area_m2, m2); fact(main, "Total floor area", p.floor_area_m2, m2); fact(main, "Cladding", p.cladding); add(main, "Last sale", p.last_sale);
+  add(main, "Decade built", p.year_built, r ? (r[0] ? `${r[0]}-${r[1]}` : `Before ${r[1] + 1}`) + " (from the council property category)" : null, "year_built");
+  fact(main, "Land area", p.land_area_m2, m2); fact(main, "Total floor area", p.floor_area_m2, m2); fact(main, "Cladding", p.cladding, esc, "cladding"); add(main, "Last sale", p.last_sale, null, "last_sale");
   fact(rest, "Land value", p.land_value, money); fact(rest, "Value of improvements", p.improvements_value, money);
   fact(rest, "Rateability", p.rateability); fact(rest, "Improvements", p.improvement_description); fact(rest, "Land use", p.land_use);
   fact(rest, "Building site coverage", p.building_site_coverage_m2, m2); fact(rest, "Legal description", p.legal_description, code);
@@ -282,21 +289,26 @@ const steps = (at, failed) => `<ol class="steps" aria-label="How far this report
   const said = i < at ? "done" : i > at ? "waiting" : failed ? "failed" : "";
   return said ? `<li class="${i > at ? "" : said}">${name}<span class="sr">: ${said}</span></li>` : `<li class="doing">${doing}</li>`; }).join("")}</ol>`;
 
+// What is said when the summary or an answer did not come: asked too often (web) or too many at once (report-api) is
+// said as such, and nothing is asked again until the reader chooses to.
+const unavailable = (what, err) => err.code === "rate_limited" || err.code === "busy" ? "Too many requests at the moment. Wait a few seconds, then try again."
+  : `The ${what} is unavailable right now. The rest of the report is not affected.`;
 // report-api only returns sentences that passed its check against the sources they cite.
 function summary({ctx, rules, rulesError, kb, report: r, reportError: err, done, first}) {
   if (!rules) return rulesError ? steps(0, true) + `<p class="problem">The summary is unavailable until the repayment figures can be calculated.</p>`
     : steps(0);
   if (err) return steps(1, true) + (err.code === "validation_failed"
     ? `<p class="problem">No summary sentence passed the check against its sources, so none is shown. The rest of the report is not affected.</p>`
-    : `<p class="problem">The summary is unavailable right now. The rest of the report is not affected.</p><button type="button" id="retry-summary">Try again</button>`);
+    : `<p class="problem">${unavailable("summary", err)}</p><button type="button" id="retry-summary">Try again</button>`);
   if (!r) return steps(1);
-  const items = byId(kb || []);
-  return steps(2) + r.summary.map(s => checked(s, items, jump(s, items, ctx))).join("") + reworded(r.dropped)
+  const items = byId(kb || []), drafts = r.model === "code-draft";  // report-api wrote every sentence itself: no model call could be made
+  return steps(2) + r.summary.map(s => checked(s, items, jump(s, items, ctx))).join("")
+    + (drafts ? `<p class="muted">The model was not used for this summary. These sentences are the program's own, written from the same facts.</p>` : reworded(r.dropped))
     + `<details class="how"${first ? " open" : ""}><summary>How this summary is made</summary><ol>
       <li>The program collects the facts from council and LINZ records, your loan figures and the notes that apply.</li>
       <li>The model rewrites them as three to five plain sentences. It never sees a figure: the program fills those in.</li>
       <li>Each sentence is checked against the sources it cites. One that fails is replaced by the program's own wording.</li></ol>
-      <p class="muted rec">Wording by ${esc(r.model)}.</p>
+      <p class="muted rec">Wording by ${drafts ? "the program" : esc(r.model)}.</p>
       <p class="muted">The check compares wording and figures. It cannot judge everything a sentence means, so open the sources of any sentence that matters to you.</p></details>`
     + (r.next_steps.length ? `<h3>Next steps</h3>${fold(`<span>${count(r.next_steps.length, "thing")} to ask or check<span id="ticked">${ticked(r.next_steps.filter(s => done.has(s.text)).length)}</span></span>`,
         `<ul class="todo">${r.next_steps.map(s => `<li><label><input type="checkbox"${done.has(s.text) ? " checked" : ""}><span>${esc(s.text)}</span></label>${control(cardsOf(s, items))}</li>`).join("")}</ul>`)}` : "")
@@ -315,7 +327,7 @@ export function renderWait(address, failed, typed) {
 // not be checked keeps its sentence, and the caveat in it, in view.
 function notFound(notes) {
   const layer = n => (n.field || "").startsWith("hazards."), fields = notes.filter(n => !layer(n));
-  const names = fields.flatMap(n => (n.field || "").split(",")).filter(Boolean).map(f => f === "cv" ? "council valuation" : words(f.replace(/_m2$/, "")));
+  const names = fields.flatMap(n => n.labels || []);
   return !notes.length ? "" : `<h3>Could not be found</h3><div class="gap">${list(notes.filter(layer).map(n => esc(n.text)))}
     ${fold(`Not in the records: ${esc(names.join(", ") || count(fields.length, "note"))}`, list(fields.map(n => esc(n.text))))}</div>`;
 }
@@ -323,7 +335,7 @@ function notFound(notes) {
 const LINK_KIND = {direct: " (opens this property)", first_result: " (opens the first search result for this address on that site)", home: " (search for the address there)"};
 const linkItem = l => `${link(l.url, l.label)}${LINK_KIND[l.kind] || ""}`;
 
-// An answer Gemini found with Google Search, for a question the report does not cover. The Gemini API terms ask for
+// An answer Gemini found with Google Search, for a question the report does not cover or a field the records lack. The Gemini API terms ask for
 // it to be shown as returned, with Google's search suggestions: the text is plain text, the suggestions are Google's
 // own HTML and sit in a frame that runs no scripts.
 // The language of the text is not known here, so it does not inherit the page's.
@@ -341,15 +353,28 @@ const THINKING = `<p class="thinking muted"><span class="sr">Answering</span><sp
 // The conversation about this report, in order. A turn holds the question and, once settled, report-api's answer with
 // the knowledge-base items on the page at that time, or the error. The sentences carry the language the answer names.
 // The links an answer names are PropertyContext links; an id the report does not have is left out.
+// What an answer put into the form, by where it came from. A value from a web search can be taken out again.
+function addedLine(added, web) {
+  const line = (mine, removed) => !mine.length ? "" : `<p class="muted rec">${removed ? "Taken out of your details again" : `Added to your details from ${web ? "a web search, not checked" : "your question"}`}: ${
+    esc(mine.map(a => a.text).join("; "))}.${web && !removed ? ` <button type="button" data-remove="${mine.map(a => a.field).join(",")}">Remove</button>` : ""}</p>`;
+  const mine = (added || []).filter(a => a.web === web);
+  return line(mine.filter(a => !a.removed), false) + line(mine.filter(a => a.removed), true);
+}
 function thread({ctx, rules, rulesError, kb: onPage, thread: turns}) {
   const answer = ({answer: a, error: err, added, kb}, items = byId(kb || onPage || [])) => err ? (err.code === "validation_failed"
       ? `<p class="problem">No answer sentence passed the check against its sources, so none is shown. Try asking in a different way.</p>`
-      : `<p class="problem">The answer is unavailable right now. The rest of the report is not affected.</p><button type="button" id="retry-answer">Try again</button>`)
+      : `<p class="problem">${unavailable("answer", err)}</p><button type="button" id="retry-answer">Try again</button>`)
     : !a ? THINKING
-    : (a.web ? webAnswer(a.web) : `<div class="say${a.answer.some(s => s.source_ids.length) ? "" : " fixed"}"${a.language ? ` lang="${esc(a.language)}"` : ""}>${a.answer.map(s => checked(s, items)).join("")}</div>` + reworded(a.dropped))
+    // a search answer stays whole in its own box; what the program says about it comes after, in a box of its own
+    : (a.web ? webAnswer(a.web) : "")
+      + (a.answer.length ? `<div class="say${a.answer.some(s => s.source_ids.length) ? "" : " fixed"}"${a.language ? ` lang="${esc(a.language)}"` : ""}>${a.answer.map(s => checked(s, items)).join("")}</div>` + reworded(a.dropped) : "")
       + list((a.links || []).map(id => ctx.links.find(l => l.id === id)).filter(Boolean).map(linkItem))
       + (a.out_of_scope && !a.web ? `<p class="muted rec">A fixed reply from the program.</p>` : "")
-      + (added?.length ? `<p class="muted rec">Added to your details from your question: ${esc(added.join("; "))}.</p>` : "");
+      + ((a.warnings || []).includes("generation_degraded") ? `<p class="muted rec">The model was not used for this answer. These sentences are the program's own.</p>` : "")
+      + ((a.warnings || []).includes("search_unavailable") ? `<p class="muted rec">A web search for this gave no answer just now. You can ask again later.</p>` : "")
+      + addedLine(added, false) + addedLine(added, true)
+      + (a.web?.autofill_skipped ? `<p class="muted rec"><a href="#details" target="_self">Open your details</a> to enter it yourself.</p>`
+        : (a.web?.fields || []).some(f => Object.values(FIELD_OF).includes(f)) && !added?.some(x => x.web) ? `<p class="muted rec">Nothing was added to your details from this search.</p>` : "");
   return turns.map(t => `<div class="msg you">${esc(t.question)}</div><div class="msg">${answer(t)}</div>`).join("")
     + (!rules && rulesError ? `<p class="problem">Questions are unavailable until the repayment figures can be calculated.</p>` : "");
 }
@@ -389,6 +414,11 @@ export function renderThread(state) {
   draw("thread", thread, state);
   $("ask").disabled = !state.inputs || state.thread.some(t => !t.answer && !t.error);
   $("starters").hidden = $("ask-note").hidden = state.thread.length > 0;  // both are for a reader who has not asked yet
+  // Each question to start with is one a note on every report answers; the last asks about this home's own title type,
+  // and is offered only when the records give the type and a note about it is on the page.
+  const title = state.ctx?.property.title_type.value;
+  $("starter-title").hidden = !(title && (state.kb || []).some(k => k.topic === "title_type"));
+  $("starter-title").textContent = `What does a ${String(title).toLowerCase()} title mean?`;
   $("handle-count").textContent = state.thread.length; $("thread").scrollTop = $("thread").scrollHeight;  // the newest turn is in view
   listSources(state);
 }
@@ -420,7 +450,7 @@ function readout({rules: r, inputs: i}) {
   const price = r.price_used;
   const used = (field, ok = true) => ok && !r.warnings.includes(field + "_user_conflict") && i.chat_supplied[field], told = {year_built: used("year_built", YEAR.test(i.chat_supplied.year_built)), cladding: used("cladding")};
   const home = [price.value != null && `${money(price.value)} price${price.basis === "cv" ? " (the council valuation)" : ""}`,
-    told.year_built && `built ${told.year_built}, as you told us`, told.cladding && `${words(told.cladding)} cladding, as you told us`].filter(Boolean);
+    told.year_built && `built ${told.year_built}, ${how(i, "year_built")}`, told.cladding && `${words(told.cladding)} cladding, ${how(i, "cladding")}`].filter(Boolean);
   return `${loanLine(i)}<br><b>This home</b> ${esc(home.join(", ") || "no price yet")}`;
 }
 
@@ -440,7 +470,7 @@ function digests({ctx, rules: r, rulesError, inputs}) {
       : [bankLoan && `${span(bankLoan.monthly_range, money)} a month at bank rates.`, fhl && `${span(fhl.monthly_range, money)} a month with a First Home Loan.`,
         own && `${money(own.monthly)} a month at your rate.`].filter(Boolean).join(" ") || "No repayments are shown yet.",
     notes: [title, decade ? `Built ${decade[0] ? `${decade[0]}-${decade[1]}` : `before ${decade[1] + 1}`}.`
-      : told ? `Built ${told}, as you told us.` : "The year built is not known. Add it in your details to see the notes for its era."].filter(Boolean).join(" "),
+      : told ? `Built ${told}, ${how(inputs, "year_built")}.` : "The year built is not known. Add it in your details to see the notes for its era."].filter(Boolean).join(" "),
   };
 }
 

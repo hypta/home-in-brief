@@ -120,12 +120,14 @@ LOAN = {"deposit": 60000, "household_income": 120000, "existing_debts": 10000}
 @pytest.fixture(autouse=True)
 def no_contexts(monkeypatch):
     monkeypatch.setattr(main, "_contexts", {})
+    monkeypatch.setattr(main, "_buckets", {})
 
 
 @pytest.mark.parametrize("path, answer, asked", [
     ("report", REPORT, {}),
     ("followup", recorded("followup_year_supplied.json"), {"question": "It was built in 1997. What should I watch for?", "history": [
         {"role": "user", "text": "Is it in a flood plain?"}, {"role": "assistant", "text": "Yes."}]}),
+    ("followup", recorded("followup_year_supplied.json"), {"search_field": "year_built", "language": "zh-Hant"}),  # the search button: no question
 ])
 def test_report_and_followup_are_written_from_documents_fetched_here_not_from_the_browser(sent, path, answer, asked):
     sent.side_effect = [upstream(200, CONTEXT.read_bytes()), upstream(200, RULES_OUTPUT), upstream(200, answer)]
@@ -141,6 +143,38 @@ def test_report_and_followup_are_written_from_documents_fetched_here_not_from_th
     assert to_report.args == ("POST", "http://localhost:8090/v1/" + path)
     assert to_report.kwargs["json"] == {"property_context": context, "user_inputs": inputs, "rules_output": json.loads(RULES_OUTPUT), **asked}
     assert all(0 < call.kwargs["timeout"] <= main.TIMEOUT for call in sent.call_args_list)
+
+
+def test_report_api_is_told_the_time_left_and_its_headers_reach_the_browser(sent):
+    answer = upstream(200, REPORT)
+    told = {"X-Report-Mode": "drafts", "X-Report-Degraded-Reason": "allowance_daily", "Retry-After": "5", "Cache-Control": "no-store"}
+    answer.headers.update({**told, "X-Other": "kept back"})
+    sent.side_effect = [upstream(200, CONTEXT.read_bytes()), upstream(200, RULES_OUTPUT), answer]
+    # a deadline named by the browser is not passed on: the time left is counted here
+    r = client.post("/api/report", json={"address_id": 2100210, "user_inputs": LOAN}, headers={"X-Request-Deadline-Ms": "999999"})
+    assert {k: r.headers.get(k) for k in told} == told and "X-Other" not in r.headers
+    to_property, to_rules, to_report = sent.call_args_list
+    assert 0 < int(to_report.kwargs["headers"]["X-Request-Deadline-Ms"]) <= main.TIMEOUT * 1000
+    assert to_property.kwargs["headers"] == to_rules.kwargs["headers"] == {}
+
+
+def test_a_visitor_is_slowed_after_a_burst_and_other_visitors_are_not(sent, monkeypatch):
+    monkeypatch.setitem(main.LIMITS, True, (2, 10.0))
+    sent.return_value = upstream(200, CONTEXT.read_bytes())
+
+    def ask(forwarded):
+        return client.post("/api/report", json={"address_id": 2100210, "user_inputs": LOAN}, headers={"X-Forwarded-For": forwarded})
+
+    assert [ask("8.8.8.8").status_code, ask("8.8.8.8").status_code] == [200, 200]
+    calls = sent.call_count
+    # what the sender wrote in front does not make a new visitor, and a hop inside Google's network is not the visitor
+    for forwarded in ("8.8.8.8", "1.2.3.4, 8.8.8.8", "8.8.8.8, 169.254.1.1"):
+        r = ask(forwarded)
+        assert r.status_code == 429 and r.json()["error"]["code"] == "rate_limited" and 0 < int(r.headers["Retry-After"]) <= 10
+    assert sent.call_count == calls  # refused before anything is asked of the services
+    assert ask("1.1.1.1").status_code == 200
+    assert client.get("/api/sources", headers={"X-Forwarded-For": "8.8.8.8"}).status_code == 200  # cheap calls have their own allowance
+    assert client.get("/", headers={"X-Forwarded-For": "8.8.8.8"}).status_code == 200
 
 
 def test_report_reuses_the_property_context_the_page_was_given_until_it_expires(sent):
@@ -178,6 +212,15 @@ def test_report_and_followup_stop_at_the_first_service_that_fails_and_pass_its_e
     sent.side_effect = [upstream(*answer) for answer in answers]
     r = client.post("/api/" + path, json={"address_id": 2100210, "user_inputs": LOAN})
     assert r.status_code == status and r.json()["error"]["code"] == code and sent.call_count == len(answers)
+
+
+def test_every_link_opens_a_new_tab_unless_it_points_into_the_page():
+    page, report = (STATIC / "index.html").read_text(), (STATIC / "report.js").read_text()
+    assert '<base target="_blank">' in page.split("</head>")[0]
+    for source in (page, report, (STATIC / "app.js").read_text(), (STATIC / "map.js").read_text()):
+        for a in re.findall(r"<a [^>]*>", source):
+            assert 'target="_self"' not in a or 'href="#' in a, a  # only links into the page stay in the tab
+    assert "<base target=\"_blank\">' + w.search_suggestions" in report  # Google's suggestions, in their own frame
 
 
 def test_page_is_served():

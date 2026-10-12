@@ -101,6 +101,7 @@
 <option value="mixed">Mixed or other</option>
 </select>
 <p id="cladding-hint" class="tip" popover>Check the listing for it.</p>
+<p id="cladding-read" class="muted" role="status"></p>
 </div>
 </div>
 <div id="go-row"><button type="submit" form="loan-form" id="go">Summarise this address</button><span id="go-note" class="hand" aria-hidden="true"><svg viewBox="0 0 34 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M31 5c-8 7-17 9-27 7"/><path d="M11 7l-7 5 8 4"/></svg> it's free!</span></div>
@@ -170,9 +171,9 @@
 <aside class="ask" id="ask-panel" aria-label="Questions about this report">
 <div id="starters" class="starters"><span class="muted">Questions to start with</span>
 <button type="button">What do the mapped hazards mean for insurance?</button>
-<button type="button">Why is the council valuation not the market value?</button>
-<button type="button">What is a LIM report?</button>
-<button type="button">What should my lawyer look at on the title?</button>
+<button type="button">Is the council valuation the market value?</button>
+<button type="button">What does buying at auction mean?</button>
+<button type="button" id="starter-title" hidden></button>
 </div>
 <div id="thread" aria-live="polite" tabindex="0" aria-label="Your questions and the answers"></div>
 <form id="ask-form" class="field">

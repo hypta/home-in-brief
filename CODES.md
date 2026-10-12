@@ -78,6 +78,13 @@ Each flag is `{id, source_ids}`. A flag is only listed when it applies.
 | `kb_verification_incomplete:<id>` | A verified item lacks `verified_by` or `verified_at` | Either field empty | Item is withheld. Not user-facing. |
 | `kb_includes_draft` | Draft knowledge-base items may be included (development mode) | Not in rules-api `warnings[]`: rules-api only sets the boolean field `kb_includes_draft` (see Other fields). report-api copies it into the report's `warnings[]` when the field is true | Not shown to end users. Internal development-mode notice only. |
 
+### report-api (`warnings[]` of `/v1/report` and `/v1/followup`, not of rules-api)
+
+| Code | Meaning | Fires when | Presentation |
+|---|---|---|---|
+| `generation_degraded` | The model was not used for part or all of the answer | A model call was refused: daily or event allowance used up, `REPORT_DEGRADED`, the kill switch, a prompt over the size limit | Say the sentences are the program's own. A summary written entirely by the program also has `model: "code-draft"`. |
+| `search_unavailable` | A Google Search was called for and gave no answer (follow-up only) | The search was refused (daily Search allowance), failed, ran out of time or named no source. Not added when `generation_degraded` applies. | Say a web search gave no answer just now. The reply is then the fixed sentences. |
+
 ## Other fields that explain absence
 
 | Field | Values | Presentation |

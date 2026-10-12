@@ -9,6 +9,10 @@ const state = {ctx: null, ...CLEARED, sources: {}, banks: {}, thread: [], done: 
 let timer, lastTyped = "", searchSeq = 0, lookupSeq = 0, calcSeq = 0, rulesSources, kbIds, kbItems;
 let asked = {};  // the summary last asked for: its key and the pending or settled answer
 let chosen = null;  // the address picked from the list; null once the box has been typed in again
+// year_built and cladding: the value a web search put into the form. While the form still holds it, that value is sent
+// and shown as found on the web and not checked; once the visitor changes it, it is their own.
+let found = {};
+const FROM_SEARCH = "Filled in from a web search, not checked. Change or clear it if it is wrong.";
 
 const num = id => $(id).value.trim() === "" ? null : Number($(id).value);  // a figure typed into the form, or null
 const show = id => { $(id).scrollIntoView(); $(id).focus({preventScroll: true}); };
@@ -48,18 +52,22 @@ async function summarise() {
 async function calculate() {
   const mine = ++calcSeq, cv = state.ctx.property.cv, rules = inputs => api("rules", {property_context: state.ctx, user_inputs: inputs});
   const chat_supplied = {year_built: $("year-built").value.trim() || null, cladding: $("cladding").value || null};
+  const searched = Object.keys(found).filter(k => found[k] === chat_supplied[k]);
+  const home = {chat_supplied, ...(searched.length && {chat_supplied_source: Object.fromEntries(searched.map(k => [k, "web_search"]))})};
+  try { sessionStorage.setItem("found", JSON.stringify(found)); } catch {}
   const built = categoryBuilt($("year-built").value);
-  $("year-built-read").textContent = built && `Read as a council property category: built ${built}.`;
+  $("year-built-read").textContent = built ? `Read as a council property category: built ${built}.` : searched.includes("year_built") ? FROM_SEARCH : "";
+  $("cladding-read").textContent = searched.includes("cladding") ? FROM_SEARCH : "";
   const price = num("price");
   const update = {...CLEARED};
   let inputs = {price_override: cv.status === "found" && price === cv.value ? null : price, deposit: num("deposit"),
-    household_income: num("income"), existing_debts: num("debts"), rate_pct: num("rate"), household_type: $("household").value || null, chat_supplied};
+    household_income: num("income"), existing_debts: num("debts"), rate_pct: num("rate"), household_type: $("household").value || null, ...home};
   try {
     update.rules = await rules(inputs);
   } catch (e) {
     update.rulesError = Object.assign(e, {fields: e.fields || []});
     // rejected loan inputs (a negative amount, say) must not blank the property notes: ask again without them
-    if (e.fields.length) update.rules = await rules(inputs = {chat_supplied}).catch(() => null);
+    if (e.fields.length) update.rules = await rules(inputs = home).catch(() => null);
   }
   if (update.rules) {
     const ids = update.rules.kb_items.join(",");
@@ -103,7 +111,7 @@ function choose(a) {
   const before = chosen?.address_id ?? state.ctx?.address.linz_address_id;
   clearTimeout(timer); ++searchSeq;  // drop any address search still pending
   $("suggestions").innerHTML = ""; $("q").value = a.full_address; chosen = a;
-  if (before != null && String(before) !== String(a.address_id)) $("price").value = $("year-built").value = $("cladding").value = "";  // facts about the home before this one
+  if (before != null && String(before) !== String(a.address_id)) { $("price").value = $("year-built").value = $("cladding").value = ""; found = {}; }  // facts about the home before this one
   if ($("details").hidden) lookup(a);
   else $("status").textContent = `Add your details below if you like, then choose ${$("go").textContent}.`;
 }
@@ -117,6 +125,7 @@ async function lookup(a) {
     const ctx = await api(`property-context?address_id=${a.address_id}&input=${encodeURIComponent(lastTyped)}`);
     if (mine !== lookupSeq) return;  // a newer lookup owns the page
     Object.assign(state, CLEARED, {ctx, sources: byId(ctx.sources), thread: [], done: new Set()});  // earlier answers were about another report
+    try { sessionStorage.setItem("address", JSON.stringify({address_id: a.address_id, full_address: a.full_address})); } catch {}
     const cv = ctx.property.cv, site = id => { const l = ctx.links.find(x => x.id === id); return l ? link(l.url, l.label) : id; };
     const typed = $("price").value !== "";  // a price typed before the records arrived is the visitor's
     if (!typed) $("price").value = cv.status === "found" ? cv.value : "";
@@ -145,35 +154,44 @@ $("summary").addEventListener("change", e => {
   $("ticked").textContent = ticked($("summary").querySelectorAll(".todo input:checked").length);
 });
 
-// A year built or cladding stated in a question goes into the form when the report on the page was not calculated with
-// it, unless the records already have that fact: the rules then use the record, and report-api's answer says how the
-// two compare. Returns what was put into the form, in words.
-function fill({year_built, cladding}) {
+// A year built or cladding stated in a question, or found by a web search, goes into the form when the report on the
+// page was not calculated with it, unless the records already have that fact: the rules then use the record, and
+// report-api's answer says how the two compare. `source` says which values a search found. Returns what was put into
+// the form: the field, the value in words, and whether a search found it.
+function fill({year_built, cladding}, source = {}) {
   const added = [], option = [...$("cladding").options].find(o => o.value === cladding), p = state.ctx.property;
   const recorded = f => f.status === "found" && f.value != null, used = state.inputs?.chat_supplied || {};
-  if (year_built != null && !recorded(p.year_built) && String(used.year_built ?? "") !== String(year_built)) { $("year-built").value = year_built; added.push("year built " + year_built); }
-  if (option && !recorded(p.cladding) && used.cladding !== cladding) { $("cladding").value = cladding; added.push("cladding " + option.text); }
+  const put = (field, value, text) => {
+    const web = source[field] === "web_search";
+    $(field.replace("_", "-")).value = value; added.push({field, text, web});
+    if (web) found[field] = String(value); else delete found[field];
+  };
+  if (year_built != null && !recorded(p.year_built) && String(used.year_built ?? "") !== String(year_built)) put("year_built", year_built, "year built " + year_built);
+  if (option && !recorded(p.cladding) && used.cladding !== cladding) put("cladding", cladding, "cladding " + option.text);
   return added;
 }
 
 // One question about the report on the page, sent with the last 3 answered turns. A turn that failed is replaced by the
 // next one asked. When the answer adds a fact about the home to the form, the report is calculated again with it first,
 // so the notes the answer cites are on the page; the turn keeps those notes, whatever the report is changed to later.
-async function ask(question) {
+// With `search_field`, the turn is the button that searches the web for one field the records lack: report-api is sent
+// the field in place of a question, and answers in the language of the last answer in the conversation.
+async function ask(question, search_field) {
   if ($("ask").disabled) return;
-  const turn = {question}, answered = state.thread.filter(t => t.answer);
+  const turn = {question, search_field}, answered = state.thread.filter(t => t.answer);
   const said = a => (a.web?.text || a.answer.map(s => s.text).join(" ")).slice(0, 2000);
   const history = answered.slice(-3).flatMap(t => [{role: "user", text: t.question}, {role: "assistant", text: said(t.answer)}]);
   state.thread = [...answered, turn];
   renderThread(state);
   try {
-    const answer = await api("followup", {address_id: state.ctx.address.linz_address_id, user_inputs: state.inputs, question, history});
+    const asked = search_field ? {search_field, language: answered.at(-1)?.answer.language || "en"} : {question};
+    const answer = await api("followup", {address_id: state.ctx.address.linz_address_id, user_inputs: state.inputs, history, ...asked});
     if (!Array.isArray(answer?.answer)) throw new Error("not an answer");
     turn.answer = answer;
   } catch (e) { turn.error = e; }
   if (!state.thread.includes(turn)) return;  // another address owns the page
   if (turn.answer) {
-    turn.added = fill(turn.answer.user_supplied || {});
+    turn.added = fill(turn.answer.user_supplied || {}, turn.answer.user_supplied_source);
     if (turn.added.length) await calculate();
     turn.kb = state.kb;
   }
@@ -189,16 +207,31 @@ $("handle").addEventListener("click", () => panel(!$("ask-panel").classList.cont
 $("question").addEventListener("focus", () => panel(true));
 addEventListener("keydown", e => { if (e.key === "Escape") panel(false); });
 document.addEventListener("click", e => {
-  const to = e.target.closest('a[href^="#sec-"]'), starter = e.target.closest(".starters button");
+  const to = e.target.closest('a[href^="#sec-"]'), starter = e.target.closest(".starters button"), search = e.target.closest("[data-search]");
   if (to) { $(to.hash.slice(1)).open = true; if (!wide.matches) panel(false); }  // a link to a folded section opens it
   if (starter) ask(starter.textContent);
+  if (search && !$("ask").disabled) { panel(true); ask("Search the web for the " + search.dataset.search.replace("_", " "), search.dataset.search); }
+  if (e.target.closest('a[href="#details"]')) { e.preventDefault(); if (!wide.matches) panel(false); details(true); show("details"); }
 });
 $("ask-form").addEventListener("submit", e => {
   e.preventDefault();
   const question = $("question").value.trim();
   if (question && !$("ask").disabled) { $("question").value = ""; ask(question); }  // the box is free for the next question; a failed turn keeps its own "Try again"
 });
-$("thread").addEventListener("click", e => { if (e.target.id === "retry-answer") ask(state.thread.at(-1).question); });
+$("thread").addEventListener("click", e => {
+  const last = state.thread.at(-1);
+  if (e.target.id === "retry-answer") ask(last.question, last.search_field);
+  if (!e.target.dataset.remove) return;
+  // "Remove": what a web search added leaves the form, unless the visitor has changed it since, and the report is calculated without it
+  const fields = e.target.dataset.remove.split(",");
+  for (const field of fields) {
+    const input = $(field.replace("_", "-"));
+    if (input.value.trim() === found[field]) input.value = "";
+    delete found[field];
+  }
+  for (const turn of state.thread) for (const a of turn.added || []) if (a.web && fields.includes(a.field)) a.removed = true;
+  renderThread(state); calculate();
+});
 
 $("loan-form").addEventListener("submit", e => {
   e.preventDefault();
@@ -215,7 +248,6 @@ $("theme").addEventListener("click", () => {
   if (next === system) delete root.dataset.theme; else root.dataset.theme = next;
   try { next === system ? localStorage.removeItem("theme") : localStorage.setItem("theme", next); } catch {}
 });
-$("edit-details").addEventListener("click", e => { e.preventDefault(); details(true); show("details"); });
 
 // Bank names, and the default interest rate: the middle of the banks' published 1-year standard rates.
 api("rates/latest").then(snap => {
@@ -228,6 +260,15 @@ api("rates/latest").then(snap => {
   $("rate").value = median;
   $("rate-hint").textContent = `Filled in with ${median}%, the middle of ${rates.length} banks' published 1-year standard rates (collected by hand${oldest ? "; the oldest is from " + oldest : ""}). Change it to a rate you have been offered.`;
 }).catch(() => {});  // without it the rate stays blank and banks show by id
+
+// The address on the page is kept for the tab, with what a web search put into the form: after a reload, or on the way
+// back from another page, the same report is read again. The browser brings back what was typed into the form; the
+// conversation is not kept (a search answer is only stored while it is on the page).
+try {
+  found = JSON.parse(sessionStorage.getItem("found")) || {};
+  const kept = JSON.parse(sessionStorage.getItem("address"));
+  if (kept) { $("q").value = kept.full_address; chosen = kept; lookup(kept); }
+} catch {}
 
 $("q").addEventListener("input", () => {
   clearTimeout(timer);

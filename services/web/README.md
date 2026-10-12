@@ -21,7 +21,17 @@ page was given it, so the summary describes what the page shows) and the RulesOu
 inputs, to report-api. The three calls share one 30 s limit.
 
 `POST /api/followup` takes `{"address_id", "user_inputs", "question", "history"}` and works the same way: the two
-documents are fetched here, and the question and history go to report-api as sent (it checks their size).
+documents are fetched here, and the question and history go to report-api as sent (it checks their size). The page's
+"Search the web" button sends `{"search_field", "language"}` in place of a question.
+
+For both, report-api is told how long the request has left (`X-Request-Deadline-Ms`, counted here, never taken from
+the browser), and its `X-Report-Mode`, `X-Report-Degraded-Reason`, `Retry-After` and `Cache-Control` headers are
+passed on to the browser.
+
+Every `/api/` call is counted per visitor (the last public address in `X-Forwarded-For`): 6 reports or answers at
+once and one more every 10 s, 20 other calls at once and one more every second. Over that: 429 `rate_limited` with
+`Retry-After`. The count is in this instance's memory, so it slows a flood down; report-api's daily allowance is the
+hard limit. Where Cloud Run puts the visitor's address in that header is not confirmed in Google's documentation.
 
 ## Run locally
 
@@ -78,7 +88,13 @@ how the summary is made, and the handwritten margin notes, are open for the firs
 The summary block is drawn from `/api/report` after each calculation. The follow-up block
 sends each question to `/api/followup` with the last 3 answered turns and draws the turns as a conversation; they
 live in page memory and are cleared when another address is chosen. An answer report-api found with Google Search
-(`web`) is shown as returned, with its sources and with Google's search suggestions in a frame that runs no scripts.
+(`web`) is shown as returned, with its sources and with Google's search suggestions in a frame that runs no scripts;
+what the program says about it follows in a box of its own.
+A year built, cladding or last sale the records lack has a "Search the web" button in section 2. A year or cladding
+the search finds goes into the form and is marked "from a web search, not checked" wherever the page states it (the
+form, the readout, the build-era line, the notes it selects, the conversation), is sent as
+`user_inputs.chat_supplied_source`, and can be taken out again with "Remove"; once the visitor changes it, it is
+their own.
 The words of the newest answer appear as if typed; that is a display effect only, since every answer arrives whole
 (nothing is streamed from the server). A year built or cladding that report-api reads from a question (`user_supplied`) is
 put into the form and the report is calculated again. Loan details typed into the form are kept in `sessionStorage`

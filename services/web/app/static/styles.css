@@ -112,7 +112,7 @@ html:has(body:not([data-seen])) { scroll-padding-bottom:84px }  /* a field that 
 #suggestions button { width:100%; text-align:left; font-weight:400; color:inherit; background:var(--paper); border:1px solid var(--line); margin-top:4px }
 #suggestions button:hover, #suggestions button:focus { border-color:var(--pen) }
 .readout { display:grid; grid-template-columns:1fr auto; align-items:center; gap:0 12px; margin-top:8px; font-size:.9375rem }
-.readout button { margin:0; padding:0 2px; color:var(--pen); background:none; text-decoration:underline; text-underline-offset:.18em }
+.readout button, .rec button { margin:0; padding:0 2px; color:var(--pen); background:none; text-decoration:underline; text-underline-offset:.18em }
 
 /* the answer sheet */
 .sheet { background:var(--paper); padding:28px 16px 44px; border-block:1px solid var(--line) }
@@ -197,7 +197,8 @@ th, td { text-align:left; padding:6px 10px; border-bottom:1px solid var(--line);
 
 /* questions: a bar at the bottom of a narrow screen that opens upward; a column beside the report on a wide one */
 .starters { flex-wrap:wrap; align-items:center; gap:8px; padding:14px 16px 0 }
-.starters button { min-height:44px; margin:0; padding:8px 16px; font-weight:400; text-align:left; color:var(--pen); background:none; border:1.5px solid var(--pen); border-radius:22px }
+.starters button, .search { min-height:44px; margin:0; padding:8px 16px; font-weight:400; text-align:left; color:var(--pen); background:none; border:1.5px solid var(--pen); border-radius:22px }
+.search { display:block; margin-top:6px }
 .jump { display:inline-flex; align-items:center; min-height:44px; font-size:.875rem }
 .how { margin-top:14px }
 .how > summary { display:inline-flex; align-items:center; min-height:44px; color:var(--pen); font-size:.875rem; font-weight:700 }

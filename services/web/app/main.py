@@ -2,8 +2,10 @@
 report-api for the summary and the answers to follow-up questions."""
 from __future__ import annotations
 
+import ipaddress
 import json
 import logging
+import math
 import mimetypes
 import os
 import re
@@ -35,7 +37,16 @@ METADATA = "http://metadata.google.internal/computeMetadata/v1/instance/service-
 # limit between their calls.
 TIMEOUT = 30
 MAX_BODY = 256 * 1024  # a PropertyContext is about 13 kB
+# What report-api says about its answer in headers, passed on to the browser: how the answer was made (the deploy check
+# reads the first two to tell whether Gemini wrote it), when to ask again, and that it must not be stored.
+PASSED_ON = ("X-Report-Mode", "X-Report-Degraded-Reason", "Retry-After", "Cache-Control")
 _tokens: dict[str, tuple[float, str]] = {}
+# What one visitor may ask of /api/: (requests at once, seconds until one more), for a report or an answer, which cost
+# model calls, and for everything else. Counted in this instance's memory: with several instances a visitor gets this
+# much from each, so it slows a flood down and report-api's daily allowance stays the hard limit.
+LIMITS = {True: (6, 10.0), False: (20, 1.0)}
+COSTLY = ("/api/report", "/api/followup")
+_buckets: dict[tuple[str, bool], tuple[float, float]] = {}  # (visitor, costly) -> (requests left, when that was counted)
 # address id -> (expiry, PropertyContext as the page was given it), so the summary is written from what the page shows
 CONTEXT_TTL, CONTEXT_MAX = 600, 100
 _contexts: dict[str, tuple[float, bytes]] = {}
@@ -49,10 +60,41 @@ app = FastAPI(openapi_url=None)
 app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 
+def _visitor(request: Request) -> str:
+    """The address a request came from. Google's front end adds it to X-Forwarded-For after anything the sender wrote
+    there, so the list is read from its end; an address that is not public (a hop inside Google's network) is passed
+    over. Not confirmed for Cloud Run in Google's documentation: check the header of a deployed request."""
+    for hop in reversed(request.headers.get("x-forwarded-for", "").split(",")):
+        try:
+            if ipaddress.ip_address(hop.strip()).is_global:
+                return hop.strip()
+        except ValueError:
+            pass
+    return request.client.host if request.client else ""
+
+
+def _wait(visitor: str, costly: bool) -> float:
+    """0 when this visitor's request may go ahead (it is counted), else the seconds until one may."""
+    burst, every = LIMITS[costly]
+    now = time.monotonic()
+    left, at = _buckets.get((visitor, costly), (burst, now))
+    left = min(burst, left + (now - at) / every)
+    if len(_buckets) > 10_000:
+        _buckets.clear()  # ponytail: everyone starts afresh when the table is full; evict the oldest if that is ever abused
+    _buckets[(visitor, costly)] = (left - 1 if left >= 1 else left, now)
+    return 0.0 if left >= 1 else (1 - left) * every
+
+
 @app.middleware("http")
 async def edge(request: Request, call_next):
     if request.method == "POST" and int(request.headers.get("content-length") or MAX_BODY + 1) > MAX_BODY:
         return _error(413, "too_large", "Request body is missing its length or is too large.")
+    if request.url.path.startswith("/api/"):
+        wait = _wait(_visitor(request), request.url.path in COSTLY)
+        if wait:
+            refused = _error(429, "rate_limited", "Too many requests. Wait a few seconds, then try again.")
+            refused.headers["Retry-After"] = str(math.ceil(wait))
+            return refused
     response = await call_next(request)
     if not request.url.path.startswith("/api/"):
         # page files must not go stale across a deploy; a font file keeps its content for as long as it keeps its name
@@ -87,9 +129,10 @@ def _has_error_body(r: requests.Response) -> bool:
 
 
 def _call(method: str, base: str, upstream: str, params=None, payload: Optional[dict] = None,
-          timeout: float = TIMEOUT) -> Response:
+          timeout: float = TIMEOUT, headers: Optional[dict] = None) -> Response:
     try:
-        r = requests.request(method, base + upstream, params=params, json=payload, headers=_auth(base), timeout=timeout)
+        r = requests.request(method, base + upstream, params=params, json=payload,
+                             headers={**_auth(base), **(headers or {})}, timeout=timeout)
     except requests.RequestException as e:
         log.warning("%s %s failed: %s", method, upstream, type(e).__name__)
         return _error(502, "upstream_unavailable", "The service behind this request did not answer.")
@@ -100,7 +143,8 @@ def _call(method: str, base: str, upstream: str, params=None, payload: Optional[
     if r.status_code >= 400 and not _has_error_body(r):
         log.warning("%s %s answered %s", method, upstream, r.status_code)
         return _error(r.status_code, "upstream_error", "The request could not be completed.")
-    return Response(r.content, r.status_code, media_type=r.headers.get("content-type"))
+    return Response(r.content, r.status_code, media_type=r.headers.get("content-type"),
+                    headers={k: r.headers[k] for k in PASSED_ON if k in r.headers})
 
 
 def _relay(method: str, path: str, request: Request, payload: Optional[dict] = None) -> Response:
@@ -176,7 +220,10 @@ def _ask(upstream: str, payload: dict, **asked) -> Response:
     r = _call("POST", RULES, "/v1/rules", payload=documents, timeout=left())
     if r.status_code != 200:
         return r
-    return _call("POST", REPORT, upstream, payload={**documents, "rules_output": json.loads(r.body), **asked}, timeout=left())
+    # report-api is told how long this request has left, counted here, so it stops spending on an answer nobody waits for
+    remaining = left()
+    return _call("POST", REPORT, upstream, payload={**documents, "rules_output": json.loads(r.body), **asked},
+                 timeout=remaining, headers={"X-Request-Deadline-Ms": str(int(remaining * 1000))})
 
 
 @app.post("/api/report")
@@ -187,9 +234,11 @@ def report(payload: dict) -> Response:
 
 @app.post("/api/followup")
 def followup(payload: dict) -> Response:
-    """The answer to one question about that report. The question and the earlier turns are the visitor's own words;
-    report-api checks their size and never reads them as facts."""
-    return _ask("/v1/followup", payload, question=payload.get("question"), history=payload.get("history", []))
+    """The answer to one question about that report, or to the page's button that searches the web for one field the
+    records lack (search_field, with the language to answer in). The question and the earlier turns are the visitor's
+    own words; report-api checks their size and never reads them as facts."""
+    return _ask("/v1/followup", payload, **{k: payload[k] for k in ("question", "history", "search_field", "language")
+                                            if payload.get(k) is not None})
 
 
 @app.post("/api/{path:path}")
