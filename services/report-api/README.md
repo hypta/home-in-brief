@@ -217,8 +217,9 @@ Steps:
    own LVR. A search answer is shown whole as returned or not at all (`followup.web_unusable`): a definition answer
    must name the term asked about and say nothing about "this property" or "your home"; any other answer must
    not judge this property or the buyer's home (`judges_property`: a sentence naming it together with a judging word
-   such as safe, good, worth, recommend, 值得, 安全, 適合; a fact such as "This home is zoned for X" passes, and it need
-   not repeat the question's words); a field answer must speak of that field (its words, a year or an era); and
+   such as safe, good, worth, recommend, "the right choice", 值得, 安全, 適合; a fact such as "This home is zoned for
+   X" or a direction such as "turn right" passes, and it need not repeat the question's words); a field answer (button
+   or typed) must pass the same `judges_property` check and speak of that field (its words, a year or an era); and
    `web_advice` catches the verdict wordings it lists. A rejected answer
    is not edited; the reply is then as if the search gave nothing (`search_unavailable`). This screen narrows what
    model text reaches the page; it is not a proof (see "Known limitations" below). A short reaction with nothing new
@@ -237,7 +238,8 @@ Steps:
 
    Otherwise the answer is one fixed refusal chosen by code: English, Chinese written by code (`REFUSAL_ZH`,
    zh-Hans by character mapping), or for other languages a restricted translation of the English (step 7; English
-   when it fails). `links` are
+   when it fails). The refusal of advice is never translated: Chinese by code, every other language the English with
+   `language: "en"`. `links` are
    the suggested PropertyContext link ids; if Gemini suggests none, code picks at most 2 by question type
    (valuation or sale: `homes`, `oneroof`, `council_valuation`; flooding: `council_flood_viewer`,
    `council_geomaps`; other hazards: `council_geomaps`, `council_flood_viewer`; anything else: `council_geomaps`),
@@ -261,7 +263,10 @@ Steps:
    the value the user just gave, cited only to the KB items it selected). After a rules re-run the list is
    rebuilt from the new RulesOutput. Gemini returns `{"answer": [{"text", "fact_ids"}], "links"}` with values as
    placeholders, written in the question's language; each sentence goes through `validator.check_rewrite` (step 6
-   is its final check) and a blocked one falls back to its facts' English drafts (model order kept, at most 3;
+   is its final check), and then through `followup.judges_purchase`: a rewrite with a verdict wording (`web_advice`),
+   a judgment of this property (`judges_property`), or a wish to buy or a push ("go ahead", "proceed", 放心, 入手)
+   that the facts it cites do not themselves say is blocked too. A blocked one falls back to its facts' English drafts
+   (model order kept, at most 3;
    a draft may be longer than the 25-word limit, which is for rewrites: some verified claims are),
    which step 7 translates. `question` and `history`
    (including assistant turns) are quoted as untrusted data and never enter the evidence. The one exception: a
@@ -272,6 +277,10 @@ Steps:
    `answer: []`, `out_of_scope: false`), or, when there is no search (eval, `strict`, no answer), the one fixed
    sentence "This page does not have enough data to answer this question." (Chinese by code, other languages
    by restricted translation) with the fallback links. Not applied when the question states a year or cladding.
+   Except for a question about what this report's items mean ("... mean for this property?", or "What do the hazard
+   maps mean?": a report item named with "the") or what to check (`diligence_question`): the checked drafts of the
+   facts about the topics it names (`topic_fact_ids`), or, for a diligence question that names no topic ("What should
+   I check before I buy?"), of the hazard, title and LIM facts (`DILIGENCE_DEFAULT`), without a search.
    This holds when the answer call returns. When the answer call failed (a 5xx, a timeout, 429, no key) and
    nothing else answers, the reply is the fixed "not enough data" sentence (Chinese written by code, other languages
    English with `language` "en") with `generation_degraded`, not the must-mention drafts. When no model call answers
@@ -348,8 +357,8 @@ Steps:
   or a purchase clause), not removed.
 - **Translated answers.** A non-English, non-Chinese answer to a factual question still uses Gemini's restricted
   translation of the program's English sentences (step 7). Its checks pin numbers, terms, length and, for CJK,
-  negation; they do not read meaning in other languages. Purchase answers (the decline and its facts) and the buyer's
-  own LVR are never translated (English, `language: "en"`).
+  negation; they do not read meaning in other languages. Purchase answers (the refusal of advice, the decline and its
+  facts) and the buyer's own LVR are never translated (English, `language: "en"`; Chinese by code).
 - **Language label of a search answer** (`followup.web_language`) is a script/word-count heuristic: capitalised
   words are left out, quoted text is left out even when it is the substantive answer, and an unexpected Latin-script
   language (Spanish to an English question) is labelled `en`; Han-only Japanese can be labelled Chinese. The text is
@@ -361,7 +370,9 @@ Steps:
   advice and search eligibility like any other.
 - **Keyword lists.** `_ADVICE_*`, `purchase_intent` and `_TERM_Q` cover common English, Chinese, Japanese and Korean
   (and a few French, Spanish, German definition) wordings. They only withhold a search or a model answer; a
-  rewording they miss falls back on classify's `advice` flag, and a definition wording they miss is not searched.
+  rewording they miss falls back on classify's `advice` flag; a definition wording they miss is searched only when
+  classify flags the question `searchable`. `judges_purchase` screens a fact rewrite for the verdict, judging and push
+  words it lists, so a purchase push in other words can still pass as a rewrite of a valid fact.
 
 ### Fields the records do not have: web search
 

@@ -348,7 +348,7 @@ def test_followup_calls_and_searches_are_all_counted(monkeypatch):
 
 def test_followup_translation_is_counted(monkeypatch):
     fake = FakeGenai(followup_brain(cls(language="ja", out_of_scope=True, searchable=False))).install(monkeypatch)
-    r = post_followup("この家を買うべきですか？")
+    r = post_followup("この近くの学校はどこですか？")  # not advice: the refusal of advice is never translated
     assert r.status_code == 200
     assert len(fake.calls) == 2 and counters() == (2, 2, 0)  # classify + refusal translation
 

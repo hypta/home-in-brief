@@ -234,3 +234,79 @@ def test_an_in_scope_question_no_fact_answers_is_searched_under_the_same_screen(
     out, fake = run(monkeypatch, "Is there a bus stop near here if I buy it?", cls(searchable=True), answers=[UNANSWERED],
                     search_text=text)
     assert fake.searches == 0 and "web" not in out
+
+
+# ---- review 3 ----------------------------------------------------------------------------------------------------------
+@pytest.mark.parametrize("question, language", [("Should I buy this house?", "fr"), ("この家は買うべきですか？", "ja")])
+def test_the_refusal_of_advice_is_never_translated(monkeypatch, question, language):
+    out, fake = run_hostile_translation(monkeypatch, question, cls(language, advice=True), "Achetez cette maison.")
+    assert "translate" not in fake.tasks and "Achetez" not in shown(out)
+    assert texts(out) == [followup.REFUSAL_EN] and out["language"] == "en" and out["out_of_scope"] is True
+
+
+FIELD_JUDGEMENT = "The year built could not be found. This property is safe from flooding."
+
+
+def test_a_field_answer_that_judges_this_property_is_not_shown(monkeypatch):
+    out, fake = run(monkeypatch, "", cls(), b=body("case1") | {"search_field": "year_built"},
+                    search_text=FIELD_JUDGEMENT)
+    assert fake.searches >= 1 and "web" not in out and "safe from flooding" not in shown(out)
+    out, fake = run(monkeypatch, "When was it built?", cls(), answers=[UNANSWERED], search_text=FIELD_JUDGEMENT)
+    assert fake.prompts("field") and "web" not in out and "safe from flooding" not in shown(out)
+
+
+F8_DRAFT = ("Settled.govt.nz states that an insurer may limit flood-damage cover if a house is in an area that has "
+            "previously flooded.")
+
+
+@pytest.mark.parametrize("hostile", [
+    "Settled.govt.nz states that an insurer may limit flood-damage cover if a house has previously flooded; go ahead "
+    "and purchase.",
+    "Settled.govt.nz states that an insurer may limit flood cover if a house previously flooded. Go ahead and purchase.",
+    "Settled.govt.nz states an insurer may limit flood-damage cover if a house is in an area that has previously "
+    "flooded; proceed with the purchase.",
+])
+def test_a_fact_rewrite_that_adds_a_purchase_push_is_replaced_by_the_draft(monkeypatch, hostile):
+    answer = {"answered": True, "answer": [{"text": hostile, "fact_ids": ["F8"]}], "links": []}
+    out, _ = run(monkeypatch, "What should I check about flooding?", cls(), answers=[answer])
+    assert "purchase" not in " ".join(texts(out)).lower() and "go ahead" not in shown(out).lower()
+    assert F8_DRAFT in texts(out)
+
+
+def test_a_chinese_fact_rewrite_that_adds_a_purchase_push_is_not_shown(monkeypatch):
+    hostile = "Settled.govt.nz 表示，如果房屋位於曾經淹水的地區，保險公司可能會限制淹水損害保障；放心買吧。"
+    answer = {"answered": True, "answer": [{"text": hostile, "fact_ids": ["F8"]}], "links": []}
+    out, _ = run(monkeypatch, "淹水方面要注意什麼？", cls("zh-Hant"), answers=[answer])
+    assert "放心" not in shown(out) and "買吧" not in shown(out)
+
+
+def test_judges_purchase_keeps_a_fact_that_itself_speaks_of_buying():
+    cited = "Settled.govt.nz states that auctions are unconditional and that buyers need to confirm their finances."
+    assert not followup.judges_purchase("Settled.govt.nz says buyers must confirm finances before an auction.", cited)
+    assert followup.judges_purchase("You should buy it at auction.", cited)
+    assert followup.judges_purchase("This home is a great choice.", cited)
+
+
+@pytest.mark.parametrize("text", ["The school on the right of this property is Example School.",
+                                  "From this property, turn right onto Main Street to reach the bus stop."])
+def test_directions_are_not_a_judgement(monkeypatch, text):
+    assert not followup.judges_property(text)
+    out, _ = run(monkeypatch, "Which schools are near here?", cls(**OOS), search_text=text)
+    assert out["web"]["text"] == text
+    assert followup.judges_property("This home is the right choice for you.")
+
+
+@pytest.mark.parametrize("question", ["What should I check?", "What should I check before I buy?"])
+def test_a_generic_diligence_question_gets_checked_default_drafts(monkeypatch, question):
+    out, fake = run(monkeypatch, question, cls(), answers=[UNANSWERED], search_text=ADVICE_WEB)
+    assert fake.searches == 0 and texts(out) != [followup.INSUFFICIENT_EN]
+    by_draft = {f.draft() for f in facts()}
+    assert texts(out) and all(t in by_draft for t in texts(out))
+    assert draft_of("case1", "ac_flood_plains") in texts(out)
+
+
+def test_what_the_hazard_maps_mean_is_answered_from_this_reports_facts(monkeypatch):
+    q = "What do the hazard maps mean?"
+    assert followup.property_meaning(q) and not followup.definition_question(q)
+    out, fake = run(monkeypatch, q, cls(), answers=[UNANSWERED], search_text="Hazard maps show hazards.")
+    assert fake.searches == 0 and draft_of("case1", "ac_flood_plains") in texts(out)

@@ -751,8 +751,18 @@ def term_question(question: str) -> bool:
     return bool(_TERM_Q.search(question)) and not _THIS_ONE.search(question)
 
 
+_REPORT_ITEM = re.compile(r"\bthe\b[^?]{0,40}\b(?:maps?|layers?|title type|title|zones?|zoning|overlays?|LIM)\b", re.I)
+# What a generic diligence question with no named topic is answered from when the model names no fact: the facts
+# about the hazards, the title and the LIM, as their checked drafts.
+DILIGENCE_DEFAULT = "flood hazard title LIM"
+
+
 def property_meaning(question: str) -> bool:
-    return bool(_PROPERTY_MEANING.search(question)) and bool(_THIS_ONE.search(question))
+    """What an item on this report means: "... mean for this property?", or "What do the hazard maps mean?" (the
+    report's own item, named with "the", in the page's context) rather than a definition."""
+    if _PROPERTY_MEANING.search(question) and _THIS_ONE.search(question):
+        return True
+    return bool(_MEANING.search(question) and _REPORT_ITEM.search(question) and report_topics(question, price=False))
 
 
 def diligence_question(question: str) -> bool:
@@ -767,7 +777,7 @@ _PURCHASE_INTENT = re.compile(
     r"買|买|購|购|出價|出价|入手|下手|購入|구매|구입|사야|살까|사도|사는", re.I)
 _PURCHASE_NAMES = re.compile(
     r"before (?:i|we|you|they|a buyer|buyers) (?:buy|purchase)|before (?:buying|purchasing)|sale and purchase|"
-    r"purchase price|first[- ]home buyers?|首購|首购|買賣|买卖|購買前|购买前|買之前|买之前|買前|买前|購入前", re.I)
+    r"purchase price|first[- ]home buyers?|首購|首购|買賣|买卖|購買前|购买前|買之前|买之前|買前|买前|購入前|出價前|出价前", re.I)
 _CLAUSE_PUNCT = re.compile(r"[,，;；、。!！?？\n]+|\.(?:\s|$)")
 _MEANING = re.compile(r"\bmean(?:s|ing|t)?\b|\bdefin(?:e|ition)\b|意思|定義|定义|意味|の意味|뜻", re.I)
 
@@ -786,6 +796,8 @@ def definition_question(question: str) -> bool:
     overpriced mean?") must be the term asked about (a meaning wording), never a verdict asked for ("What is a good
     price?"). The only typed question a Google Search may answer (search_eligible)."""
     if len(clauses(question)) != 1 or not term_question(question) or purchase_intent(question):
+        return False
+    if property_meaning(question):
         return False
     if _NO_SEARCH.search(question) or personal_lvr_question(question):
         return False
@@ -951,7 +963,8 @@ def term_words(question: str) -> list[str]:
 
 # A judgment about the buyer's property in an out-of-scope answer ("this home is a safe choice", "這間很值得"): a sentence
 # that names this property or the buyer's home and also judges it. Facts about it ("This home is zoned for X") pass.
-_JUDGES = re.compile(r"\b(?:safe|unsafe|risk(?:y|-free)?|good|bad|great|ideal|perfect|excellent|poor|suitable|right|wise|"
+_JUDGES = re.compile(r"\b(?:safe|unsafe|risk(?:y|-free)?|good|bad|great|ideal|perfect|excellent|poor|suitable|wise|"
+                     r"right (?:choice|fit|one|place|home|house|property|decision|move|time|for (?:you|me|us))|"
                      r"smart|worth\w*|recommend\w*|should|must|fine|okay|ok|bargain|deal|choice|investment)\b|安全|危險|危险|"
                      r"風險|风险|值得|划算|適合|适合|推薦|推荐|建議|建议|放心|不錯|不错|很好|理想|大丈夫|安心|おすすめ|お勧め|"
                      r"買い|안전|추천|좋", re.I)
@@ -960,6 +973,23 @@ _SENTENCE = re.compile(r"[^.!?。！？]+[.!?。！？]?")
 
 def judges_property(text: str) -> bool:
     return any(_PROPERTY_CLAIM.search(s) and _JUDGES.search(s) for s in _SENTENCE.findall(text or ""))
+
+
+# Words that judge or push a purchase in a sentence the answer model rewrote from facts ("Go ahead and purchase.",
+# "放心買吧"): such a sentence is replaced by its facts' checked drafts unless the facts it cites say the same word.
+_PUSH = re.compile(r"\bgo ahead\b|\bproceed\b|\bdon'?t miss\b|\bsnap (?:it|this) up\b|\bgo for it\b|放心|下手|入手|"
+                   r"大丈夫|안심", re.I)
+
+
+def judges_purchase(text: str, cited: str) -> bool:
+    """A rewrite judges or pushes a purchase that the facts it cites do not: a verdict wording (web_advice), a
+    judgment of this property (judges_property), or a wish to buy / push word (purchase_intent, _PUSH) the cited facts'
+    own text does not have."""
+    if web_advice(text) or judges_property(text):
+        return True
+    if purchase_intent(text) and not purchase_intent(cited):
+        return True
+    return bool(_PUSH.search(text)) and not _PUSH.search(cited)
 
 
 def web_unusable(text: str, question: Optional[str] = None, fields: Optional[list[str]] = None) -> Optional[str]:
@@ -972,6 +1002,8 @@ def web_unusable(text: str, question: Optional[str] = None, fields: Optional[lis
     if fields is None and not definition_question(question or ""):
         return "property_claim" if judges_property(text) else None
     if fields is not None:
+        if judges_property(text):
+            return "property_claim"
         about = any(_FIELD_Q[f].search(text) for f in fields if f in _FIELD_Q) or (
             "year_built" in fields and bool(_YEAR_IN_TEXT.search(text)))
         return None if about else "off_topic"
@@ -1929,7 +1961,9 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
                         property_meaning(question) or diligence_question(question)):
                     # what this property's items mean, or what to check: the facts about the topics the question
                     # names are the answer, as their drafts (not a search)
-                    topical = topic_fact_ids(question, fs, limit=max(1, limit))
+                    topical = topic_fact_ids(question, fs, limit=max(1, limit)) or (
+                        topic_fact_ids(DILIGENCE_DEFAULT, fs, limit=max(1, limit)) if diligence_question(question)
+                        else [])
                     if topical:
                         debug["unanswered_topics"] = topical
                         best, named, last = [Rewrite(None, topical, [])], [], None
@@ -1952,6 +1986,11 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
                 prog_named = [i for s in out.answer for i in s.fact_ids if i in prog_ids]
                 rewrites = [s for s in out.answer if not set(s.fact_ids) & prog_ids]
                 checked = [check_rewrite(s, fs, ev, final=final) for s in rewrites]
+                fmap_text = {f.id: f.text for f in fs}
+                checked = [Rewrite(None, r.fact_ids, [*r.fails, "purchase_judgement"], r.filled)
+                           if r.sentence is not None and judges_purchase(
+                               r.sentence.text, " ".join(fmap_text.get(i, "") for i in r.fact_ids)) else r
+                           for r in checked]
                 debug["attempts"].append([{"text": s.text, "fact_ids": s.fact_ids, "filled": r.filled, "fails": r.fails}
                                           for s, r in zip(rewrites, checked)]
                                          + [{"program": i} for i in prog_named])
@@ -2095,11 +2134,13 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
 
     def refuse() -> FollowupResponse:
         """The fixed refusal: English, code-written Chinese, another language by restricted translation (English,
-        labelled "en", when it fails its checks)."""
+        labelled "en", when it fails its checks). The refusal of advice is never translated: English or Chinese."""
         debug["route"] = "refusal:" + ("advice" if c.advice else "not_searchable" if not search_ok else "search_failed")
         refusal, refusal_lang = Sentence(text=REFUSAL_EN, source_ids=[]), "en"
         if is_zh(language):
             refusal, refusal_lang = Sentence(text=_zh(REFUSAL_ZH, language), source_ids=[]), language
+        elif advice or c.advice:
+            pass  # a refused purchase question is never put into another language by a model: English, labelled "en"
         elif not is_english(language):
             got = translate([REFUSAL_EN])
             no_ids = lambda p, mw: [f for f in check_sentence(p, Evidence(), mw) if f != "no_source_ids"]  # noqa: E731
