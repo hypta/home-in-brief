@@ -1,6 +1,6 @@
 """Values extracted from a Google Search answer about a property field the records do not have.
 
-Team decision 10/11 (Ting; plan C): for year_built, cladding and last_sale, when PropertyContext has no value, the
+For year_built, cladding and last_sale, when PropertyContext has no value, the
 follow-up may run a Google Search (followup.gemini_search) and show the answer as returned (WebAnswer: text,
 sources, search suggestions). Code then *extracts* the year built and the cladding from that text, and the follow-up
 returns them in user_supplied (marked "web_search" in user_supplied_source) so the form fills them in and the rules

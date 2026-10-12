@@ -11,7 +11,7 @@ sys.path[:0] = [str(HERE.parents[1]), str(HERE.parents[3] / "shared")]
 os.environ["KB_SOURCE"] = "local"
 os.environ.pop("REPORT_MOCK", None)
 os.environ.pop("GEMINI_API_KEY", None)
-# Protection (Codex F03): a per-process allowance in memory, never Firestore, unless a test chooses otherwise.
+# Protection: a per-process allowance in memory, never Firestore, unless a test chooses otherwise.
 os.environ["PROTECTION_BACKEND"] = "memory"
 os.environ.pop("REPORT_DEGRADED", None)
 

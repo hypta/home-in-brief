@@ -1,4 +1,4 @@
-"""Gemini prompts for POST /v1/followup (INTERFACE_DRAFT 5, 6.1).
+"""Gemini prompts for POST /v1/followup.
 
 Four small tasks, each with its own prompt:
   classify  - the question's language, out-of-scope, whether a web search can answer it, a year built or cladding
@@ -10,7 +10,7 @@ Four small tasks, each with its own prompt:
   web       - a short answer to an out-of-scope question from a Google Search (no schema; the sources come from
               the search, not from the text)
   fields    - a Google Search for this property's year built, cladding or last sale when the records do not have
-              them (team decision 10/11, plan C); shown as returned, code extracts the values (web_fields)
+              them; shown as returned, code extracts the values (web_fields)
   extract   - structured extraction of a year built / cladding from that search answer's text only, when code could
               not find one (code keeps a value only when it is written in the text)
 
@@ -43,7 +43,7 @@ TASK_EXTRACT = "TASK: extract"
 CJK_MAX_UNITS = 60  # Chinese sentence limit: CJK characters plus Latin words and numbers
 # Japanese (kana) and Korean (Hangul syllables) need more characters for the same sentence.
 CJK_MAX_UNITS_BY_LANG = {"zh": CJK_MAX_UNITS, "ja": 90, "ko": 80}
-# English terms kept as written in an answer in any language (INTERFACE_DRAFT 6.6).
+# English terms kept as written in an answer in any language.
 KEEP_ENGLISH = ("LVR", "DTI", "LIM", "First Home Loan", "Cross Lease", "Unit Title", "Freehold", "Leasehold", "NHC",
                 "LINZ", "Settled.govt.nz", "unittitles.govt.nz", "Kāinga Ora")
 
@@ -272,7 +272,7 @@ TEXT: {json.dumps(text, ensure_ascii=False)}
 
 
 def translate_prompt(texts: list[str], language: str, copy: Optional[list[str]] = None) -> str:
-    """Restricted translation (6.1): sees only the fixed sentences and the target language, never the question or
+    """Restricted translation: sees only the fixed sentences and the target language, never the question or
     history, so nothing a user typed can steer it. Code checks every result (followup.check_translation).
     `copy`, on the retry: the numbers, terms and values of these sentences, which a translation must copy as written."""
     retry = (f"Your previous translation of these TEXTS could not be used. Copy each of these exactly as written: "

@@ -1,4 +1,4 @@
-"""Follow-up answers in the question's language (2026-10-11 decision; the report stays English).
+"""Follow-up answers in the question's language (the report stays English).
 
 English program sentences (program facts, comparison sentences, fact drafts) are written in Chinese by code or
 translated by a restricted Gemini call that sees only the sentences; a translation that changes a number, adds a
@@ -67,7 +67,7 @@ def test_year_program_fact_in_chinese_with_the_chinese_prefix(monkeypatch, no_ru
 
 
 def test_cladding_program_fact_without_a_source_in_chinese(monkeypatch, no_rules):
-    # the cladding question searches the web first; no key here, so the real wrapper would stop the request (R5)
+    # the cladding question searches the web first; no key here, so the real wrapper would stop the request
     monkeypatch.setattr(followup, "gemini_search", lambda prompt, timeout_s: None)
     out = ask(monkeypatch, council_off(), "外牆是什麼材質？", fake("zh-Hant", lambda texts: [CLAD_ZH]))
     assert out["answer"] == [{"text": CLAD_ZH, "source_ids": []}]

@@ -17,7 +17,7 @@ from .validator import (MAX_WORDS, PREFIX, WEB_PREFIX, build_evidence, check_rew
 log = logging.getLogger("report-api")
 NZ = ZoneInfo("Pacific/Auckland")
 MAX_SUMMARY = 5
-CODE_DRAFT = "code-draft"  # Report.model when no sentence is a Gemini rewrite (Codex R4): no model wrote the wording
+CODE_DRAFT = "code-draft"  # Report.model when no sentence is a Gemini rewrite: no model wrote the wording
 
 
 class ReportError(Exception):

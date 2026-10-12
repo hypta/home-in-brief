@@ -1,4 +1,4 @@
-"""Sentence validator for report summaries (INTERFACE_DRAFT 3.2, 3.3). Pure functions, no I/O.
+"""Sentence validator for report summaries. Pure functions, no I/O.
 
 A sentence passes only when every rule holds; `check_sentence` returns the list of failed rule codes
 (empty = pass). The evidence a sentence may use is built once per request by `build_evidence`.
@@ -18,12 +18,12 @@ NO_LOAN_WARNINGS = ("deposit_exceeds_price", "cash_purchase_no_loan", "price_mis
 LENDING_SOURCES = {"rbnz_lvr", "rbnz_dti", "kainga_ora_fhl", "kainga_ora_fhl_brochure", "bank_rates_snapshot"}
 HIGH_CLASSES = {"high", "very high"}
 PREFIX = "Based on what you told us, "
-# A value code extracted from a Google Search answer (team decision 10/11, plan C) is not something the user told us.
+# A value code extracted from a Google Search answer is not something the user told us.
 WEB_PREFIX = "Based on a web search (not checked by this service), "
 PREFIX_RE = re.compile(r"^\s*based on (?:what you (?:told|gave) us|a web search(?: \(not checked by this service\))?)"
                        r"\s*,?\s*", re.I)
 
-# Display precision per kind of field (R1): percent 1 decimal, money and areas whole units, rates 2 decimals.
+# Display precision per kind of field: percent 1 decimal, money and areas whole units, rates 2 decimals.
 P_PCT, P_MONEY, P_RATE = 1, 0, 2
 
 # Rule codes returned by check_sentence.
@@ -65,7 +65,7 @@ def host_of(url: Any) -> Optional[str]:
     return host[4:] if host.startswith("www.") else host
 _JARGON_RE = re.compile(r"\b[a-z]+_[a-z0-9_]+\b|\brules assessment\b|\bstandard loan scenario\b|"
                         r"\brules-api\b|\bRulesOutput\b|\bPropertyContext\b", re.I)
-# Verdicts, advice, predictions and approximations (RUBRIC 7). Words in QUOTABLE are allowed when
+# Verdicts, advice, predictions and approximations. Words in QUOTABLE are allowed when
 # they appear in the claim_en of a cited KB item (quoting the source, e.g. "will not provide funding").
 _BANNED = [
     r"safe", r"safer", r"unsafe", r"no risk", r"risk-free", r"low risk", r"high risk", r"no hazards?",
@@ -83,7 +83,7 @@ _LENDING_TEXT_RE = re.compile(r"\b(?:loans?|LVR|DTI|mortgage|repayments?|lend\w*
 @dataclass(frozen=True)
 class Allowed:
     value: Decimal
-    precision: Optional[int] = None  # R1: the value rounded to this many decimals also matches
+    precision: Optional[int] = None  # the value rounded to this many decimals also matches
 
 
 @dataclass
@@ -456,7 +456,7 @@ _NEG_RE = re.compile(r"\b(?:not|no|never|neither|nor|without|cannot)\b|n't\b", r
 # ("your income is within the cap, making it exempt") that its facts do not have.
 _SAY_RE = re.compile(r"\b(?:says?|said|states?|stated|stating|notes?|noted|noting|explains?|explained|describes?|"
                      r"described|discusses|discussed|according to|reports?|reported|warns?|advises?)\b", re.I)
-# ", as no debts were entered" is a cause too (REVIEW_cladding_fix.md); "as you entered", "describes it as" are not
+# ", as no debts were entered" is a cause too; "as you entered", "describes it as" are not
 _CAUSE_RE = re.compile(r"\b(?:because|so|therefore|thus|hence|since|making|makes|means?|meaning|as a result|due to|"
                        r"leads? to|results? in|(?<=, )as(?=\s+(?:no|there|its?|the|your|they|this|these|those)\b))\b",
                        re.I)

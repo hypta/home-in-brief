@@ -180,8 +180,8 @@ if [ -n "$PUBLIC" ] && [ -n "$(describe service "$PUBLIC")" ]; then
        and (((.answer // []) | type) == "array" and ([.answer[]? | if type == "object" then .text else . end | select(nonempty)] | length) > 0
             or ((.web // {}) | type) == "object" and ((.web // {}).text | nonempty))
     then "ok" else "bad" end'
-  # Gemini path check from the two headers (Codex R3). Sets verdict: ok | unverified | warn | fail.
-  #   no X-Report-Mode (web does not forward it yet): unverified, only status and sentences are checked;
+  # Gemini path check from the two headers, which web passes on. Sets verdict: ok | unverified | warn | fail.
+  #   no X-Report-Mode (the header did not arrive): unverified, only status and sentences are checked;
   #   gemini: ok; drafts with reason allowance_daily / allowance_event / disabled: warn (refused on purpose);
   #   drafts with any other reason (backend_error, model_error, prompt_too_large, deadline): fail;
   #   drafts without a reason header: unverified if the body says generation_degraded (the reason is unknown, so
@@ -221,8 +221,8 @@ if [ -n "$PUBLIC" ] && [ -n "$(describe service "$PUBLIC")" ]; then
 
   # Report and follow-up through web with a public address (740 Sandringham Road Extension), real Gemini. Only when
   # a target on that path was deployed, so other deploys cost no Gemini calls. Each POST is sent once (no retry, not
-  # even after 503 busy). Until web forwards X-Report-Mode / X-Report-Degraded-Reason, the Gemini path is reported as
-  # not verified and only 200 and the response shape are required.
+  # even after 503 busy). web passes X-Report-Mode / X-Report-Degraded-Reason on; if X-Report-Mode is missing, the
+  # Gemini path is reported as not verified and only 200 and the response shape are required.
   if grep -qxE 'report-api|rules-api|web' <<<"$TO_DEPLOY"; then
     calls=0; calls_note=""
     smoke_post /api/report '{"address_id": 2100210, "user_inputs": {"deposit": 34000, "household_income": 130000}}'

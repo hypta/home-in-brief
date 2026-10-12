@@ -1,8 +1,8 @@
-"""Structured logs for Cloud Logging (Codex F07): single-line JSON on stdout, one completion record per
+"""Structured logs for Cloud Logging: single-line JSON on stdout, one completion record per
 /v1/report and /v1/followup request, and one WARNING per failed Gemini call with its error category.
 
 Never logged: prompts, the question, history, Search answer text, the user's amounts or income, API keys, and
-exception messages (Codex R7): a failed Gemini call logs its exception class, category, HTTP status and the
+exception messages: a failed Gemini call logs its exception class, category, HTTP status and the
 provider's request id; any logged traceback (ours, or uvicorn's "Exception in ASGI application") keeps only the
 exception classes and the file:line:function of each frame. The completion record has counts, timings, the model
 name and categories only.
@@ -31,7 +31,7 @@ ALLOWANCE = "allowance"  # protection.admit refused the call (allowance, REPORT_
 SEARCH_ALLOWANCE = "search_allowance"  # the daily Search allowance is used up: only that search is skipped
 DEADLINE = "deadline"  # no time left for a model call (before it, or after its reservation)
 MODEL_ERROR = "model_error"
-# X-Report-Degraded-Reason values (Codex R3): only on a response that fell back to drafts
+# X-Report-Degraded-Reason values: only on a response that fell back to drafts
 DEGRADED_REASONS = ("allowance_daily", "allowance_event", "disabled", "backend_error", "prompt_too_large",
                     MODEL_ERROR, DEADLINE)
 _MODEL_ERRORS = {TIMEOUT, QUOTA, HTTP_4XX, HTTP_5XX, SCHEMA, OTHER, CONFIG}
@@ -39,7 +39,7 @@ _MODEL_ERRORS = {TIMEOUT, QUOTA, HTTP_4XX, HTTP_5XX, SCHEMA, OTHER, CONFIG}
 
 def safe_traceback(exc_info) -> str:
     """A traceback without any exception message: the exception classes (chained ones too) and file:line in
-    function for each frame. Messages can echo request content (Codex R7)."""
+    function for each frame. Messages can echo request content."""
     etype, value, tb = exc_info if isinstance(exc_info, tuple) else (type(exc_info), exc_info, exc_info.__traceback__)
     out: list[str] = []
     seen: set[int] = set()
@@ -76,7 +76,7 @@ class JsonFormatter(logging.Formatter):
             out["request_id"] = st.request_id
         out.update(getattr(record, "json_fields", None) or {})
         if record.exc_info:
-            out["exception"] = safe_traceback(record.exc_info)  # never the message (Codex R7)
+            out["exception"] = safe_traceback(record.exc_info)  # never the message
         return json.dumps(out, ensure_ascii=False, default=str)
 
 
@@ -237,7 +237,7 @@ def provider_request_id(exc: BaseException) -> Optional[str]:
 
 def gemini_failed(logger: logging.Logger, what: str, exc: BaseException) -> tuple[str, str]:
     """Records and logs (WARNING) a failed Gemini call: exception class, category, HTTP status and the provider's
-    request id only, never the exception's message (it can echo the prompt, a URL or model text; Codex R7).
+    request id only, never the exception's message (it can echo the prompt, a URL or model text).
     Returns that safe description and the category, for the exception the caller raises."""
     category = classify(exc)
     note_error(category)

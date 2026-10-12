@@ -1,4 +1,4 @@
-# Build all images in parallel. Run from the repo root:
+# Build five of the six images in parallel (there is no step for report-api). Run from the repo root:
 #   gcloud builds submit --config cloudbuild.yaml \
 #     --substitutions=_REGION=australia-southeast1,_REPO=REPO,SHORT_SHA=$(git rev-parse --short HEAD) .
 # (SHORT_SHA is only auto-filled by build triggers, so pass it for manual submits.)

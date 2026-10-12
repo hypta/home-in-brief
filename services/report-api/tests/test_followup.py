@@ -624,7 +624,7 @@ def test_bad_history_role_is_422(rules_calls):
 
 
 def test_gemini_timeout_falls_back_to_program_facts(monkeypatch, rules_calls):
-    # F01 (spec change): classify and answer both fail -> 200 with the must-mention facts' drafts, not 503
+    # classify and answer both fail -> 200 with the must-mention facts' drafts, not 503
     t = gemini.ModelUnavailable("ReadTimeout", "timeout")
     gen = fake(t, [t])
     monkeypatch.setattr(followup, "gemini_json", gen)

@@ -1,4 +1,4 @@
-"""Codex review R1, R3, R4, R5, R6 (2026-10-11): one request deadline (X-Request-Deadline-Ms), the reservation
+"""One request deadline (X-Request-Deadline-Ms), the reservation
 inside it, X-Report-Degraded-Reason, model "code-draft", the request-wide stop after quota/config/refusal, and the
 fixed fallback sentences in the asker's language (Chinese) or English (language "en").
 
@@ -66,7 +66,7 @@ class SlowReserve(protection.MemoryBackend):
         return super().reserve(search, lim, day, wait_s)
 
 
-# ---- R1: one deadline per request ------------------------------------------------------------------------------
+# ---- one deadline per request ----------------------------------------------------------------------------------
 def test_header_shortens_the_deadline_drafts_without_a_call(monkeypatch, clock):
     fake = FakeGenai(report_brain(GOOD)).install(monkeypatch)
     r = post_report(headers={HEADER: "5000"})  # web has 5 s left: no time for a call (ADMIT_S 11)
@@ -148,10 +148,10 @@ def test_followup_shares_the_route_deadline(monkeypatch, clock):
     r = post_followup("洪水のリスクはありますか？", headers={HEADER: "3000"})
     assert r.status_code == 200 and not fake.calls
     out = r.json()
-    assert out["language"] == "en" and r.headers[REASON] == "deadline"  # fixed English sentences (R6)
+    assert out["language"] == "en" and r.headers[REASON] == "deadline"  # fixed English sentences
 
 
-# ---- R1: the allowance transaction's whole life is bounded --------------------------------------------------
+# ---- the allowance transaction's whole life is bounded ------------------------------------------------------
 class FakeApi:
     def __init__(self, delay=0.0):
         self.calls, self.delay = [], delay
@@ -261,7 +261,7 @@ def test_two_instances_with_late_commits_never_exceed_the_limit(monkeypatch):
     assert set(out) <= {protection.OK, protection.DAILY, protection.BACKEND}
 
 
-# ---- R3: X-Report-Degraded-Reason ------------------------------------------------------------------------------
+# ---- X-Report-Degraded-Reason ----------------------------------------------------------------------------------
 @pytest.mark.parametrize("setup,reason", [
     ({"GEMINI_DAILY_CALLS": "0"}, "allowance_daily"),
     ({"GEMINI_EVENT_CALLS": "0"}, "allowance_event"),
@@ -317,7 +317,7 @@ def test_followup_reason_only_when_it_fell_back(monkeypatch):
     assert r.headers["x-report-mode"] == "drafts" and r.headers[REASON] == "allowance_daily"
 
 
-# ---- R4: model "code-draft" ------------------------------------------------------------------------------------
+# ---- model "code-draft" ----------------------------------------------------------------------------------------
 def test_all_draft_summary_says_code_draft_and_mixed_keeps_the_model(monkeypatch):
     FakeGenai(report_brain(GOOD)).install(monkeypatch)
     mixed = post_report().json()
@@ -327,7 +327,7 @@ def test_all_draft_summary_says_code_draft_and_mixed_keeps_the_model(monkeypatch
     assert post_report().json()["model"] == CODE_DRAFT
 
 
-# ---- R5: one stop for the whole request ------------------------------------------------------------------------
+# ---- one stop for the whole request ----------------------------------------------------------------------------
 class StageGenai(FakeGenai):
     """Answers every task; raises a provider 429 at `fail` (classify, search, extract, answer, translate)."""
 
@@ -406,7 +406,7 @@ def test_search_allowance_alone_does_not_stop_the_answer(monkeypatch):
     assert r.headers["x-report-mode"] == "gemini" and r.json()["warnings"] == [followup.SEARCH_UNAVAILABLE]
 
 
-# ---- R6: fixed sentences in the asker's language when written, else English --------------------------------------
+# ---- fixed sentences in the asker's language when written, else English ------------------------------------------
 def test_chinese_question_after_the_allowance_gets_chinese_fixed_sentences(monkeypatch):
     fake = FakeGenai(followup_brain(cls(language="zh-Hant"))).install(monkeypatch)
     monkeypatch.setenv("GEMINI_DAILY_CALLS", "0")

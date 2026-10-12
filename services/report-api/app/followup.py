@@ -1,10 +1,10 @@
-"""POST /v1/followup: answer one question in the asker's language, validated like the summary (INTERFACE_DRAFT 5, 6.1).
+"""POST /v1/followup: answer one question in the asker's language, validated like the summary.
 
-Language (2026-10-11 decision; the report itself stays English): classify detects the question's language
+Language (the report itself stays English): classify detects the question's language
 (BCP 47, corrected by script in normalize_language); the answer is written in it, with English terms (LVR, DTI,
 First Home Loan, Cross Lease, Unit Title, Freehold, Settled.govt.nz, ...) kept. `language` in the response is the
 detected language, except when no model call could be made for the translation (allowance refused, request stopped,
-no time; Codex R6): Chinese then gets fixed Chinese sentences written by code, any other language the English
+no time): Chinese then gets fixed Chinese sentences written by code, any other language the English
 sentences with `language` "en" (fixed_answer).
 
 Flow: classify (Gemini: language, out-of-scope, stated year/cladding) -> code checks user_supplied ->
@@ -17,15 +17,15 @@ prefix in the language of the sentence. Out of scope: an answer from a Google Se
 can answer it (`web`, in the language of the question, shown whole with its sources and never run through the
 validator), else a fixed refusal chosen by code.
 
-Property fields the records do not have (team decision 10/11, Ting; plan C): year_built, cladding and last_sale
+Property fields the records do not have: year_built, cladding and last_sale
 may be looked up with a Google Search (`field_search`): when the question asks about one whose status is
-not_found/unavailable, or when web's "Search the web for this" button sends `search_field`. The search answer is
+not_found/unavailable, or when web's "Search the web" button sends `search_field`. The search answer is
 shown as returned (`web`); code extracts the year built and cladding from it (web_fields) into user_supplied, marked
 "web_search" in user_supplied_source, and re-runs the rules with them. Sentences that depend on such a value get
 the prefix "Based on a web search (not checked by this service), " instead of "Based on what you told us, ".
 
 question and history are untrusted: they never enter the evidence or the translation prompt. The one exception
-(P-V3) is a validated year_built that was used for the re-run; it is allowed only in sentences citing
+is a validated year_built that was used for the re-run; it is allowed only in sentences citing
 kb_items_from_user_input.
 """
 from __future__ import annotations
@@ -62,7 +62,7 @@ REFUSAL_EN = ("This question is outside what this tool covers; the original sour
 REFUSAL_ZH = "這個問題超出本報告涵蓋的範圍；下方的原始連結可供你查詢。"
 PREFIX_EN = "Based on what you told us, "
 PREFIXES = {"zh-Hant": "依你提供的資訊，", "zh-Hans": "根据你提供的信息，"}
-# A value code extracted from a Google Search answer (team decision 10/11, plan C); other languages translate it.
+# A value code extracted from a Google Search answer; other languages translate it.
 WEB_PREFIX_EN = WEB_PREFIX
 WEB_PREFIXES = {"zh-Hant": "依網路搜尋結果（未經本系統核對），", "zh-Hans": "依网络搜索结果（未经本系统核对），"}
 USER, WEB_SEARCH = facts_prompt.USER, facts_prompt.WEB_SEARCH
@@ -79,7 +79,7 @@ class Turn(BaseModel):
 class FollowupRequest(ReportRequest):
     question: str = Field(default="", max_length=1000)
     history: list[Turn] = Field(default_factory=list, max_length=6)
-    # web's "Search the web for this" button: search for this one field, no classify step (question optional).
+    # web's "Search the web" button: search for this one field, no classify step (question optional).
     search_field: Optional[Literal["year_built", "cladding", "last_sale"]] = None
     # The button with no question: the page's language (BCP 47, e.g. "zh-Hant"), for the search answer and the
     # sentences derived from it. Ignored when a question is sent (its language is detected as usual). Default en.
@@ -102,7 +102,7 @@ class WebAnswer(BaseModel):
     text: str
     sources: list[WebSource]
     search_suggestions: str  # Google's HTML widget
-    # Field searches only (team decision 10/11, plan C): the fields searched for, and the values code extracted
+    # Field searches only: the fields searched for, and the values code extracted
     # from `text` ({"year_built": 1987, "cladding": "wood", "last_sale": {"date": "March 2019", "price": "$850,000"}}).
     # `text` itself is never changed.
     fields: list[str] = Field(default_factory=list)
@@ -120,7 +120,7 @@ class FollowupResponse(BaseModel):
     user_supplied: dict[str, Any]
     # Only when a user_supplied value came from a web search: {field: "user" | "web_search"} for each user_supplied
     # key ("web_search": code extracted it from the search answer in `web`). Absent: every value is the user's.
-    # web is to send it back as user_inputs.chat_supplied_source (not wired in web yet; see README).
+    # web sends it back as user_inputs.chat_supplied_source for the values still in its form (see README).
     user_supplied_source: Optional[dict[str, str]] = None
     links: list[str]
     dropped: int
@@ -219,7 +219,7 @@ def _parse(raw: str, schema: type):
         return schema.model_validate(json.loads(raw))
     except (ValueError, ValidationError) as e:
         obs.note_error(obs.SCHEMA)
-        raise gemini.ModelOutputInvalid(type(e).__name__) from e  # no model text in the message (Codex R7)
+        raise gemini.ModelOutputInvalid(type(e).__name__) from e  # no model text in the message
 
 
 # One deadline for the request (gemini.Budget): every Gemini call, search, translation and retry is made only with
@@ -246,7 +246,7 @@ def _call(generate: JsonGenerator, prompt: str, schema: type, timeout: float):
         raise ReportError(502, "model_output_invalid", "The language model's answer did not match the schema.")
 
 
-# ---- user_supplied (5.3) ------------------------------------------------------------------------
+# ---- user_supplied ------------------------------------------------------------------------------
 _CONDITIONAL_RE = re.compile(r"\b(?:if|suppose|assuming|whether|not|isn't|wasn't|isnt|wasnt)\b|如果|假如|假設|若是|"
                              r"要是|萬一|不是|並非", re.I)
 
@@ -409,7 +409,7 @@ _CJK_NUM_SPACE = [(re.compile(r"(\d)(?=[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]
                   (re.compile(r"(?<=[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af])(?=[$\d])"), " ")]
 _ASCII_CJK_GAP = re.compile(r"(?<=[A-Za-z0-9])(?=[\u3000-\u303f\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af\uff00-\uffef])|"
                             r"(?<=[\u3000-\u303f\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af\uff00-\uffef])(?=[A-Za-z0-9])")
-# Verdict, advice and approximation words (6.1). 可能/或許/也許 are the Chinese "may": allowed only when a cited
+# Verdict, advice and approximation words. The Chinese words for "may" are allowed only when a cited
 # source's English has may/might/can/could (hedged_source); never as the model's own guess.
 _BANNED_BY_LANG = {
     "zh": re.compile(r"安全|危險|危险|無風險|无风险|沒有風險|没有风险|低風險|低风险|高風險|高风险|風險低|风险低|風險高|风险高|"
@@ -446,7 +446,7 @@ def tidy(text: str, language: str = "") -> str:
     return text.strip()
 
 
-# English kept in any answer (6.6): terms, publishers, title names, layer names, the cladding table, plus (per
+# English kept in any answer: terms, publishers, title names, layer names, the cladding table, plus (per
 # request) the values and labels code fills in and the property's own text values (latin_terms).
 _LATIN_TERMS = {*fp.KEEP_ENGLISH, "Auckland Council", "Auckland", "Reserve Bank", "RBNZ", "Kainga Ora",
                 "Natural Hazards Commission", "EQC", "CV", "body corporate", "high-LVR", "high-DTI", "loan-to-value",
@@ -559,7 +559,7 @@ def add_prefix(s: Sentence, prefix: str = PREFIX_EN) -> Sentence:
     return Sentence(text=prefix + body, source_ids=s.source_ids)
 
 
-# ---- user value vs. property value (5.3; user decision 10/10: show both) -------------------------
+# ---- user value vs. property value: both are shown ------------------------------------------------
 def comparison_sentence(key: str, value: Any, f: FieldView, language: str = "en",
                         web: bool = False) -> Optional[Sentence]:
     """A code-written sentence comparing the user's value with the property field (status found).
@@ -709,7 +709,7 @@ def mock_answer(ev: Evidence, kb_items: dict[str, dict], used: dict, language: s
     return passed, dropped
 
 
-# ---- program facts (prompt.program_facts): shown as their drafts, never rewritten ------------------
+# ---- program facts (prompt._program_topics): shown as their drafts, never rewritten ----------------
 # Questions about a field, for the safety net when the model names no program fact for it. Any language is
 # understood by the model; these cover the common English, Chinese and Japanese wordings of the demo questions.
 _FIELD_Q = {
@@ -763,7 +763,7 @@ def program_sentences(fs: list, named: list[str], question: str, ev: Evidence,
     return out
 
 
-# ---- restricted translation of English program sentences (6.1) ------------------------------------
+# ---- restricted translation of English program sentences ------------------------------------------
 _TR_NUM = re.compile(r"\d+(?:[.,]\d+)*")
 _TR_DOMAIN = re.compile(r"(?<![A-Za-z0-9-])(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,}(?![A-Za-z0-9-])")
 TRANSLATION_CHANGED = "translation_changed"  # numbers, terms, negation or length differ from the English
@@ -806,7 +806,7 @@ def check_translation(orig: Sentence, text: str, language: str, ev: Evidence,
 EMPTY_TRANSLATION = "empty_translation"
 
 
-# ---- fixed sentences when no model call can be made (Codex R6) ------------------------------------------------
+# ---- fixed sentences when no model call can be made -----------------------------------------------------------
 # Allowance refused, the request stopped (quota, config) or no time left: no translation call. A language with
 # sentences written by code (zh-Hant / zh-Hans) gets them; any other language gets the English sentences, and the
 # response's `language` is then "en" (it always names the language of the text delivered).
@@ -862,7 +862,7 @@ def fallback_language(language: str) -> str:
 
 def fixed_answer(parts: list[Part], language: str, ev: Evidence, debug: dict,
                  web_part: Callable[[Part], bool]) -> list[Sentence]:
-    """The answer when no translation call may be made (Codex R6). Chinese: sentences already in Chinese (checked
+    """The answer when no translation call may be made. Chinese: sentences already in Chinese (checked
     rewrites, code-written comparisons) and code-written Chinese for program sentences, each checked; an English
     sentence with no Chinese version is left out. Other languages: the English sentences, no sentence in the asker's
     language (they would not match `language: "en"`). A lead sentence says the answer is limited."""
@@ -967,11 +967,11 @@ def finish(parts: list[Part], language: str, ev: Evidence,
     return out
 
 
-# ---- web search for property fields the records do not have (team decision 10/11, plan C) --------
-# Ting 10/11 reversed "no Gemini help for data the first-hand sources do not have": year_built, cladding and
-# last_sale may be looked up with Google Search. The search answer (`web`) is shown as returned, never edited or
+# ---- web search for property fields the records do not have --------------------------------------
+# year_built, cladding and last_sale, which the first-hand sources often lack, may be looked up with Google
+# Search. The search answer (`web`) is shown as returned, never edited or
 # mixed with other text; values code extracts from it go in user_supplied / web.extracted. Sources are not filtered
-# by domain (team decision). At most 2 search calls per request, within the request deadline.
+# by domain. At most 2 search calls per request, within the request deadline.
 BUTTON_QUESTIONS = {"year_built": "When was this home built?",
                     "cladding": "What is this home's exterior cladding?",
                     "last_sale": "When was this home last sold, and for how much?"}
@@ -1051,7 +1051,7 @@ def _sources_out(supplied: dict[str, Any], sources: dict[str, str]) -> Optional[
     return out if WEB_SEARCH in out.values() else None
 
 
-# ---- multi-owner titles: a search value is shown, never filled in (user decision 10/11) -----------
+# ---- multi-owner titles: a search value is shown, never filled in ---------------------------------
 MULTI_UNIT = "multi_unit_title"
 SEARCH_UNAVAILABLE = "search_unavailable"
 
@@ -1223,7 +1223,7 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
     link_ids = [link.id for link in req.links()]
     warnings: list[str] = []
     classify_failed = stopped = False  # stopped: quota or no key, no further Gemini call (gemini.NO_RETRY)
-    no_call = {"translate": False}  # a translation was needed but no model call could be made (Codex R6)
+    no_call = {"translate": False}  # a translation was needed but no model call could be made
 
     def halted() -> bool:
         return stopped or protection.stopped()
@@ -1266,7 +1266,7 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
             c = _call(generate, fp.classify_prompt(question, history, [{"id": link.id, "label": link.label}
                                                                         for link in req.links()]),
                       ClassifyOut, clock.timeout(0.4))
-        except ReportError as e:  # F01: answered from the program's facts; no extracted values, no search
+        except ReportError as e:  # answered from the program's facts; no extracted values, no search
             log.warning("classify failed (%s); answer from the facts, no values, no search", e.code)
             c, classify_failed = ClassifyOut(language=normalize_language("en", question)), True
             stopped = e.category in gemini.NO_RETRY
@@ -1420,7 +1420,7 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
         all_facts = facts_prompt.followup_facts(eff, ev, data.items, said)
         kind = loan_topic(question)
         if kind and not fixed and not used and not loan_facts(all_facts, kind):
-            # a search first (what a First Home Loan is, how a loan works: Ting 10/12); the fixed sentences when it
+            # a search first (what a First Home Loan is, how a loan works); the fixed sentences when it
             # gives nothing
             online = None if after_search else searched(False)
             if online:
@@ -1511,7 +1511,7 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
             debug["program"] = [p.sentence.text for p in prog]
             passed.extend(prog)
             limit -= len(prog)
-            # no model answer (out of time, or every call failed: F01) and no fixed sentence: the must-mention facts'
+            # no model answer (out of time, or every call failed) and no fixed sentence: the must-mention facts'
             # drafts
             musts = best is None and not prog and not fixed
             # A draft is the program's own sentence or a verified claim as written: the sentence limit, which keeps the
@@ -1556,7 +1556,7 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
                                 user_supplied_source=_sources_out(supplied, sources),
                                 links=out_links, dropped=dropped, warnings=warnings)
 
-    # 1b. property fields the records do not have (team decision 10/11, plan C): a Google Search answer shown as
+    # 1b. property fields the records do not have: a Google Search answer shown as
     #     returned; the year built and cladding code extracts from it fill user_supplied ("web_search") and re-run
     #     the rules; the answer's other sentences come from the usual steps. No search, or no source: the usual
     #     steps (fixed program sentences and links).
@@ -1624,7 +1624,7 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
             else:
                 log.info("refusal translation not used; English")
                 if unavailable():
-                    language = "en"  # no model call could be made: the English refusal, said to be English (R6)
+                    language = "en"  # no model call could be made: the English refusal, said to be English
         links = links or fallback_links(question, link_ids)
         if refusal_mode == "strict":
             data = _kb(req, clock)
@@ -1640,7 +1640,7 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
 
 
 def allow_user_year(ev: Evidence, used: dict[str, Any]) -> None:
-    """P-V3 exception: the validated, used year is allowed only with the items it selected."""
+    """The one exception for a user's value: the validated, used year is allowed only with the items it selected."""
     years = [Decimal(y) for y in _year_numbers(used.get("year_built"))]
     for i in ev.user_kb:
         ev.allowed.setdefault(i, []).extend(Allowed(y) for y in years)

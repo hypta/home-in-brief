@@ -1,4 +1,4 @@
-"""F05: a conditional First Home Loan (income between the single and the multiple/dependants caps, household type
+"""A conditional First Home Loan (income between the single and the multiple/dependants caps, household type
 not entered) states its condition; eligible and over-cap keep their own wording."""
 import copy
 

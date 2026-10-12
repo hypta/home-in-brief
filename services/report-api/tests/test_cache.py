@@ -1,4 +1,4 @@
-"""Codex F03 point 5: the /v1/report in-process cache (LRU, TTL, single flight). Sockets blocked."""
+"""The /v1/report in-process cache (LRU, TTL, single flight). Sockets blocked."""
 import copy
 import threading
 
@@ -136,7 +136,7 @@ def test_leader_failure_releases_the_duplicates(monkeypatch):
     assert cache.wait(flight, 0.1) is None and not cache.REPORTS.flights
 
 
-# ---- Codex R2: a stable key (timestamps out) and KB invalidation; R4: unknown provenance is not cached -----------
+# ---- a stable key (timestamps out) and KB invalidation; unknown provenance is not cached ------------------------
 def _later(b, n=1):
     """The same inputs computed again later: rules-api's and property-api's generated_at, sources' accessed_at."""
     b = copy.deepcopy(b)

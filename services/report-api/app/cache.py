@@ -1,16 +1,16 @@
-"""In-process cache for /v1/report (Codex F03 point 5): LRU, REPORT_CACHE_SIZE (100) entries, REPORT_CACHE_TTL_S
+"""In-process cache for /v1/report: LRU, REPORT_CACHE_SIZE (100) entries, REPORT_CACHE_TTL_S
 (600 s), with single flight (identical requests in flight wait for the first one instead of calling Gemini again).
 
 Key: SHA-256 of the three input objects as canonical JSON (sorted keys, array order kept) plus the model name,
 CACHE_VERSION (bump it when the prompt, facts or validator change what a report says) and the fingerprint of the KB
-items and sources the report is checked against (kb_fingerprint: a KB change misses the cache; Codex R2). Left out
+items and sources the report is checked against (kb_fingerprint: a KB change misses the cache). Left out
 of the key: only the timestamps that say when an input was computed or fetched and that report-api never reads
 (TIMESTAMP_PATHS: rules_output.generated_at, property_context.generated_at, property_context.sources[].accessed_at),
 so identical inputs computed in different seconds hit. Rates dates, warnings, amounts, source labels and array order
 stay in. Only reports with at least one Gemini rewrite that passed (X-Report-Mode gemini) are stored: never drafts,
 mock, errors or degraded reports, never a request whose inputs carry a value found by a web search
 (user_inputs.chat_supplied_source), and never chat_supplied values whose source is missing or does not match
-(Codex R4: unknown provenance). A hit keeps its original generated_at. Follow-ups are never cached. Each process has
+(unknown provenance). A hit keeps its original generated_at. Follow-ups are never cached. Each process has
 its own cache; the global allowance still bounds what several instances spend.
 """
 from __future__ import annotations

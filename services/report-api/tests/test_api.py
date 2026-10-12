@@ -89,7 +89,7 @@ def test_retry_after_invalid_json_then_success(monkeypatch):
 
 
 def test_invalid_json_twice_falls_back_to_drafts(monkeypatch):
-    # F01 (spec change): a model failure no longer removes the summary; the checked drafts answer with 200
+    # a model failure does not remove the summary: the checked drafts answer with 200
     gen = fake("{}", "[1]")
     monkeypatch.setattr(gemini, "gemini_generate", gen)
     r = client.post("/v1/report", json=body("case1"))

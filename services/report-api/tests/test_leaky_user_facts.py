@@ -1,7 +1,7 @@
 """Leaky-building user facts in the summary, and follow-up answers about fields public data could not give us.
 
 Inputs are case1 with the council property page unreadable (COUNCIL_PAGE=off: year built, floor area, building site
-coverage and local board unavailable / council_site_refuses_this_server), as in out/golden/inputs_council_off.
+coverage and local board unavailable / council_site_refuses_this_server).
 """
 import copy
 import json
@@ -50,7 +50,7 @@ def test_user_monolithic_1998_is_a_must_with_prefix_and_land_use_still_in_the_su
     assert len(user) == 1 and set(LEAKY) <= set(user[0].source_ids)
     text = prompt.draft_text(user[0])
     assert text.startswith(V.PREFIX) and "leaky buildings" in text and "monolithic" in text
-    # the non-residential use the user fact pushed out is merged into the title sentence (RUBRIC 8 case1 musts)
+    # the non-residential use the user fact pushed out is merged into the title sentence (case1 must-mentions)
     title = next(f for f in musts if f.topic == "title")
     assert "RESERVE LAND" in title.draft() and "Freehold" in title.draft() and "ac_valuation" in title.source_ids
     for f in musts:

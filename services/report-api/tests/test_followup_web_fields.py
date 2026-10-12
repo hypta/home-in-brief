@@ -1,4 +1,4 @@
-"""Web search for property fields the records do not have (team decision 10/11, plan C).
+"""Web search for property fields the records do not have.
 
 Gemini (classify, answer, translate, extract) and the Google Search call are fakes; rules-api is a fake. No test
 reads anything under out/.
@@ -253,7 +253,7 @@ def test_model_value_written_in_the_text_is_kept(monkeypatch, search, rules):
 
 
 def test_model_year_without_a_build_word_is_dropped(monkeypatch, search):
-    """Codex review 1: a model quote must name a construction event, like code extraction."""
+    """A model quote must name a construction event, like code extraction."""
     monkeypatch.setattr(followup, "call_rules", lambda *a: pytest.fail("no rules re-run"))
     search.reply = web("OneRoof gives 1972 as the date of the house.")
     gen = fake(None, extract={"year_built": "1972", "year_built_quote": "1972 as the date of the house"})
@@ -263,7 +263,7 @@ def test_model_year_without_a_build_word_is_dropped(monkeypatch, search):
 
 
 def test_button_on_a_found_field_answers_from_the_records_without_a_search(monkeypatch, search):
-    """Codex review 2 (P1): council data wins. The button never searches a found field, and user_supplied never
+    """Council data wins. The button never searches a found field, and user_supplied never
     carries a value that conflicts with the council's."""
     monkeypatch.setattr(followup, "call_rules", lambda *a: pytest.fail("the record wins: no rules re-run"))
     search.reply = web("Homes.co.nz says the house was built in 1985.")
@@ -367,7 +367,7 @@ def test_extract(text, expected):
 
 
 # =========================================================================================================
-# Codex review of 2fdb1d9 (10/11): every reproduced case is a test below. All Gemini, search and rules calls are fakes.
+# Cases found in review: each one is a test below. All Gemini, search and rules calls are fakes.
 # =========================================================================================================
 from app import gemini, service  # noqa: E402
 
@@ -528,7 +528,7 @@ def test_bad_button_language_is_rejected(search):
 
 # ---- 3. provenance ------------------------------------------------------------------------------------------
 def test_mixed_sources_take_the_web_prefix_in_the_follow_up(monkeypatch):
-    """Codex review 3: web year 1972 and the user's brick cladding. The year sentence names the web search, the
+    """Web year 1972 and the user's brick cladding. The year sentence names the web search, the
     cladding sentence names the user."""
     monkeypatch.setattr(followup, "call_rules", lambda *a: pytest.fail("no rules re-run"))
     b = copy.deepcopy(body("case1"))
@@ -633,7 +633,7 @@ def timed(clock, classify=None, classify_s=1.0, answers=()):
 
 
 def test_codex_31_second_sequence_stays_within_25_seconds(monkeypatch, clock, rules):
-    """Codex review 5: classify 1 s, two field searches with no source, then an out-of-scope search: 31 s before.
+    """Classify 1 s, two field searches with no source, then an out-of-scope search: 31 s before.
     Now: at most 2 searches in all, each sent with >= 10 s and only with >= 11 s left; done within 25 s."""
     start = clock.t
     clock.deadline_left = lambda: start + 25.0 - clock.t
@@ -834,7 +834,7 @@ def test_mock_mode_also_skips_the_form(monkeypatch, search, rules):
     assert "cross lease property" in out["answer"][1]["text"]
 
 
-# ---- a question the facts cannot answer: a search, else a plain "cannot answer" (Ting 10/12) -------------
+# ---- a question the facts cannot answer: a search, else a plain "cannot answer" --------------------------
 UNANSWERED = {"answered": False, "answer": [], "links": []}
 DEFINITION = "What is the difference between a flood plain and a flood prone area?"
 

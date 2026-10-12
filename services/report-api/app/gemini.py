@@ -30,7 +30,7 @@ SEED = 20261010    # fixed seed: same prompt, same answer as far as the API allo
 MIN_CALL_S = 10.0
 ADMIT_S = 11.0
 MAX_SEARCHES = 2  # Google Search calls per follow-up request, field search and out-of-scope search together
-# One deadline per request (Codex R1): set at route entry (request_budget), REQUEST_DEADLINE_S or, when web sends it,
+# One deadline per request: set at route entry (request_budget), REQUEST_DEADLINE_S or, when web sends it,
 # X-Request-Deadline-Ms (web's remaining milliseconds), whichever is smaller. The single-flight wait, KB reads, the
 # allowance reservation and every Gemini call count against it; every Budget made during the request shares it.
 DEADLINE_HEADER = "x-request-deadline-ms"
@@ -129,7 +129,7 @@ class ModelUnavailable(Exception):
 # Nor after a call protection refused (allowance used up, REPORT_DEGRADED, prompt too large), nor when the
 # request's deadline left no time after the reservation: the drafts answer.
 NO_RETRY = frozenset({obs.QUOTA, obs.CONFIG, obs.ALLOWANCE, obs.DEADLINE})
-# These also stop every further model call of the request (Codex R5: protection.stop_request).
+# These also stop every further model call of the request (protection.stop_request).
 STOPS_REQUEST = NO_RETRY
 
 
@@ -243,4 +243,4 @@ def parse(raw: str) -> list[RewriteSentence]:
         return SummaryOut.model_validate(json.loads(raw)).summary
     except (ValueError, ValidationError) as e:
         obs.note_error(obs.SCHEMA)
-        raise ModelOutputInvalid(type(e).__name__) from e  # no model text in the message (Codex R7)
+        raise ModelOutputInvalid(type(e).__name__) from e  # no model text in the message

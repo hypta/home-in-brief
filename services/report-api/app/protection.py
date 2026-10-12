@@ -1,4 +1,4 @@
-"""Abuse and cost protection (Codex F03): generation slots per process and a global Gemini call allowance.
+"""Abuse and cost protection: generation slots per process and a global Gemini call allowance.
 
 Generation slots: `GENERATION_SLOTS` (2) /v1/report and /v1/followup requests run at once per process; a further
 request is refused at once (no queue) with 503 `busy`, `Retry-After: 5`. /health takes no slot.
@@ -13,7 +13,7 @@ A call is refused when `disabled` is true, `event_calls` >= GEMINI_EVENT_CALLS (
 `calls` >= GEMINI_DAILY_CALLS, or (Search only) `searches` >= SEARCH_DAILY_CALLS. A Search call counts once in
 `calls` and once in `searches`. Reserved calls are never refunded (failures and timeouts count). The transaction
 makes no Gemini call; it gets PROTECTION_TIMEOUT_S (1 s; never more than the request has left) for its whole life:
-begin, reads, commit and rollback each get only what is left of that limit (Codex R1), at most 2 attempts on
+begin, reads, commit and rollback each get only what is left of that limit, at most 2 attempts on
 contention. The caller stops waiting at the limit and the next reservation may start at once; at most
 MAX_IN_FLIGHT transactions run per process (a further one is refused at once). Firestore unavailable, slow or
 conflicting: the call is refused (`backend_error`).
@@ -23,7 +23,7 @@ with category obs.ALLOWANCE, in gemini.NO_RETRY). A refused Search (obs.SEARCH_A
 REPORT_DEGRADED=true refuses every call without reading Firestore; a prompt over GEMINI_INPUT_MAX_BYTES is refused
 without counting.
 
-Request stop (Codex R5): a refusal other than the Search allowance, provider quota (429), a configuration error or no
+Request stop: a refusal other than the Search allowance, provider quota (429), a configuration error or no
 time left after a reservation stops the whole request: every later SDK wrapper refuses before reserving
 (gemini.check_stopped). A used-up Search allowance only stops searches.
 
@@ -58,7 +58,7 @@ DEGRADED = "degraded"          # REPORT_DEGRADED=true
 TOO_LARGE = "prompt_too_large"  # prompt over GEMINI_INPUT_MAX_BYTES
 DEADLINE = "deadline"          # reserved, then no time left to send the call (kept, never refunded)
 
-# X-Report-Degraded-Reason (Codex R3) for each refusal; obs adds model_error and deadline
+# X-Report-Degraded-Reason for each refusal; obs adds model_error and deadline
 DEGRADED_REASON = {DAILY: "allowance_daily", EVENT: "allowance_event", DISABLED: "disabled", DEGRADED: "disabled",
                    BACKEND: "backend_error", TOO_LARGE: "prompt_too_large", DEADLINE: "deadline"}
 
@@ -146,7 +146,7 @@ def generation_slot() -> Iterator[None]:
 @dataclass
 class Scope:
     refused: list[str] = field(default_factory=list)
-    stop: Optional[str] = None  # why the request makes no further model call (Codex R5), None: calls allowed
+    stop: Optional[str] = None  # why the request makes no further model call, None: calls allowed
 
     @property
     def degraded(self) -> bool:
@@ -292,7 +292,7 @@ class FirestoreBackend:
                                                            thread_name_prefix="allowance")
         # One reservation waited on at a time per process: two at once on the same documents contend, and contention
         # takes longer than the time limit to resolve (about 2 s on the emulator). Released when the caller stops
-        # waiting (result or time limit), never held by an abandoned transaction (Codex R1).
+        # waiting (result or time limit), never held by an abandoned transaction.
         self._one = threading.Lock()
         self._count = threading.Lock()
         self._in_flight = 0

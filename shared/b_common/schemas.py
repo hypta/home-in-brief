@@ -14,7 +14,7 @@ class _Lenient(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
 
-# ---- PropertyContext (teammate spec 6.2, only the fields we read) ----------
+# ---- PropertyContext (only the fields we read) ----------
 class CV(_Lenient):
     value: Optional[float] = None
     valuation_date: Optional[str] = None

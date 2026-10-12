@@ -11,12 +11,13 @@ summaries only, see `tos_url` per source).
 After checking items against their sources, run (reviewer name = the person who checked; this may be the author of the item):
 
 ```
-python kb/mark_verified.py --by "Reviewer Name" kb_auction_unconditional kb_nhc_building_cap
+.venv/bin/python kb/mark_verified.py --by "Reviewer Name" kb_auction_unconditional kb_nhc_building_cap
 ```
 
 It sets `status`, `verified_by`, `verified_at` (current UTC time) and `verified_content_hash` for the listed
 ids only, then runs `kb/validate.py`. Use `--dry-run` to preview. Commit the seed changes afterwards; the local
-rules-api reads the seed files on every request, and a deployed one needs `scripts/seed_firestore.py`.
+rules-api reads the seed files on every request, and the deployed one is re-seeded by the deploy workflow when
+`kb/seed/` changes on `main` (step 5 below).
 
 ## How to check one item
 
@@ -38,12 +39,13 @@ everywhere (validator, seeding, kb-refresh) until it is reviewed again.
    the start of that day), then compute the hash and paste it into `verified_content_hash`:
 
    ```
-   python kb/validate.py --hash <item id>
+   .venv/bin/python kb/validate.py --hash <item id>
    ```
 
    (Set status, name and date first; the hash does not depend on them, only on the five content fields.)
-5. Run `python kb/validate.py` (must print `errors=0`), commit, then re-seed with
-   `python scripts/seed_firestore.py` (use `--dry-run` first).
+5. Run `.venv/bin/python kb/validate.py` (must print `errors=0`), then commit and push to `main`: the deploy
+   workflow re-seeds Firestore when `kb/seed/` changed. To seed by hand (use `--dry-run` first), see `DEPLOY.md`,
+   section 3b.
 6. If the wording changed or the page moved: leave `status` as `needs_review` or `draft`, correct `quote`
    and `claim_en` from the new original text, and verify again as above.
 7. Keep the attribution from the source's `attribution` field wherever the quote is shown.
@@ -114,7 +116,7 @@ While checking against the sources, Ting Wang narrowed the wording of 3 items to
 `kb_rbnz_lvr` (added "for owner-occupiers"), `kb_low_deposit_higher_rates` (added "less than a 20% deposit"
 and "until you reach 20% equity"), and `kb_landslide_map_context` (now "if or when a landslide might happen").
 
-The production rules-api returns `verified` items, so a report can cite all 31.
+The production rules-api returns `verified` items, so the page can cite all 31.
 
 If you later edit the `claim_en`, `quote`, `source_url`, `applies_when` or `next_step_en` of any item, it goes back to `needs_review` automatically and must be reviewed again.
 
@@ -123,7 +125,7 @@ If you later edit the `claim_en`, `quote`, `source_url`, `applies_when` or `next
 | Source (`tos_status`) | Items | Why manual | Cadence |
 |---|---|---|---|
 | `src_settled_*` settled.govt.nz (unclear) | kb_auction_unconditional, kb_leaky_build_era, kb_monolithic_cladding, kb_flood_insurance_limit, kb_insurance_condition, kb_title_freehold, kb_title_cross_lease, kb_title_cross_lease_flats_plan, kb_title_unit_title | Real Estate Authority copyright: "personal or in-house use only"; no automation clause, so unclear. All 9 verified 2026-10-04. | re-check every 2 weeks (verified 2026-10-04) |
-| `rbnz_lvr`, `rbnz_dti` rbnz.govt.nz (prohibited) | kb_rbnz_lvr, kb_rbnz_dti, kb_fhl_lvr_not_restricted, kb_fhl_dti_not_restricted | Terms forbid robots and scrapers | every 2 weeks; also after each RBNZ Financial Policy Committee announcement |
+| `rbnz_lvr`, `rbnz_dti` rbnz.govt.nz (prohibited) | kb_rbnz_lvr, kb_rbnz_dti, kb_fhl_lvr_not_restricted, kb_fhl_dti_not_restricted, kb_low_deposit_higher_rates | Terms forbid robots and scrapers | every 2 weeks; also after each RBNZ Financial Policy Committee announcement |
 | `src_akl_rating_valuation`, `src_akl_overland_flow`, `src_akl_home_search_tips`, `src_akl_landslide_maps` Auckland Council (unclear) | kb_cv_not_market, kb_overland_flow_path, kb_coastal_inundation_meaning, kb_landslide_map_context | Council terms unclear on automated access | every 2 weeks |
 | `bank_rates_snapshot` banks (unclear) | not a KB item | See `jobs/rates-refresh/config/banks.yaml` | per that file |
 
@@ -134,7 +136,7 @@ If you later edit the `claim_en`, `quote`, `source_url`, `applies_when` or `next
 | `src_nhc_about` naturalhazards.govt.nz (allowed, CC BY-NC 4.0) | kb_nhc_building_cap, kb_nhc_levy, kb_nhc_building_excess, kb_nhc_land_cover_limits | The site sits behind a bot challenge (Incapsula). If a run records `blocked` or `quote_found: null`, check by hand. Cadence: monthly, and whenever there is news about the NHC levy or building cap (Treasury review of the levy and cap was reported in 2025; not verified). |
 | `src_unittitles_guide` unittitles.govt.nz (allowed) | kb_unit_title_body_corporate_insurance, kb_unit_title_levies | If blocked or the PDF URL changed, check by hand every 2 weeks until fixed. |
 | `src_nhc_home_buyers` naturalhazards.govt.nz (allowed, CC BY-NC 4.0) | kb_lim_next_step | Same Incapsula bot challenge as src_nhc_about; if a run records `blocked` or `quote_found: null`, check by hand monthly. |
-| `kainga_ora_fhl`, `kainga_ora_fhl_brochure` kaingaora.govt.nz (allowed, tentative) | kb_fhl_premium, kb_fhl_govt_not_funding_premium, kb_fhl_deposit_5pct, kb_fhl_income_cap_individual, kb_fhl_income_cap_multiple, kb_fhl_income_basis | Terms were read from a search summary only; re-read the copyright statement in a browser. If blocked, check by hand every 2 weeks. |
+| `kainga_ora_fhl`, `kainga_ora_fhl_brochure` kaingaora.govt.nz (allowed) | kb_fhl_premium, kb_fhl_govt_not_funding_premium, kb_fhl_deposit_5pct, kb_fhl_income_cap_individual, kb_fhl_income_cap_multiple, kb_fhl_income_basis | If blocked, check by hand every 2 weeks. |
 
 ## Reading the job output
 
@@ -149,11 +151,11 @@ If you later edit the `claim_en`, `quote`, `source_url`, `applies_when` or `next
   stored with `stale_content: true` and does not touch the item.
 - Redirects are followed only to the same host over https; only https URLs are fetched; robots.txt problems
   (429, 401, 403, 5xx, timeout, an HTML page instead of robots.txt) stop the fetch.
-- `job_runs/{timestamp}` (or `out/kb_refresh_report.json` locally) counts `checked`, `manual_check_required`,
-  `changed` and `errors`.
+- `job_runs/{run_id}` (run id `YYYYMMDDTHHMMSSZ-xxxx`; `out/kb_refresh_report.json` locally) has the counts
+  `checked`, `manual_check_required` and `changed`, and the list `errors`.
 
 ## Changing a source's `tos_status`
 
 Only after re-reading the site's terms and robots.txt. Update `tos_status`, `tos_url`,
-`tos_checked_at` and `attribution` in `kb/seed/sources.json`, run `python kb/validate.py`, then re-seed
-with `scripts/seed_firestore.py`.
+`tos_checked_at` and `attribution` in `kb/seed/sources.json`, run `.venv/bin/python kb/validate.py`, then commit
+and push to `main` (the deploy workflow re-seeds; by hand: `DEPLOY.md`, section 3b).

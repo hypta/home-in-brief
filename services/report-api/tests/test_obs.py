@@ -1,4 +1,4 @@
-"""F07: one JSON completion record per request, without the question, history, prompts or financial inputs."""
+"""One JSON completion record per request, without the question, history, prompts or financial inputs."""
 import json
 import logging
 
@@ -134,12 +134,12 @@ def test_followup_mode_header(monkeypatch):
     assert r.status_code == 200 and r.headers["X-Report-Mode"] == "gemini"
 
 
-# ---- Codex R7: no exception message reaches the logs ------------------------------------------------------------
+# ---- no exception message reaches the logs ----------------------------------------------------------------------
 SENTINELS = ("household income 130000", "12 Sentinel Street, Remuera", "is my house a good buy")
 
 
 class LeakyError(Exception):
-    """A provider error whose message echoes request content (the hypothesis in Codex R7)."""
+    """A provider error whose message echoes request content."""
 
     def __init__(self, code=500):
         super().__init__("; ".join(SENTINELS))

@@ -1,11 +1,12 @@
 # web
 
-The only public service. It serves the report page and relays the page's API calls to the private services;
+The only public service. It serves the page and relays its API calls to the private services;
 browsers never call property-api, rules-api or report-api directly.
 
 | Path | Goes to |
 |---|---|
-| `GET /` | The report page (`app/static/`) |
+| `GET /` | The page (`app/static/`) |
+| `GET /config.json` | `{"linz_basemaps_key": ...}` for the map |
 | `GET /api/addresses`, `/api/property-context`, `/api/map` | property-api `/v1/...` |
 | `POST /api/rules`, `GET /api/rates/latest`, `/api/kb/items`, `/api/sources` | rules-api `/v1/...` |
 | `POST /api/report` | report-api `/v1/report`, after property-api and rules-api (below) |
@@ -28,10 +29,11 @@ For both, report-api is told how long the request has left (`X-Request-Deadline-
 the browser), and its `X-Report-Mode`, `X-Report-Degraded-Reason`, `Retry-After` and `Cache-Control` headers are
 passed on to the browser.
 
-Every `/api/` call is counted per visitor (the last public address in `X-Forwarded-For`): 6 reports or answers at
+Every `/api/` call is counted per visitor (the last public address in `X-Forwarded-For`): 6 summaries or answers at
 once and one more every 10 s, 20 other calls at once and one more every second. Over that: 429 `rate_limited` with
 `Retry-After`. The count is in this instance's memory, so it slows a flood down; report-api's daily allowance is the
 hard limit. Where Cloud Run puts the visitor's address in that header is not confirmed in Google's documentation.
+A POST body over 256 kB, or without `Content-Length`, gets 413 `too_large`.
 
 ## Run locally
 
@@ -54,8 +56,8 @@ PYTHONPATH=services/web .venv/bin/python -m uvicorn app.main:app --port 8082 --e
 ```
 
 Then open http://localhost:8082. `PROPERTY_API_URL`, `RULES_API_URL` and `REPORT_API_URL` default to ports 8081, 8080
-and 8090. Without report-api the page works and only the summary block says it is unavailable. Run
-rules-api with `INCLUDE_DRAFT=true` to see knowledge-base notes while they are still drafts.
+and 8090. Without report-api the records, map and figures still work; the summary and the answers say they are
+unavailable.
 
 ## Tests
 
@@ -67,29 +69,33 @@ The relay is tested against real rules-api, property-api and report-api response
 
 ## Page
 
-Plain HTML, CSS and JavaScript modules, no build step: `app.js` (page flow), `report.js` (the report blocks),
+Plain HTML, CSS and JavaScript modules, no build step: `app.js` (page flow), `report.js` (draws the blocks of the page),
 `map.js` (Leaflet map). The look and the rules for each part of the page are in `DESIGN.md`.
 
-Order: the address box, then the details the report was calculated with in one line each (the form is open until the
-first report and folded behind "Change" after it), then the summary, the next steps and what could not be found, then
-five folded sections with the records. The hazards section is open when a flood layer is mapped on the parcel. A next
-step on the summary's list is not repeated under the note it comes from. Each line opens its sources from one control: a source
+Order: the address box, then the details the results were calculated with in one line each (the form is open until the
+first results are on the page and folded behind "Change" after that), then the summary, the next steps and what could
+not be found, then five folded sections with the records. The hazards section is open when a flood layer is mapped on
+the parcel. A next step on the summary's list is not repeated under the note it comes from. Each line opens its sources
+from one control: a source
 shown there is its name, and the words quoted from it, its credit line, licence and dates are in the list of section 5.
-While the form is open, choosing an address asks for nothing: the report starts when the visitor chooses "Summarise
-this address" (or "Update"), so details can be added first. With the form folded behind a report, choosing another
-address starts the next report at once. The two steps above the summary end when the page
+While the form is open, choosing an address asks for nothing: the lookup starts when the visitor chooses "Summarise
+this address" (or "Update"), so details can be added first. With the form folded away behind the results, choosing
+another address starts the next lookup at once. The two steps above the summary end when the page
 sees their requests finish (the records with the figures calculated from them, then the summary); nothing is paced by a timer.
 The three typefaces are served from `app/static/fonts/` with their licence texts (SIL Open Font License).
 
 Questions sit in one panel: a bar at the bottom of a narrow screen that opens upward over the page, and a column
-beside the report from 1000 px. Until something has been asked it offers four questions to start with. A summary sentence links to the section that holds its records. The explanation of
-how the summary is made, and the handwritten margin notes, are open for the first report in a tab only.
+beside the results from 1000 px. Until something has been asked it offers three questions to start with, and a fourth
+about this home's title type when the records give it and a note about it is on the page. A summary sentence links to
+the section that holds its records. The explanation of
+how the summary is made, and the handwritten margin notes, are open for the first address looked up in a tab only.
 
 The summary block is drawn from `/api/report` after each calculation. The follow-up block
 sends each question to `/api/followup` with the last 3 answered turns and draws the turns as a conversation; they
 live in page memory and are cleared when another address is chosen. An answer report-api found with Google Search
-(`web`) is shown as returned, with its sources and with Google's search suggestions in a frame that runs no scripts;
-what the program says about it follows in a box of its own.
+(`web`) is shown as returned, with its sources and with Google's search suggestions in a frame that runs no scripts.
+Under it one small paragraph says it was found by Gemini with Google Search and not checked by this tool, and lists the
+links report-api names for checking it; any sentences of the program's own follow as ordinary answer sentences.
 A year built, cladding or last sale the records lack has a "Search the web" button in section 2. A year or cladding
 the search finds goes into the form and is marked "from a web search, not checked" wherever the page states it (the
 form, the readout, the build-era line, the notes it selects, the conversation), is sent as
@@ -97,7 +103,12 @@ form, the readout, the build-era line, the notes it selects, the conversation), 
 their own.
 The words of the newest answer appear as if typed; that is a display effect only, since every answer arrives whole
 (nothing is streamed from the server). A year built or cladding that report-api reads from a question (`user_supplied`) is
-put into the form and the report is calculated again. Loan details typed into the form are kept in `sessionStorage`
-for the tab.
+put into the form and the results are calculated again.
+Kept in `sessionStorage` for the tab: the loan details typed into the form, the address on the page (a reload reads the
+same records again), a year or cladding a web search filled in, and whether a first address has been shown. A theme
+choice that differs from the system setting is kept in `localStorage`. The page's own code stores nothing else in the
+browser; the conversation is not kept.
 The map background is LINZ Basemaps aerial imagery when `LINZ_BASEMAPS_KEY` is set (the page gets the key from
 `/config.json`, because browsers fetch the tiles themselves), with OpenStreetMap as the other choice and the fallback.
+The tiles come from basemaps.linz.govt.nz and tile.openstreetmap.org and both are credited on the map. Leaflet 1.9.4 is
+loaded from unpkg.com with an integrity hash.

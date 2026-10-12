@@ -1,4 +1,4 @@
-"""Codex F03: generation slots, the global Gemini allowance, REPORT_DEGRADED, prompt/output caps.
+"""Generation slots, the global Gemini allowance, REPORT_DEGRADED, prompt/output caps.
 
 Every test here runs with sockets blocked: any network call (Gemini, Firestore, rules-api) fails the test. The real
 SDK wrappers (gemini.gemini_generate, followup.gemini_json, followup.gemini_search) run against a fake
@@ -411,7 +411,7 @@ def test_degraded_followup_in_japanese_stays_english(monkeypatch):
     r = post_followup("洪水のリスクはありますか？")
     assert r.status_code == 200 and not fake.calls
     assert r.json()["warnings"] == [protection.GENERATION_DEGRADED]
-    assert r.json()["language"] == "en"  # Codex R6: no Japanese sentences written by code, so said to be English
+    assert r.json()["language"] == "en"  # no Japanese sentences written by code, so said to be English
 
 
 def test_search_allowance_exhausted_only_skips_the_search(monkeypatch, caplog):

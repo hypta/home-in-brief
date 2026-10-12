@@ -17,13 +17,16 @@ but the schedule is not enabled (see `DEPLOY.md`).
    - `low_equity.bands`: low equity margin bands as `lvr_from`, `lvr_to`, `margin_pct` (empty if not published).
    - `page_effective_date`: the date the page states, as written, or `null`.
    - `fhl.special_applies` (`true` only if the bank's page says First Home Loans get the special rates, else `null`),
-     `fhl.lmi_passthrough_pct` and `notes` are curated by hand; the automatic job never overwrites them.
+     `fhl.lmi_passthrough_pct` and `notes` are curated by hand; the automatic job never overwrites them. When you
+     set `fhl.special_applies` to `true` or give `fhl.lmi_passthrough_pct`, add a note that starts with `FHL source`
+     and gives the evidence from the page; the validator requires a note with that start.
    - Ignore first-home-buyer-only promotions, revolving credit, investor and reverse-equity rates.
 3. Set that row's `captured_at` to the time you read the page (ISO 8601, e.g. `2026-10-04T09:30:00+13:00`).
    Leave other banks' `captured_at` alone: each row carries its own date. Update the top-level `captured_at`
    to the same time if you touched any row.
 4. Validate: `.venv/bin/python scripts/validate_rates_seed.py` (checks the format, rates between 2% and 12%, a `1y`
-   special rate, `captured_at` and `source_url` on every bank). Fix anything it lists.
+   special rate, `captured_at` and `source_url` on every bank, the low-equity fields and the `FHL source` note). Fix
+   anything it lists.
 5. Run the tests: `make test`.
 6. Commit `data/rates_seed.json` with a message such as `rates: update ASB and BNZ (read 2026-10-04)`.
    If the app runs from Firestore, load the file with `scripts/seed_rates.py` (see `LOCAL.md` / `DEPLOY.md`).

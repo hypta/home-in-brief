@@ -1,6 +1,7 @@
-# Local testing (B: rules-api, rates-refresh, kb-refresh)
+# Local run: rules-api and the two jobs
 
 Run everything from the repo root. `make test` runs all unit tests with the `.venv` (Python 3.12).
+For property-api, report-api and the page, see `services/web/README.md`.
 
 ## One-time: create the virtualenv
 
@@ -8,8 +9,8 @@ Run everything from the repo root. `make test` runs all unit tests with the `.ve
 make setup    # uv venv --python 3.12 .venv, then installs every service's requirements.txt plus pytest
 ```
 
-Without `uv`: `python3.12 -m venv .venv`, then `.venv/bin/pip install -r services/rules-api/requirements.txt -r jobs/rates-refresh/requirements.txt -r jobs/kb-refresh/requirements.txt pytest`.
-(`PY=/path/to/python` overrides the interpreter that every target uses.)
+Without `uv`: `python3.12 -m venv .venv`, then `.venv/bin/pip install -r services/rules-api/requirements.txt -r jobs/rates-refresh/requirements.txt -r jobs/kb-refresh/requirements.txt -r services/property-api/requirements.txt -r services/web/requirements.txt -r services/report-api/requirements.txt pytest`.
+(`VENV=dir`, a path relative to the repo root, changes the virtualenv every target uses. An absolute `VENV` or `PY` breaks `make test`: three of its suites run `../../$(PY)` from the service's folder.)
 
 ## One-time: your own `.env`
 
@@ -17,10 +18,12 @@ Without `uv`: `python3.12 -m venv .venv`, then `.venv/bin/pip install -r service
 
 ```bash
 cp .env.example .env
-# edit .env and set GEMINI_API_KEY=...   (GEMINI_MODEL is optional: leave it commented out to use the code default)
+# edit .env and set GEMINI_API_KEY=...
+# GEMINI_MODEL is optional: delete the line or comment it out to use the code default
+# (rates-refresh takes an empty GEMINI_MODEL= as the model name, not as the default)
 ```
 
-With an allowed bank configured but no key, `rates` / `local-rates` fail loudly (`KeyError: 'GEMINI_API_KEY'` recorded as that bank's failure, non-zero exit when every attempted bank failed) and write no rates snapshot. A `job_runs` record of the failed run is still written.
+With an allowed bank configured but no key, `rates` / `local-rates` fail loudly (the error is recorded as that bank's failure, non-zero exit when every attempted bank failed) and write no rates snapshot. The error is `KeyError: 'GEMINI_API_KEY'` when the variable is not set at all; an empty `GEMINI_API_KEY=` line, as in an unedited copy of `.env.example`, counts as set, so the Gemini client is called with an empty key and any error it raises is recorded instead. A `job_runs` record of the failed run is still written.
 
 ## Mode 1: pure Python (no Docker)
 
@@ -30,7 +33,7 @@ make local-api     # uvicorn on :8080, DATA_BACKEND=local (reads kb/seed + data/
 make smoke         # in another shell: /healthz + /v1/rules, expects loan 880000, lvr 88.0, dti 6.07
 make rates-fetch   # fetch pages of tos_status=allowed banks only (none today); no Gemini, no writes
 make local-rates   # full rates-refresh (needs .env); skips non-allowed banks; output in jobs/rates-refresh/out/
-python scripts/validate_rates_seed.py   # check the hand-maintained data/rates_seed.json
+.venv/bin/python scripts/validate_rates_seed.py   # check the hand-maintained data/rates_seed.json
 make local-kb      # kb-refresh; prints quote_found per KB item, report in out/
 ```
 

@@ -17,7 +17,7 @@ GET {{property}}/v1/property-context?address_id=2100210
 ### PropertyContext for 44 Lorne Street (Auckland Central Library)
 GET {{property}}/v1/property-context?address_id=1132249
 
-### GeoJSON for the development map (not part of the hand-off contract)
+### GeoJSON for the page's map (not part of PropertyContext)
 GET {{property}}/v1/map?address_id=2100210
 
 ### End to end: send the PropertyContext above straight to rules-api

@@ -179,7 +179,7 @@ def _intersecting(req: ReportRequest) -> set[str]:
 
 
 def _rank(item_id: str, item: dict, req: ReportRequest, layers: set[str]) -> int:
-    """Program ordering after the items cited in the summary (RUBRIC 4)."""
+    """Program ordering after the items cited in the summary."""
     topic = item.get("topic")
     if item_id == "kb_flood_insurance_limit" and layers & set(PRIMARY_FLOOD_LAYERS):
         return 1
@@ -205,7 +205,7 @@ def _rank(item_id: str, item: dict, req: ReportRequest, layers: set[str]) -> int
 _STEP_STOP = frozenset("a an the to of for and or with your you it its how what which that this their about at on in "
                        "is are be would will if any each ask check first home loan lender participating lending "
                        "application applications".split())
-SIMILAR_STEP = 0.3  # share of topic words two First Home Loan steps have in common to count as the same advice
+SIMILAR_STEP = 0.3  # share of topic words two First Home Loan steps have in common to count as the same next step
 
 
 def _step_words(text: str) -> set[str]:

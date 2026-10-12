@@ -22,7 +22,7 @@ GET {{rules}}/v1/kb/items?ids=kb_auction_unconditional,kb_nhc_building_cap
 ### All visible knowledge-base items
 GET {{rules}}/v1/kb/items
 
-### 1. Spec sample (§6.2/6.3): CV $1,000,000, deposit $120k, income $150k, debts $30k
+### 1. CV $1,000,000, deposit $120k, income $150k, debts $30k
 # Expect loan_amount 880000, lvr_pct 88.0, dti 6.07, high_dti_threshold 870000
 POST {{rules}}/v1/rules
 Content-Type: application/json

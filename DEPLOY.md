@@ -1,25 +1,27 @@
 # Deploy (Cloud Run + Firestore, australia-southeast1)
 
-## Monorepo structure and ownership
+## Monorepo structure
 
-A and B share this one repo; the submission is a single GitHub link.
+All services and jobs share this one repo; the submission is a single GitHub link.
 
-| Directory | Owner | Notes |
-|---|---|---|
-| `services/property-api/` | A | private Cloud Run service (section 8b) |
-| `services/web/` | A | the only public Cloud Run service: report page and relay to the private services (section 8c) |
-| `services/rules-api/` | B | private Cloud Run service (section 8) |
-| `jobs/rates-refresh/` | B | Cloud Run job; scheduler code kept but disabled, rates maintained by hand (`RATES_UPDATE.md`) |
-| `jobs/kb-refresh/` | B | Cloud Run job, weekly |
-| `shared/`, `kb/`, `data/` | shared | common code, knowledge base, seed data |
-| `.github/` | shared | deploy workflow (`workflows/deploy.yml`) and its target list (`deploy/targets.json`) |
+| Directory | Notes |
+|---|---|
+| `services/property-api/` | private Cloud Run service (section 8b) |
+| `services/web/` | the only public Cloud Run service: the page and a relay to the private services (section 8c) |
+| `services/rules-api/` | private Cloud Run service (section 8) |
+| `services/report-api/` | private Cloud Run service: summary and follow-up answers with Gemini (section 8d) |
+| `jobs/rates-refresh/` | Cloud Run job; deployed but not scheduled (section 10), rates maintained by hand (`RATES_UPDATE.md`) |
+| `jobs/kb-refresh/` | Cloud Run job, weekly |
+| `shared/`, `kb/`, `data/` | common code, knowledge base, seed data |
+| `scripts/`, `api-requests/` | seed, validation, smoke-test and evaluation scripts; ready-made API requests |
+| `.github/` | deploy workflow (`workflows/deploy.yml`) and its target list (`deploy/targets.json`) |
 
 - Each service/job has its own `Dockerfile` and `requirements.txt`.
 - The Docker build context is always the repo root (`docker build -f <dir>/Dockerfile .`), so Dockerfiles can `COPY shared/ ...`.
 - All paths in this file are relative to the repo root.
-- Suggested: add `.github/CODEOWNERS` mapping each directory above to its owner (not created yet).
-- `cloudbuild.yaml` builds all five images with Cloud Build. **The GitHub Actions workflow does not use it**; it is kept
-  for building by hand (`gcloud builds submit --config cloudbuild.yaml ...`, see the comment at its top).
+- `cloudbuild.yaml` builds five of the six images with Cloud Build (it has no step for report-api). **The GitHub
+  Actions workflow does not use it**; it is kept for building by hand (`gcloud builds submit --config cloudbuild.yaml ...`,
+  see the comment at its top).
 
 ## 1. How deployment works
 
@@ -100,7 +102,7 @@ gcloud firestore databases create --location=$REGION --type=firestore-native
 The workflow passes no `--service-account`, so every service and job runs as `$RUNTIME_SA`. Depending on the
 organisation policy `iam.automaticIamGrantsForDefaultServiceAccounts`, a new project may or may not give this account
 the broad Editor role. Grant what it needs explicitly either way. On our deployment the account did get Editor
-automatically; A removed it and kept only the grants listed in this section, and the services work normally, so do the
+automatically; we removed it and kept only the grants listed in this section, and the services work normally, so do the
 same (find it with `gcloud projects get-iam-policy $PROJECT_ID --flatten=bindings --filter="bindings.members:$RUNTIME_SA"
 --format='table(bindings.role)'`, then `gcloud projects remove-iam-policy-binding $PROJECT_ID
 --member=serviceAccount:$RUNTIME_SA --role=roles/editor`; verify the flags):
@@ -114,8 +116,9 @@ gcloud projects add-iam-policy-binding $PROJECT_ID \
 
 Also for `$RUNTIME_SA`, granted elsewhere:
 - `roles/secretmanager.secretAccessor` on the two secrets (section 4).
-- `roles/run.invoker` on rules-api and property-api, so web can call them with an ID token. **The workflow adds these
-  bindings** after each deploy (`gcloud run services add-iam-policy-binding`), because the services must exist first.
+- `roles/run.invoker` on rules-api, property-api and report-api, so web (and report-api, which calls rules-api) can
+  call them with an ID token. **The workflow adds these bindings** after each deploy
+  (`gcloud run services add-iam-policy-binding`), because the services must exist first.
 - `roles/run.invoker` on the kb-refresh job, for Cloud Scheduler (section 10).
 
 Trade-off of a single identity: every service and job gets the union of these grants, so rules-api and web can also
@@ -178,8 +181,8 @@ Commands follow the `google-github-actions/auth` README ("Workload Identity Fede
 ## 3b. Seed data in Firestore
 
 A fresh database is empty. Without seed data rules-api is healthy but `/v1/rates/latest` returns 404, `/v1/rules`
-returns no repayment scenarios (warning `rates_unavailable`) and `/v1/sources` is `[]`. The rates job cannot fill the
-gap: with no bank marked `tos_status: allowed` it fetches nothing (see section 9 and RATES_UPDATE.md).
+returns no bank or First Home Loan scenarios (warning `rates_unavailable`) and `/v1/sources` is `[]`. The rates job
+cannot fill the gap: with no bank marked `tos_status: allowed` it fetches nothing (see section 9 and RATES_UPDATE.md).
 
 **The workflow seeds Firestore** as the deployer, before deploying the new rules-api revision:
 - `scripts/seed_firestore.py` (`sources/*`, `kb_items/*`) when `kb/seed/` changed since the commit rules-api was last
@@ -219,22 +222,22 @@ Notes:
   `"status": "retired"` always retires.
 - `seed_rates.py` overwrites `rates_latest/current` with `data/rates_seed.json`. That is the intended path while rates
   are maintained by hand; if the rates job is ever scheduled, a later `data/` change would overwrite its snapshot.
-- Seeded KB items have `status: draft` until a person verifies them (see `kb/MANUAL_CHECK.md`). rules-api only
-  returns `verified` items unless `INCLUDE_DRAFT=true` is set.
+- All 31 seed items are `verified` (see `kb/MANUAL_CHECK.md`). rules-api returns only `verified` items unless
+  `INCLUDE_DRAFT=true` is set; an item edited after its review is served again only after a new review.
 - Check after seeding (needs an identity with `run.invoker` on rules-api):
   `curl -H "Authorization: Bearer $(gcloud auth print-identity-token)" $RULES_API_URL/v1/rates/latest` returns 200.
 
 ## 4. Secrets (Secret Manager)
 
-Secret values never appear in the workflow; the services and jobs mount them by name
-(`--update-secrets` / `--set-secrets` in `.github/deploy/targets.json`).
+Secret values never appear in the workflow; the services and jobs mount them by name (the `secrets` map in
+`.github/deploy/targets.json`, applied by `deploy.sh` with `--update-secrets` / `--set-secrets`).
 
 ```bash
 # LINZ Data Service key for property-api: read from the unquoted LINZ_API_KEY=... line in .env, never typed or printed
 gcloud secrets create LINZ_API_KEY --replication-policy=automatic
 grep '^LINZ_API_KEY=' .env | cut -d= -f2- | tr -d '\n' | gcloud secrets versions add LINZ_API_KEY --data-file=-
 
-# Gemini key for rates-refresh, same way
+# Gemini key for report-api and rates-refresh, same way
 gcloud secrets create GEMINI_API_KEY --replication-policy=automatic
 grep '^GEMINI_API_KEY=' .env | cut -d= -f2- | tr -d '\n' | gcloud secrets versions add GEMINI_API_KEY --data-file=-
 
@@ -272,7 +275,8 @@ missing, the deploy job fails with a message saying so.
 - **deploy** (needs test, only on `refs/heads/main`): one run at a time (`concurrency: cloud-run-deploy`, a newer
   queued run replaces an older queued one; a running deploy is never cancelled). Permissions `contents: read`,
   `id-token: write`. Steps: check variables, checkout with full history, `google-github-actions/auth` (WIF, impersonating
-  `GCP_DEPLOY_SA`), `setup-gcloud`, `gcloud auth configure-docker`, then `.github/deploy/deploy.sh`.
+  `GCP_DEPLOY_SA`), `setup-gcloud`, Python 3.12 and uv (used when a seed script runs), `gcloud auth configure-docker`,
+  then `.github/deploy/deploy.sh`.
 
 Triggers: push to `main`; **Run workflow** (`workflow_dispatch`) with the option `deploy_all`.
 
@@ -290,7 +294,8 @@ being deployed (`git diff`). So a deploy that failed is retried on the next push
 | rates-refresh | job | - | `jobs/rates-refresh/`, `shared/` | `DATA_BACKEND=firestore`, `GEMINI_MODEL`, secret `GEMINI_API_KEY` |
 
 The list lives in `.github/deploy/targets.json` and is deployed in that order (web after the private services). The
-paths follow what each Dockerfile copies; `shared/` triggers every Python target. To add a service: add an entry
+paths cover what each Dockerfile copies. `shared/` is listed for all six targets, although the web, kb-refresh and
+rates-refresh images do not copy it, so a change there redeploys everything. To add a service: add an entry
 there, and if web calls it, a `url_env` line on web (plus a relay route in web's code).
 
 Per deploy run:
@@ -307,12 +312,15 @@ Per deploy run:
    must return 200 with banks whose oldest `captured_at` is at most 30 days old (a 502 `upstream_auth` means a missing
    `run.invoker` binding). When report-api, rules-api or web was deployed, `POST /api/report` (address 2100210, fixed
    inputs, real Gemini) must return 200 with at least one summary sentence and `POST /api/followup` (one English
-   question) 200 with an `answer` array and a `language`. Each POST is sent once (no retry, not even after 503 busy).
-   report-api's `X-Report-Mode` (`gemini`, `drafts`, `mock`) and `X-Report-Degraded-Reason` decide the Gemini check:
-   `gemini` passes; `drafts` with `allowance_daily`, `allowance_event` or `disabled` is a warning; `drafts` with any
-   other reason (`backend_error`, `model_error`, `prompt_too_large`, `deadline`) fails the deploy. While web's relay
-   does not pass the headers on, only status and shape are checked and the summary says "Gemini path not verified
-   (header not forwarded)". Latency, mode, reason and the estimated Gemini calls the smoke test used go to the job
+   question) 200 with a `language` and either at least one non-empty answer sentence or a web-search answer
+   (`web.text`). Each POST is sent once (no retry, not even after 503 busy).
+   report-api's `X-Report-Mode` (`gemini`, `drafts`, `mock`) and `X-Report-Degraded-Reason`, which web passes on,
+   decide the Gemini check: `gemini` passes; `drafts` with `allowance_daily`, `allowance_event` or `disabled` is a
+   warning; `drafts` with any other reason (`backend_error`, `model_error`, `prompt_too_large`, `deadline`) fails the
+   deploy. If `X-Report-Mode` is missing, or the mode is `drafts` with no reason header and the body carries the
+   warning `generation_degraded`, the Gemini path is reported as not verified and only status and shape are required.
+   `drafts` with no reason and no such warning fails for `/api/report` and passes for the follow-up; `mock` fails.
+   Latency, mode, reason and the estimated Gemini calls the smoke test used go to the job
    summary. Private services are not called;
    if you check them by hand use `/health`, not `/healthz` (Cloud Run reserves some paths ending in `z`,
    [known issues](https://docs.cloud.google.com/run/docs/known-issues)).
@@ -357,7 +365,7 @@ Firestore (section 3). Only identities with `run.invoker` can call it; the workf
 account so web can relay to it.
 
 `--min-instances=1` keeps one instance warm so judges do not hit a cold start. Use it for the judging period
-(Oct 19 - Nov 6). It is billed for the idle instance (CPU and memory, roughly a few dollars to low tens of dollars a
+(19 October to 6 November 2026). It is billed for the idle instance (CPU and memory, roughly a few dollars to low tens of dollars a
 month for a small instance; check the Cloud Run pricing page for your region and your budget alert from section 12).
 The workflow does not pass `--min-instances`, so set it by hand and it stays across deploys:
 
@@ -382,35 +390,39 @@ default runtime service account, which the workflow grants `run.invoker` on prop
 
 For the judging period add `--min-instances=1` by hand, as for rules-api in section 8.
 
-Check as a user who has `run.invoker` on the service. The check uses `/v1/addresses` rather than `/healthz`
-because Cloud Run reserves some paths ending in `z`
-([known issues](https://docs.cloud.google.com/run/docs/known-issues)). The two address ids are the public
+Check as a user who has `run.invoker` on the service. Use `/health`, not `/healthz`: Cloud Run reserves some paths
+ending in `z` ([known issues](https://docs.cloud.google.com/run/docs/known-issues)). The two address ids are the public
 facilities used in the tests:
 
 ```bash
 export PROPERTY_API_URL=$(gcloud run services describe property-api --region=$REGION --format='value(status.url)')
 TOKEN=$(gcloud auth print-identity-token)
 mkdir -p out
+curl -s -H "Authorization: Bearer $TOKEN" "$PROPERTY_API_URL/health"                             # {"status":"ok"}
 curl -s -o /dev/null -w '%{http_code}\n' "$PROPERTY_API_URL/v1/addresses?q=740%20sandringham"   # no token: 403
 curl -s -H "Authorization: Bearer $TOKEN" "$PROPERTY_API_URL/v1/addresses?q=740%20sandringham"
 curl -s -H "Authorization: Bearer $TOKEN" "$PROPERTY_API_URL/v1/property-context?address_id=2100210" -o out/ctx_2100210.json
 curl -s -H "Authorization: Bearer $TOKEN" "$PROPERTY_API_URL/v1/property-context?address_id=1132249" -o out/ctx_1132249.json
 ```
 
-Compare the two files with the same requests against a local run (`services/property-api/README.md`). Only
-`generated_at` should differ; both must carry a New Zealand offset (`+13:00` or `+12:00`).
+Compare the two files with the same requests against a local run (`services/property-api/README.md`).
+`generated_at` differs, and so does `sources[].accessed_at` when the two runs are on different days. The four fields
+read from the council property page (`year_built`, `floor_area_m2`, `building_site_coverage_m2`, `local_board`) are
+`unavailable` whenever the council site gives no answer, so they can differ too. Nothing else should differ; both `generated_at` values must carry a New
+Zealand offset (`+13:00` or `+12:00`).
 
 ## 8c. web (public)
 
-The only service that allows unauthenticated access. It serves the report page and relays the page's API calls
-to property-api and rules-api as the default runtime service account, which therefore needs `run.invoker` on both
-(added by the workflow). The workflow deploys it after the private services and sets `PROPERTY_API_URL` and
-`RULES_API_URL` from their `status.url`.
+The only service that allows unauthenticated access. It serves the page and relays its API calls to property-api,
+rules-api and report-api as the default runtime service account, which therefore needs `run.invoker` on all three
+(added by the workflow). The workflow deploys it after the private services and sets `PROPERTY_API_URL`,
+`RULES_API_URL` and `REPORT_API_URL` from their `status.url`.
 
 `LINZ_BASEMAPS_KEY` is a plain environment variable, not a secret: the page hands it to browsers, which fetch the
 map tiles themselves. Without it, or when LINZ refuses it, the map uses OpenStreetMap. The workflow does not set it;
 set it once after the first deploy, and replace it the same way without a rebuild (deploys keep it, because the
-workflow only adds env vars with `--update-env-vars`). The current key is a 90-day key issued on 2026-10-04:
+workflow only adds env vars with `--update-env-vars`). The current key is a 90-day key issued on 2026-10-04
+(90 days later is 2027-01-02):
 
 ```bash
 gcloud run services update web --region=$REGION \
@@ -430,15 +442,15 @@ curl -s -o /dev/null -w '%{http_code}\n' $WEB_URL/api/anything-else             
 ```
 
 A 502 with `"code": "upstream_auth"` means a `run.invoker` binding for the runtime service account is missing on
-rules-api or property-api; rerun the workflow with `deploy_all`, or add it with
+rules-api, property-api or report-api; rerun the workflow with `deploy_all`, or add it with
 `gcloud run services add-iam-policy-binding SERVICE --region=$REGION --member=serviceAccount:$RUNTIME_SA --role=roles/run.invoker`.
 
-## 8d. report-api: Gemini allowance and generation slots (Codex F03)
+## 8d. report-api: Gemini allowance and generation slots
 
-report-api counts every outbound Gemini call (report rewrite, classify, answer, translation, value extraction, Google
-Search) in Firestore **before** sending it, and refuses calls over the allowance: the report and follow-up then answer
-from the program's checked drafts (200, warning `generation_degraded`, `X-Report-Mode: drafts`). Failed and timed-out
-calls count; nothing is refunded. Code: `services/report-api/app/protection.py`.
+report-api counts every outbound Gemini call (summary rewrite, classify, answer, translation, value extraction, Google
+Search) in Firestore **before** sending it, and refuses calls over the allowance: the summary and the follow-up answers
+then come from the program's checked drafts (200, warning `generation_degraded`, `X-Report-Mode: drafts`). Failed and
+timed-out calls count; nothing is refunded. Code: `services/report-api/app/protection.py`.
 
 Firestore documents (Native mode, default database; created on first use):
 
@@ -447,7 +459,7 @@ Firestore documents (Native mode, default database; created on first use):
 | `protection/control` | `disabled` (bool, set by hand), `event_calls` (int, whole judging period), `event_searches` (int), `updated_at` |
 | `protection/daily-YYYY-MM-DD` | `date`, `calls` (int; Search calls included), `searches` (int), `updated_at`. One per **UTC** day |
 
-Env (set by the deploy from `targets.json`; defaults in code are the same):
+Env (the deploy sets the values in `targets.json`; the code defaults are the same except `PROTECTION_TIMEOUT_S`):
 
 | Env | Default | Meaning |
 |---|---|---|
@@ -459,8 +471,8 @@ Env (set by the deploy from `targets.json`; defaults in code are the same):
 | `GEMINI_MAX_OUTPUT_TOKENS` | `2048` | `max_output_tokens` on every call (thinking tokens included) |
 | `GEMINI_INPUT_MAX_BYTES` | `32000` | Larger prompts (UTF-8 bytes) are not sent (drafts) and not counted |
 | `REPORT_DEGRADED` | `false` | `true`: never call Gemini, drafts only (no Firestore read) |
-| `PROTECTION_TIMEOUT_S` | `1` | Time for the allowance transaction; slower, unavailable or conflicting: the call is refused |
-| `REPORT_CACHE_SIZE`, `REPORT_CACHE_TTL_S` | `100`, `600` | /v1/report result cache per instance (not in `targets.json`; 0 turns it off). Only Gemini reports without web-search inputs |
+| `PROTECTION_TIMEOUT_S` | `1` in code, `3` on Cloud Run (`targets.json`) | Seconds for the allowance transaction; slower, unavailable or conflicting: the call is refused |
+| `REPORT_CACHE_SIZE`, `REPORT_CACHE_TTL_S` | `100`, `600` | /v1/report result cache per instance (not in `targets.json`; 0 turns it off). It stores only answers in mode `gemini`, and never a request whose inputs carry a web-search value |
 
 Firestore unavailable, missing permission or a slow transaction: **every call is refused** (drafts), never allowed.
 `$RUNTIME_SA` needs `roles/datastore.user` (section 3), which it already has for rules-api and the jobs.
@@ -475,7 +487,8 @@ Operations:
   `disabled`, `backend_error`, `degraded`, `prompt_too_large`) and `busy`; refused calls log `allowance_refused`,
   busy refusals `busy_rejected`, Firestore failures `allowance_backend_error`.
 - The deploy smoke test treats a drafts answer with `X-Report-Degraded-Reason` `allowance_daily`, `allowance_event` or
-  `disabled` as a warning (the allowance may be used up for the day), any other reason as a failure (section 4 above).
+  `disabled` as a warning (the allowance may be used up for the day), any other reason as a failure (section 6,
+  step 4).
 
 ## 9. Cloud Run jobs
 
@@ -485,7 +498,8 @@ Deployed (created or updated) by the workflow, never executed by it:
   `GEMINI_MODEL=gemini-3.5-flash-lite`, secret `GEMINI_API_KEY`. Created but **not scheduled** (section 10). 2Gi is only
   needed if a bank is switched to `render: browser`.
 - **kb-refresh**: `--memory=512Mi --max-retries=1 --task-timeout=15m`, `DATA_BACKEND=firestore`. It needs no Gemini
-  secret (only `DATA_BACKEND` is read) and no browser. Scheduled weekly (section 10).
+  secret (it reads `DATA_BACKEND`; `KB_ROOT`, `KB_SEED_DIR` and `OUT_DIR` are optional overrides for local runs) and no
+  browser. Scheduled weekly (section 10).
 
 Smoke test once by hand after the first deploy, then check the Firestore `job_runs` collection (with no bank marked
 `tos_status=allowed`, rates-refresh fetches nothing, writes no snapshot and records `skipped_by_policy` in `job_runs`):
@@ -529,9 +543,10 @@ gcloud scheduler jobs create http kb-refresh-weekly \
 
 ## 11. Calling private services (service-to-service auth)
 
-rules-api and property-api reject unauthenticated requests. The caller (web) runs on Cloud Run as the default runtime
-service account, fetches an ID token from the metadata server with `audience` = the private service's URL, and sends
-it as a Bearer token. The calling identity needs `run.invoker` on the target (the workflow grants it).
+rules-api, property-api and report-api reject unauthenticated requests. The callers (web, and report-api when it calls
+rules-api) run on Cloud Run as the default runtime service account, fetch an ID token from the metadata server with
+`audience` = the private service's URL, and send it as a Bearer token. The calling identity needs `run.invoker` on the
+target (the workflow grants it).
 
 Python (no extra deps beyond `requests`):
 
@@ -589,13 +604,15 @@ Budgets only alert, they do not stop spending. Adjust the amount (and currency t
 SBS Bank, Unity, Nelson Building Society and NZHL (ASB-written, own rates page).
 
 Each lender carries `tos_status` (`allowed`, `unclear` or `prohibited`), `tos_url`, `tos_checked_at` and `tos_note`
-from a review of its website terms and robots.txt on 2026-10-03 (not legal advice). The job only fetches banks
+from a review of its website terms and robots.txt on 2026-10-03 (not legal advice); `tos_url` is null for the four
+lenders where no terms page was found (ASB, Co-operative Bank, Unity, Nelson Building Society). The job only fetches banks
 marked `allowed`. As of that review none is: NZHL is `prohibited` (its terms name scraping and automation), the other
 ten are `unclear` (no written permission, no explicit ban). Those rows are updated by hand, see `RATES_UPDATE.md`.
 
 Fetch behaviour for allowed banks: honest `User-Agent` (`home-in-brief/0.1 (+repo URL)`), robots.txt is read first
-and a Disallow means no request, and a 401/403/429 or an Imperva/Incapsula/Cloudflare challenge page is final (the
-bank is recorded as blocked and keeps its old data; there is no retry through a browser). Playwright is used only for a
+and a Disallow means no request, and a 401, 403, 406, 429 or 503, or a challenge page (Imperva/Incapsula, a captcha
+or a "verify you are human" page), is final (the bank is recorded as blocked and keeps its old data; there is no retry
+through a browser). Playwright is used only for a
 bank that is `allowed` and sets `render: browser` because its rates need JavaScript.
 
 Adding a lender means one entry in `banks.yaml` (start with `tos_status: unclear`) and a row in `data/rates_seed.json`.

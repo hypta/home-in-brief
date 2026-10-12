@@ -1,7 +1,7 @@
 """Shared exterior-cladding table: the one list the web form and the report-api follow-up both use.
 
-Source: LINZ Rating Valuations Rules 2008, Table 10 (13 wall materials), as used by teammate A's form
-(services/web/app/static/index.html, the #cladding <select>). tests/test_cladding_consistency.py in report-api
+Source: LINZ Rating Valuations Rules 2008, Table 10 (13 wall materials), as used by the web form
+(services/web/app/static/index.html, the #cladding <select>). tests/test_cladding.py in report-api
 fails if the form's option values drift from VALUES below.
 
 Only "monolithic" (Roughcast, stucco or texture coat) counts as monolithic cladding; it is the only value that

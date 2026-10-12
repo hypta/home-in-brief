@@ -58,7 +58,7 @@ def _http_error(_: Request, exc: StarletteHTTPException) -> JSONResponse:
 
 @app.exception_handler(Exception)
 def _unhandled(_: Request, exc: Exception) -> JSONResponse:
-    # class and frames only, never the message (Codex R7; obs.safe_traceback)
+    # class and frames only, never the message (obs.safe_traceback)
     # no exc_info: any handler, not only obs.JsonFormatter, would print the message with the traceback
     log.error("unhandled error", extra={"json_fields": {"exception": obs.safe_traceback(exc)}})
     return _error(500, "internal_error", "Internal server error.")
@@ -70,7 +70,7 @@ def health() -> dict:
 
 
 def _degraded_header(response: Response) -> None:
-    """X-Report-Degraded-Reason (Codex R3): only when the answer fell back to drafts after a refused or failed
+    """X-Report-Degraded-Reason: only when the answer fell back to drafts after a refused or failed
     model call or for lack of time (obs.DEGRADED_REASONS)."""
     reason = obs.degraded_reason()
     if reason:
@@ -80,7 +80,7 @@ def _degraded_header(response: Response) -> None:
 @app.post("/v1/report", response_model=Report, responses=ERRORS)
 def report(req: ReportRequest, request: Request, response: Response) -> Report:
     response.headers["Cache-Control"] = "no-store"
-    # One deadline for the whole request (Codex R1): REQUEST_DEADLINE_S, or web's X-Request-Deadline-Ms if smaller.
+    # One deadline for the whole request: REQUEST_DEADLINE_S, or web's X-Request-Deadline-Ms if smaller.
     # The KB read, the wait for an identical request in flight, the reservation and the call all count against it.
     with gemini.request_budget(request.headers) as budget:
         kbd = load_kb(req, budget)
@@ -116,9 +116,9 @@ def _cached_report(req: ReportRequest, response: Response, kbd, k: str, budget: 
 
 
 def _generate_report(req: ReportRequest, response: Response, kbd=None) -> Report:
-    with protection.generation_slot():  # 503 busy at once when GENERATION_SLOTS requests are running (Codex F03)
+    with protection.generation_slot():  # 503 busy at once when GENERATION_SLOTS requests are running
         rep = build_report(req, debug=obs.attach(Debug()), kbd=kbd)
-    response.headers["X-Report-Mode"] = obs.mode()  # gemini | drafts | mock (deploy smoke test, Codex F06)
+    response.headers["X-Report-Mode"] = obs.mode()  # gemini | drafts | mock (deploy smoke test)
     _degraded_header(response)
     return rep
 

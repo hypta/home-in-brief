@@ -306,7 +306,7 @@ function summary({ctx, rules, rulesError, kb, report: r, reportError: err, done,
     + (drafts ? `<p class="muted">The model was not used for this summary. These sentences are the program's own, written from the same facts.</p>` : "")
     + `<details class="how"${first ? " open" : ""}><summary>How this summary is made</summary><ol>
       <li>The program collects the facts from council and LINZ records, your loan figures and the notes that apply.</li>
-      <li>The model rewrites them as three to five plain sentences. It never sees a figure: the program fills those in.</li>
+      <li>Gemini, Google's AI model, rewrites them as three to five plain sentences. It never sees a figure: the program fills those in.</li>
       <li>Each sentence is checked against the sources it cites. One that fails is replaced by the program's own wording.</li></ol>
       ${drafts ? "" : reworded(r.dropped)}
       <p class="muted">The check compares wording and figures. It cannot judge everything a sentence means, so open the sources of any sentence that matters to you.</p></details>`

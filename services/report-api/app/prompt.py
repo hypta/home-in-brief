@@ -1,7 +1,7 @@
-"""The fact list and the Gemini prompt for the report summary (out/golden/WRITER_BRIEF.md and RUBRIC.md).
+"""The fact list and the Gemini prompt for the report summary.
 
 Code reads the three documents and writes each topic as a fact (facts.Fact): a draft sentence whose values are
-placeholders ({{F1.flood_plain_pct}}), the ids it cites, and whether it is a RUBRIC must-mention. Gemini rewrites
+placeholders ({{F1.flood_plain_pct}}), the ids it cites, and whether it is a must-mention. Gemini rewrites
 the facts freely (3-5 sentences, facts may be merged) but writes values only as placeholders; code fills them in.
 validator.check_rewrite checks every rewrite, and a blocked one falls back to its facts' drafts (service.py).
 """
@@ -79,8 +79,8 @@ HOUSEHOLD = {"single": "a single buyer", "single_with_dependants": "a single buy
              "multiple": "multiple buyers"}
 MISSING = ("not_found", "unavailable")
 
-# Where a chat-supplied value came from (user_inputs.chat_supplied_source, to be set by web from the follow-up's
-# user_supplied_source; not wired in web yet). "web_search": extracted by code from a Google Search answer (team decision 10/11, plan C);
+# Where a chat-supplied value came from (user_inputs.chat_supplied_source, set by web from the follow-up's
+# user_supplied_source). "web_search": extracted by code from a Google Search answer;
 # facts then say "found online" instead of "you gave", and the prefix names the web search.
 USER, WEB_SEARCH = "user", "web_search"
 _TOPIC_FIELD = {"build_era": "year_built", "cladding": "cladding"}
@@ -130,8 +130,8 @@ def words(text: str) -> int:
 MAX_TOPICS = 5
 MERGED_MAX_WORDS = MAX_WORDS - 1  # a merged draft leaves one word of slack
 
-# Display order follows RUBRIC 1. Priority decides which topics are must-mentions within the 5-sentence cap: the
-# RUBRIC 8 must-mentions first (hazards that intersect, lending meaning, First Home Loan, title, non-residential
+# Display order is fixed (O_* below). Priority decides which topics are must-mentions within the 5-sentence cap: the
+# core topics first (hazards that intersect, lending meaning, First Home Loan, title, non-residential
 # use, build era with a KB note or a user fact, not checked), then High landslide ratings, other hazard layers, a
 # bare council decade and an unflagged lending sentence. Facts outside the cap, and the user-input meaning facts,
 # are optional extras for Gemini (must=False).
@@ -444,7 +444,7 @@ def _topics(req: ReportRequest, ev: Evidence, kb_items: dict[str, dict]) -> list
     elif uy is not None:
         u = _Topic(O_USER, P_ERA, "user_year", user=True, fields=("year_built",))
         if "kb_leaky_build_era" in user_leaky and clad_ok:
-            # both leaky-building items from what the user told us: one sentence names both (RUBRIC 3, user facts)
+            # both leaky-building items from what the user told us: one sentence names both
             out.append(u.set(f"The year {yg} and the monolithic cladding are both discussed in Settled.govt.nz's "
                              "guidance on leaky buildings; public data could not confirm them.",
                              ["ac_property_page", "kb_leaky_build_era", "kb_monolithic_cladding"],
@@ -542,7 +542,7 @@ def _select(out: list[_Topic]) -> tuple[list[_Topic], list[_Topic]]:
 
 
 def fact_list(req: ReportRequest, ev: Evidence, kb_items: dict[str, dict]) -> list[Fact]:
-    """The summary facts in display order (RUBRIC 1), ids F1, F2, ... At most MAX_TOPICS have must=True."""
+    """The summary facts in display order, ids F1, F2, ... At most MAX_TOPICS have must=True."""
     keep, optional = _select(_topics(req, ev, kb_items))
     musts = {id(t) for t in keep}
     ordered = sorted(keep + optional, key=lambda t: (t.order, t.prio))
@@ -641,7 +641,7 @@ def followup_facts(req: ReportRequest, ev: Evidence, kb_items: dict[str, dict],
                    used: Optional[dict[str, Any]] = None) -> list[Fact]:
     """The summary fact list (same ids) plus: each selected KB claim, found property values, fields and hazard
     layers that could not be checked, other hazard layers, and the value the user just told us (only with the KB
-    items it selected, P-V3). None of these is a must-mention."""
+    items it selected). None of these is a must-mention."""
     base = fact_list(req, ev, kb_items)
     chat = req.chat_supplied()
     extra: list[_Topic] = []

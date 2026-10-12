@@ -1,7 +1,7 @@
 """property-api answers `source_unavailable` for any read failure (the real cause stays in its log unless
 REASON_DETAIL=on). The council-page fields and hazard layers must read like the council_site_refuses_this_server case.
 
-Input: tests/data/case1_source_unavailable.json, out/golden/inputs_council_off/case1 with that reason, English only.
+Input: tests/data/case1_source_unavailable.json (case1 with that reason, English only).
 """
 import copy
 import json

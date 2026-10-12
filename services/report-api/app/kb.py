@@ -122,7 +122,7 @@ def _cached(key: str, fetch):
 
 def _load_remote(ids: list[str], timeout: float) -> KbData:
     base = os.environ.get("RULES_API_URL", "http://localhost:8080").rstrip("/")
-    end = time.monotonic() + max(0.5, min(5.0, timeout))  # every request below shares this limit (Codex R1)
+    end = time.monotonic() + max(0.5, min(5.0, timeout))  # every request below shares this limit
 
     def left() -> float:
         t = end - time.monotonic()

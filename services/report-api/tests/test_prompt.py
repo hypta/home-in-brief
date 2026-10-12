@@ -84,7 +84,7 @@ def _eval_module():
 
 @pytest.mark.parametrize("case", CASES)
 def test_drafts_cover_every_rubric_must_mention(case):
-    """RUBRIC 8 must / must-not checks hold on the drafts alone (plus the code-written no-loan sentence)."""
+    """The must / must-not checks hold on the drafts alone (plus the code-written no-loan sentence)."""
     from app import assemble
 
     ev_mod = _eval_module()

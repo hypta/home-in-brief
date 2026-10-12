@@ -1,4 +1,4 @@
-"""Team A's four reports (10/12): a loan question the report has no loan facts for, near-duplicate First Home Loan
+"""Four cases: a loan question the report has no loan facts for, near-duplicate First Home Loan
 next steps, display names in not_found_notes, and the CODES.md wording for the two unavailable property codes."""
 import copy
 

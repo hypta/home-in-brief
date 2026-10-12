@@ -127,7 +127,7 @@
           }
         },
         {
-          "name": "1. Spec sample (§6.2/6.3): CV $1,000,000, deposit $120k, income $150k, debts $30k",
+          "name": "1. CV $1,000,000, deposit $120k, income $150k, debts $30k",
           "request": {
             "method": "POST",
             "header": [
@@ -529,7 +529,7 @@
           }
         },
         {
-          "name": "GeoJSON for the development map (not part of the hand-off contract)",
+          "name": "GeoJSON for the page's map (not part of PropertyContext)",
           "request": {
             "method": "GET",
             "header": [],

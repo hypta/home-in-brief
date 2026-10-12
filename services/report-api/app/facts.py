@@ -5,7 +5,7 @@ such as {{F1.flood_plain_pct}}. Gemini rewrites the facts in its own words but m
 placeholders, which code fills in (validator.check_rewrite checks every rewrite). A blocked rewrite falls back
 to the facts' drafts, so the must-mention facts are always in the summary.
 
-The KB clauses are short, attributed paraphrases of KB claims (REVIEW_real_gemini.md: free paraphrases became
+The KB clauses are short, attributed paraphrases of KB claims (free paraphrases by the model became
 "rules do not apply"). Each must stay true to the KB item's claim_en, keep its attribution, and be short enough
 that a full sentence stays within validator.MAX_WORDS. Publisher names are followed by "says", "discusses" or
 "guidance" so the validator's URL check accepts them.
@@ -111,10 +111,10 @@ class Fact:
     topic: str = ""
     priority: int = 99            # lower is more important
     user: bool = False            # relies on chat-supplied facts: code adds "Based on what you told us, "
-    must: bool = False            # a RUBRIC must-mention: always in the summary (draft if not rewritten)
-    order: int = 0                # display order (RUBRIC 1)
+    must: bool = False            # a must-mention: always in the summary (draft if not rewritten)
+    order: int = 0                # display order
     keep: list[str] = field(default_factory=list)  # extra phrases a rewrite must keep (besides validator.QUALIFIERS)
-    program: bool = False         # follow-up only: shown as its draft, never rewritten (prompt.program_facts)
+    program: bool = False         # follow-up only: shown as its draft, never rewritten (prompt._program_topics)
     # The chat-supplied fields ("year_built", "cladding") the fact depends on: a sentence using a fact whose field
     # came from a web search gets the web-search prefix (prompt.from_web).
     fields: list[str] = field(default_factory=list)
