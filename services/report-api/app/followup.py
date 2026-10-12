@@ -134,7 +134,10 @@ class FollowupResponse(BaseModel):
 class ClassifyOut(BaseModel):
     language: str = "en"
     out_of_scope: bool = False
+    # a fact public web pages can state (any topic, never advice); see search_eligible
     searchable: bool = False
+    advice: bool = False  # asks whether to buy/offer, whether a price is good, for a verdict or personal advice
+    reaction: bool = False  # only reacts to the last answer ("are you sure?"); see resolve_question
     year_built: Optional[str] = None
     cladding: Optional[Literal[cladding_table.VALUES]] = None  # type: ignore[valid-type]  # the 13 shared values
     hypothetical: bool = False
@@ -667,6 +670,100 @@ def fallback_links(question: str, link_ids: list[str]) -> list[str]:
     return got or link_ids[:1]
 
 
+# ---- who may be searched for -------------------------------------------------------------------------
+# Google Search answers are shown as returned, so what may be searched for is decided before any search, by code as
+# well as by classify: a question that asks for advice or a prediction, or for a figure the report already holds, is
+# never sent to a search, whatever the topic or the scope classify gave it.
+_ADVICE_EN = re.compile(
+    r"\bshould (?:i|we) (?:buy|purchase|offer|bid|make an offer|go for|get (?:this|it)|take (?:this|it)|walk away|pass|"
+    r"proceed|sign|pay)\b|\bwhat (?:should|shall) (?:i|we) (?:offer|bid|do)\b|\bhow much (?:should|shall) (?:i|we) "
+    r"(?:offer|bid|pay)\b|\b(?:good|bad|great|fair|reasonable|wise|smart) (?:price|deal|buy|investment|purchase|value|"
+    r"offer|time to buy)\b|\b(?:is|was|would) (?:it|this|that|the (?:house|home|property|place)) (?:a )?(?:good|bad|wise|"
+    r"smart) (?:idea|move|choice|decision)\b|\bworth (?:buying|it|the (?:price|money|asking))\b|"
+    r"\b(?:over|under)-?(?:priced|valued)\b|\bbargain\b|\brip-?off\b|\b(?:do you |would you )?(?:recommend|advise|suggest) "
+    r"(?:me |that i |i |us )?(?:to )?(?:buy|buying|purchase|purchasing|this|it)\b", re.I)
+_ADVICE_CJK = re.compile(
+    r"該買|该买|該不該買|该不该买|要不要買|要不要买|應不應該買|应不应该买|買不買|买不买|值不值得|值得買|值得买|值得投資|值得投资|"
+    r"划算|划得來|划得来|可以買嗎|可以买吗|適合買|适合买|推薦我|推荐我|建議我|建议我|建議買|建议买|該出價|该出价|出價多少|出价多少|"
+    r"要出多少|買うべき|買った方が|買っても(?:いい|大丈夫)|買うか|お買い得|お得|割安|割高|사야|살까|사도 (?:될|돼)|살 만|추천해")
+# A question about a prediction or what the home is worth: answered from the records or not at all, never searched.
+_NO_SEARCH = re.compile(
+    r"\bworth\b|\bwill (?:the |house |property )?(?:prices?|market|values?|it) (?:rise|fall|go|increase|drop|be worth)\b|"
+    r"\bfuture (?:price|value)s?\b|\bpredict|\bforecast|\binvestment (?:return|advice)s?\b|\bresale value\b|"
+    r"會漲|会涨|會跌|会跌|漲價|涨价|升值|增值|預測|预测|值多少|投資報酬|投资回报|未來房價|未来房价", re.I)
+# "my LVR": the buyer's own figure, which the report calculates (prompt.PERSONAL_LVR); not "What is LVR?"
+_MY_LVR = re.compile(
+    r"\b(?:my|our)\s+(?:[\w-]+\s+){0,2}(?:high-)?(?:LVR|loan[- ]to[- ]value)|\b(?:LVR|loan[- ]to[- ]value)\b[^.?!]{0,20}"
+    r"\b(?:for me|of mine|is mine)\b|(?:我的|我們的|我们的|咱們的)[^。？?，,]{0,6}(?:LVR|貸款成數|贷款成数|貸款比例|贷款比例|借貸比|借贷比)|"
+    r"(?:私|わたし)の[^。？?]{0,6}(?:LVR|ローン)|내 [^.?]{0,6}LVR", re.I)
+_REACTION_ONLY = re.compile(
+    r"^\W*(?:are you sure|really|why|how come|tell me more|more|explain|what do you mean|source|sure|你確定嗎|你确定吗|確定嗎|"
+    r"确定吗|真的嗎|真的吗|為什麼|为什么|為甚麼|再說|再说|詳細說|详细说|もっと|本当|확실|왜)\W*$", re.I)
+
+
+def is_advice(question: str) -> bool:
+    return bool(_ADVICE_EN.search(question) or _ADVICE_CJK.search(question))
+
+
+def personal_lvr_question(question: str) -> bool:
+    return bool(_MY_LVR.search(question))
+
+
+def no_search_question(question: str) -> bool:
+    return bool(_NO_SEARCH.search(question) or personal_lvr_question(question))
+
+
+def _is_short(text: str) -> bool:
+    t = text.strip()
+    return len(t) <= 40 and len(t.split()) <= 8
+
+
+def resolve_question(question: str, history: list[dict], c: "ClassifyOut") -> str:
+    """The question a short reaction ("Are you sure?", "你確定嗎") is about: the last earlier user turn that is not itself
+    a bare reaction. Only when classify says it is a reaction and it is short. The history holds role and text only,
+    so the origin of the earlier answer (records or search) is not known; the earlier question is asked again, which
+    sends it down the same route it took the first time (a definition the facts do not hold is searched again)."""
+    if not c.reaction or not _is_short(question):
+        return question
+    turns = [t["text"].strip() for t in history if t.get("role") == "user" and (t.get("text") or "").strip()]
+    for t in reversed(turns):
+        if not _REACTION_ONLY.match(t):
+            return t[:1000]
+    return question
+
+
+def search_eligible(c: "ClassifyOut", question: str) -> bool:
+    """A factual question public web pages can answer, whatever its scope: not advice (classify's flag or the keywords),
+    not a prediction or a worth, not the buyer's own figure, and, when classify
+    says the tool does not cover it, flagged searchable. An in-scope question (the facts could not answer it) needs only
+    the first part. The decision does not depend on the tool's scope alone: `searchable` mattered only out of scope
+    before."""
+    if c.advice or is_advice(question) or no_search_question(question):
+        return False
+    return c.searchable if c.out_of_scope else True
+
+
+# ---- the language of a Google Search answer -------------------------------------------------------------
+_EN_WORDS = re.compile(r"\b(?:the|and|is|are|of|to|in|for|with|that|this|from|at|as|what|about|it|by|an|which|has|be|can|"
+                       r"you|your)\b", re.I)
+
+
+def web_language(text: str, asked: str) -> str:
+    """The language a search answer is actually written in, for the response's `language` (the text is never changed). The
+    answer should be in the asker's language; when it is not, the label says what it is: kana -> ja, Hangul -> ko,
+    Han -> zh-Hant / zh-Hans (the asker's variant when it is Chinese), no CJK script -> en. A Latin-script language other
+    than English is told apart from English by common English words."""
+    if _KANA_RE.search(text):
+        return "ja"
+    if _HANGUL_RE.search(text):
+        return "ko"
+    if _HAN_RE.search(text):
+        return asked if is_zh(asked) else normalize_language("zh", text)
+    if is_english(asked) or is_cjk(asked):
+        return "en"
+    return "en" if len(_EN_WORDS.findall(text)) >= 3 else asked
+
+
 # ---- REPORT_MOCK=true: no Gemini call ---------------------------------------------------------------
 _MOCK_OOS = re.compile(r"school|\bzon(?:e|es|ing)\b|commute|commuting|crime|neighbou?r|traffic|investment return|"
                        r"學區|學校|校區|通勤|治安|犯罪|鄰居|交通|学区|学校|通勤|治安", re.I)
@@ -1133,7 +1230,7 @@ _FHL_Q = re.compile(r"first[- ]home[- ](?:loan|buyer|scheme)|\bFHL\b|k[aā]inga 
                     r"ファーストホームローン|첫 ?주택 ?대출", re.I)
 _LOAN_Q = re.compile(r"\bloans?\b|mortgage|borrow|repayments?|\bLVR\b|\bDTI\b|deposit|interest rate|lender|lending|"
                      r"貸款|贷款|房貸|房贷|還款|还款|月供|頭期款|头期款|首付|利率|借多少|ローン|返済|頭金|대출|상환", re.I)
-_LOAN_TOPICS = frozenset({"lending", "lending_debts", "first_home_loan", "user_input", "kb:lending"})
+_LOAN_TOPICS = frozenset({"lending", "lending_debts", "first_home_loan", "user_input", "kb:lending", "personal_lvr"})
 INSUFFICIENT_EN = "This page does not have enough data to answer this question."
 INSUFFICIENT_ZH = ("這裡沒有足夠的資料可以回答這個問題。", "这里没有足够的资料可以回答这个问题。")
 _NEED = {"price": ("the price", "价格", "價格"), "deposit": ("the deposit", "头期款", "頭期款"),
@@ -1281,6 +1378,17 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
         supplied.pop(k)
     sources = {k: USER for k in supplied}
     links = [i for i in dict.fromkeys(c.links) if i in link_ids][:3]
+    # A short reaction is the earlier question asked again. Advice (classify's flag or the keywords, in the question
+    # or in the one it reacts to) is declined before anything else: not a field search, not a Google Search.
+    original = question
+    if not button:
+        question = resolve_question(question, history, c)
+        if question != original:
+            debug["resolved_question"] = question
+        if c.advice or is_advice(question) or is_advice(original):
+            c = c.model_copy(update={"out_of_scope": True, "searchable": False, "advice": True})
+    search_ok = bool(button) or search_eligible(c, question)
+    debug["search_eligible"] = search_ok
 
     def no_search() -> None:
         """A search was called for and gave no answer (refused, failed, quota 429, no key or other setting error, out
@@ -1289,15 +1397,19 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
         if not protection.degraded() and SEARCH_UNAVAILABLE not in warnings:
             warnings.append(SEARCH_UNAVAILABLE)
 
-    def searched(out_of_scope: bool) -> Optional[FollowupResponse]:
+    def searched(out_of_scope: bool, why: str) -> Optional[FollowupResponse]:
         """The whole reply from a Google Search (fp.web_prompt): for a question the report does not cover, or one no
         fact answers. None when search is off (eval, strict or mock mode) or gave no answer; the latter is named in
         warnings.
         The model does not always search: asked once more, time allowing, when the answer names no source. Neither
         call gets all the time that is left: web, the caller, has its own limit for the whole request. The search limit
-        is shared with the field search: at most gemini.MAX_SEARCHES calls per request."""
+        is shared with the field search: at most gemini.MAX_SEARCHES calls per request. Every entry comes through here,
+        and none searches a question that is not eligible (search_eligible): `why` names the entry for debug["route"]."""
         address = str((req.property_context.get("address") or {}).get("matched") or "")
+        if not search_ok:
+            return None
         if mock or not (web_search and refusal_mode == "exempt" and address):
+            debug.setdefault("search_wanted", []).append(why)  # eval runs, strict and mock mode: the route that would search
             return None
         prompt = fp.web_prompt(address, question, history)
         try:
@@ -1307,9 +1419,11 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
             web = None
         if not web:
             no_search()
+            debug.setdefault("search_failed", []).append(why)
             return None
-        return FollowupResponse(language=language, answer=[], out_of_scope=out_of_scope, user_supplied=supplied,
-                                links=links, dropped=0, warnings=warnings, web=web)
+        debug["route"] = "web:" + why
+        return FollowupResponse(language=web_language(web.text, language), answer=[], out_of_scope=out_of_scope,
+                                user_supplied=supplied, links=links, dropped=0, warnings=warnings, web=web)
 
     def insufficient_answer(eff: ReportRequest, kind: Optional[str]) -> Optional[tuple[list[Sentence], str]]:
         """The fixed "not enough data" answer in the asker's language (English or code-written Chinese; another
@@ -1395,6 +1509,9 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
                                                              "; it selected no extra fact, so do not write the value."))
         elif ev.user_kb:
             notes.append("Facts with \"user\": true depend on what the user told us earlier (unverified).")
+        if question != original:
+            notes.append("The buyer only reacted to the last answer; the QUESTION is the earlier question they asked. "
+                         "Answer it again from the facts.")
 
         # Program sentences comparing the user's value with the property value (both values, cited).
         # Chinese wording is written by code; other non-English languages translate the English sentence later.
@@ -1418,17 +1535,18 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
         dropped, out_links = 0, []
         last: Optional[ReportError] = None
         limit = max(0, MAX_ANSWER - len(fixed))
-        all_facts = facts_prompt.followup_facts(eff, ev, data.items, said)
+        all_facts = facts_prompt.followup_facts(eff, ev, data.items, said, personal_lvr=personal_lvr_question(question))
         kind = loan_topic(question)
         if kind and not fixed and not used and not loan_facts(all_facts, kind):
             # a search first (what a First Home Loan is, how a loan works); the fixed sentences when it
             # gives nothing
-            online = None if after_search else searched(False)
+            online = None if after_search else searched(False, "loan_without_facts")
             if online:
                 return online
             got = insufficient_answer(eff, kind)
             if got:
                 debug["insufficient"] = kind
+                debug["route"] = "insufficient:" + str(kind)
                 return FollowupResponse(language=got[1], answer=got[0], out_of_scope=False, user_supplied=supplied,
                                         user_supplied_source=_sources_out(supplied, sources), links=links,
                                         dropped=0, warnings=warnings)
@@ -1479,12 +1597,13 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
                     # no fact answers it (a definition, a topic the facts do not hold): never facts about something else
                     if after_search:
                         raise ReportError(502, "validation_failed", "No fact answers the question.")
-                    got = searched(False)
+                    got = searched(False, "unanswered")
                     if got:
                         return got
                     sure = insufficient_answer(eff, None)
                     if sure:
                         debug["insufficient"] = "unanswered"
+                        debug["route"] = "insufficient:" + str("unanswered")
                         return FollowupResponse(language=sure[1], answer=sure[0], out_of_scope=False,
                                                 user_supplied=supplied, links=links or fallback_links(question, link_ids),
                                                 dropped=0, warnings=warnings)
@@ -1515,6 +1634,7 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
                 sure = insufficient_answer(eff, None)
                 if sure:
                     debug["insufficient"] = "model_failed"
+                    debug["route"] = "insufficient:" + str("model_failed")
                     if protection.GENERATION_DEGRADED not in warnings:
                         warnings.append(protection.GENERATION_DEGRADED)
                     return FollowupResponse(language=sure[1], answer=sure[0], out_of_scope=False,
@@ -1545,7 +1665,7 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
         def online() -> Optional[FollowupResponse]:
             """The facts gave no sentence that can be shown (every rewrite and draft blocked, or none that could be put
             into the asker's language): a search answer, when one may be made, before an error or an empty reply."""
-            return None if after_search or used or fixed else searched(False)
+            return None if after_search or used or fixed else searched(False, "no_sentence")
 
         if not passed and not fixed:
             got = online()
@@ -1558,6 +1678,7 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
                         lambda p: p.web if p.web is not None else
                         facts_prompt.from_web(p.sentence.source_ids, eff, ev, data.items, p.fields), unavailable)
         out_links = [i for i in dict.fromkeys(out_links + links) if i in link_ids][:3]
+        debug.setdefault("route", "facts")
         fallback = debug.get("fallback")
         if fallback and len(answer) == 1:  # the lead sentence alone: nothing could be said in the asker's language
             got = online()
@@ -1579,12 +1700,14 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
         fields = [button] if missing_field(req, button) else []
     else:
         fields = fields_to_search(question, req, supplied)
-    if fields and web_search and refusal_mode == "exempt" and not classify_failed:
+    if fields and web_search and refusal_mode == "exempt" and not classify_failed and search_ok:
         web = field_search(req, fields, question, history, generate, clock, mock, debug,
                            language if button and not req.question.strip() else "")
         if not web:
             no_search()
+            debug.setdefault("search_failed", []).append("field")
         if web:
+            debug["route"] = "field_search"
             chat = req.chat_supplied()  # values only add: a value the user already gave is never replaced
             kind = multi_unit_kind(req)
             held: dict[str, Any] = {}
@@ -1606,7 +1729,7 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
                                         user_supplied_source=_sources_out(supplied, sources),
                                         links=links or fallback_links(question, link_ids), dropped=0,
                                         warnings=warnings, web=web)
-            only_web = FollowupResponse(language=language, answer=[], out_of_scope=False, user_supplied=supplied,
+            only_web = FollowupResponse(language=web_language(web.text, language), answer=[], out_of_scope=False, user_supplied=supplied,
                                         user_supplied_source=_sources_out(supplied, sources),
                                         links=links or fallback_links(question, link_ids), dropped=0,
                                         warnings=warnings, web=web)
@@ -1624,9 +1747,10 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
 
     # 2. out of scope: an answer from a Google Search when web pages can answer it, else the fixed refusal
     if c.out_of_scope:
-        got = searched(True) if c.searchable else None
+        got = searched(True, "out_of_scope")
         if got:
             return got
+        debug["route"] = "refusal:" + ("advice" if c.advice else "not_searchable" if not search_ok else "search_failed")
         refusal, refusal_lang = Sentence(text=REFUSAL_EN, source_ids=[]), "en"
         if is_zh(language):
             refusal, refusal_lang = Sentence(text=_zh(REFUSAL_ZH, language), source_ids=[]), language
@@ -1637,15 +1761,15 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
                 refusal, refusal_lang = Sentence(text=tidy(got[0], language), source_ids=[]), language
             else:
                 log.info("refusal translation not used; English")
-                if unavailable():
-                    language = "en"  # no model call could be made: the English refusal, said to be English
+                if not mock:
+                    refusal_lang = "en"  # the English refusal, said to be English
         links = links or fallback_links(question, link_ids)
         if refusal_mode == "strict":
             data = _kb(req, clock)
             ev = build_evidence(req, data.items, data.sources.keys(), source_urls=data.sources.urls)
             if check_answer(refusal, ev, refusal_lang):
                 raise ReportError(502, "validation_failed", "No answer sentence passed validation.")
-        return FollowupResponse(language=language, answer=[refusal], out_of_scope=True, user_supplied=supplied,
+        return FollowupResponse(language=refusal_lang, answer=[refusal], out_of_scope=True, user_supplied=supplied,
                                 links=links, dropped=0, warnings=warnings)
 
     return in_scope(question, supplied, sources)

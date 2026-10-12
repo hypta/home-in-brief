@@ -143,12 +143,35 @@ def test_question_about_a_missing_year_searches_extracts_and_reruns_rules(monkey
     assert not any("sale" in s["text"] for s in out["answer"])
 
 
-def test_found_year_is_answered_from_the_records_without_a_search(monkeypatch, search):
+def test_found_year_is_answered_from_the_records_without_any_search(monkeypatch, search):
     monkeypatch.setattr(followup, "call_rules", lambda *a: pytest.fail("no rules re-run"))
+    # a valid sentence from the build-era fact (F6 in case3): the question is answered, so nothing is searched for
+    ok = {"answer": [{"text": "The council dates the building to the {{F6.decade}}.", "fact_ids": ["F6"]}], "links": []}
+    monkeypatch.setattr(followup, "gemini_json", fake(cls(), [ok]))
+    r = post("case3", "When was this place built?")
+    assert r.status_code == 200, r.text
+    out = r.json()
+    assert search.prompts == []  # neither the field search nor the search for an unanswered question
+    assert [s["text"] for s in out["answer"]] == ["The council dates the building to the 1960s."]
+    assert "web" not in out and out["warnings"] == []
+
+
+def test_an_empty_answer_for_a_found_field_is_searched_for_when_the_question_is_eligible(monkeypatch, search):
+    monkeypatch.setattr(followup, "call_rules", lambda *a: pytest.fail("no rules re-run"))
+    search.reply = web("Auckland Council describes the home as built in the 1960s.")
     monkeypatch.setattr(followup, "gemini_json", fake(cls(), [{"answer": [], "links": []}]))
-    post("case3", "When was this place built?")
-    # no search for the field; the fake model gives no sentence at all, and that alone is searched for
+    r = post("case3", "When was this place built?")
+    assert r.status_code == 200, r.text
+    out = r.json()
+    # not the field search (the year is on record) but the search for a question no sentence answered
+    assert len(search.prompts) == 1 and search.prompts[0].startswith(fp.TASK_WEB)
     assert not any(p.startswith(fp.TASK_FIELDS) for p in search.prompts)
+    assert out["web"]["text"] == search.reply.text and out["answer"] == [] and out["language"] == "en"
+    # the same empty answer to a question that asks for advice is not searched for
+    search.prompts.clear()
+    monkeypatch.setattr(followup, "gemini_json", fake(cls(), [{"answer": [], "links": []}]))
+    out = post("case3", "Is this a good price given when it was built?").json()
+    assert search.prompts == [] and "web" not in out and out["out_of_scope"] is True
 
 
 def test_statement_with_a_year_or_value_given_earlier_does_not_search(monkeypatch, search, rules):
@@ -516,8 +539,10 @@ def test_button_without_a_question_uses_the_page_language(monkeypatch, search, r
     out = post("case1", search_field="year_built", language="zh-TW").json()
     assert out["language"] == "zh-Hant"
     assert 'BCP 47 code "zh-Hant"' in search.prompts[0]
+    search.reply = web("OneRoof lists the last sale as March 2019.")  # the label follows the text delivered
     out = post("case1", search_field="last_sale").json()  # no language: English
     assert out["language"] == "en" and 'BCP 47 code "en"' in search.prompts[1]
+    search.reply = web("網頁顯示這棟房子上次成交於 2019 年 3 月。")
     out = post("case1", "這房子上次什麼時候賣出？", search_field="last_sale", language="en").json()
     assert out["language"] == "zh-Hant"  # a question sent with the button gives the language
 
@@ -962,7 +987,8 @@ def test_an_answer_that_cannot_be_put_into_the_askers_language_is_searched_for(m
                "links": []}
     monkeypatch.setattr(followup, "gemini_json", fake(cls("zh-Hant"), [blocked]))
     out = post("case1", followup.REFUSAL_ZH).json()  # a Chinese sentence the program already has, as the question
-    assert out["answer"] == [] and out["web"]["text"] == search.reply.text and out["language"] == "zh-Hant"
+    # the search text is shown as returned and is English, so the response says "en", not the question's language
+    assert out["answer"] == [] and out["web"]["text"] == search.reply.text and out["language"] == "en"
     search.reply = None  # no search answer: the fixed lead sentence, as before
     out = post("case1", followup.REFUSAL_ZH).json()
     assert [s["text"] for s in out["answer"]] == [followup.FALLBACK_NONE["zh-Hant"]] and "web" not in out

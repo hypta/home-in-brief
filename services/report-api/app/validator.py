@@ -94,6 +94,9 @@ class Evidence:
     kb_topics: dict[str, str] = field(default_factory=dict)
     allowed: dict[str, list[Allowed]] = field(default_factory=dict)
     computed: set[Decimal] = field(default_factory=set)
+    # follow-up only: a value rules-api calculated that one typed fact may show, bound to the source id it cites (the
+    # buyer's own LVR, prompt.PERSONAL_LVR). Everything else in `computed` stays blocked.
+    typed_computed: dict[str, list[Allowed]] = field(default_factory=dict)
     user_kb: set[str] = field(default_factory=set)
     no_loan: bool = False
     landslide_high: bool = False
@@ -319,6 +322,8 @@ def check_sentence(s: Sentence, ev: Evidence, max_words: Optional[int] = MAX_WOR
         if _matches(n, kb_allowed):
             continue  # a number quoted from a cited KB claim is valid even if it equals a computed value
         if n in ev.computed or n == 0:
+            if n != 0 and _matches(n, [a for i in ids for a in ev.typed_computed.get(i, [])]):
+                continue  # the one typed value the cited source is bound to
             fails.append(COMPUTED_VALUE)
         elif not _matches(n, field_allowed):
             fails.append(NUMBER_NOT_IN_CITED_SOURCES)

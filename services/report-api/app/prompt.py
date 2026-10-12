@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import replace
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, Optional
 
 from b_common import cladding as cladding_table
@@ -638,8 +638,28 @@ def _claim_fact(t: _Topic, kb_id: str, claim: str) -> str:
     return _CLAIM_NUM_RE.sub(rep, claim)
 
 
+PERSONAL_LVR = "personal_lvr"  # Fact.topic of the buyer's own LVR
+
+
+def _personal_lvr(req: ReportRequest, ev: Evidence) -> Optional[_Topic]:
+    """The buyer's own LVR as a typed fact: the ratio rules-api calculated (rules_output.lvr_pct, one decimal), cited to
+    the Reserve Bank LVR source it is measured against. Only with loan data. It is the one computed value a follow-up
+    may show: ev.typed_computed binds it to that source id alone, so the number check stays as strict as before for
+    every other figure. Not the 80% threshold (a different slot, a different fact) and not a definition of LVR."""
+    lvr = to_decimal(req.rules_output.get("lvr_pct"))
+    if lvr is None or ev.no_loan or lvr <= 0 or "rbnz_lvr" not in ev.known_ids:
+        return None
+    lvr = lvr.quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
+    t = _Topic(95, P_EXTRA, PERSONAL_LVR)
+    v = t.slot("lvr_pct", lvr, "pct", "the buyer's own LVR (loan as a percentage of the price), calculated from the "
+               "price and deposit entered", "rbnz_lvr", label="LVR")
+    ev.typed_computed["rbnz_lvr"] = [Allowed(lvr)]
+    return t.set(f"Your LVR, the loan as a share of the price, is {v}, calculated from the price and deposit you entered.",
+                 ["rbnz_lvr"], keep=["Your LVR"])
+
+
 def followup_facts(req: ReportRequest, ev: Evidence, kb_items: dict[str, dict],
-                   used: Optional[dict[str, Any]] = None) -> list[Fact]:
+                   used: Optional[dict[str, Any]] = None, personal_lvr: bool = False) -> list[Fact]:
     """The summary fact list (same ids) plus: each selected KB claim, found property values, fields and hazard
     layers that could not be checked, other hazard layers, and the value the user just told us (only with the KB
     items it selected). None of these is a must-mention."""
@@ -712,6 +732,10 @@ def followup_facts(req: ReportRequest, ev: Evidence, kb_items: dict[str, dict],
     for t in _program_topics(req, ev, kb_items, used or {}):
         if not check_program(Sentence(text=t.rendered(), source_ids=t.cite), ev, t.slots):
             out.append(_fact(t, len(out) + 1, program=True))
+    # last, so no other fact's id moves; only when the question asks for the buyer's own LVR (followup.personal_lvr_question)
+    t = _personal_lvr(req, ev) if personal_lvr else None
+    if t and not check_sentence(Sentence(text=t.rendered(), source_ids=t.cite), ev, max_words=None):
+        out.append(_fact(t, len(out) + 1))
     return out
 
 

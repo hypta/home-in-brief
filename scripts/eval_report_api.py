@@ -216,7 +216,7 @@ def main() -> int:
                     "uses the checks of case1")
     ap.add_argument("--out", default=str(ROOT / "out" / "golden" / "eval"))
     ap.add_argument("--followup", action="store_true", help="real follow-up questions for case1 and case5")
-    ap.add_argument("--questions", nargs="*", help="with --followup: these questions instead of the default three; "
+    ap.add_argument("--questions", nargs="*", help="with --followup: these questions instead of the default ones; "
                     "--inputs and --cases pick the cases")
     args = ap.parse_args()
     if args.followup:
@@ -342,11 +342,41 @@ FOLLOWUP_QUESTIONS = [
     ("en_general", "What do the hazard maps and the title type mean for this property?"),
     ("zh_year_cladding", "這間是 1997 年蓋的，外牆是 monolithic，要注意什麼？"),
     ("out_of_scope", "Is this house in a good school zone?"),
+    ("definition", "What is a LIM report?"),
+    ("advice", "Should I buy this house?"),
+    ("my_lvr", "What is my LVR?"),
 ]
+# What each default question should do, scored apart from the answer's wording. `route`: the route prefix expected
+# (debug["route"]); `search`: whether the question is one the program would send to a Google Search. This eval never
+# searches (answer_followup's web_search is off, and the Gemini API terms do not allow storing real results), so a
+# search is "wanted" when the route reached the search step with an eligible question (debug["search_wanted"]).
+FOLLOWUP_EXPECT = {
+    "en_general": {"route": "facts", "search": False},
+    "zh_year_cladding": {"route": "facts", "search": False},
+    "out_of_scope": {"route": "refusal", "search": True},
+    "definition": {"route": "insufficient", "search": True},
+    "advice": {"route": "refusal:advice", "search": False},
+    "my_lvr": {"route": "facts", "search": False},
+}
+
+
+def route_row(qid: str, dbg: dict) -> dict:
+    """How a follow-up was routed, apart from how well it was answered: the route taken, why it said it could not answer,
+    whether the question may be searched, whether the program would have searched, and (for a default question) whether
+    that matches what is expected. The search-enabled routes themselves are tested with a fake SDK in
+    services/report-api/tests/test_followup_search_routes.py, not here."""
+    route = dbg.get("route") or "facts"
+    wanted = bool(dbg.get("search_wanted"))
+    row = {"route": route, "insufficient": dbg.get("insufficient"), "search_eligible": dbg.get("search_eligible"),
+           "search_wanted": wanted, "search_failed": dbg.get("search_failed")}
+    exp = FOLLOWUP_EXPECT.get(qid)
+    row["expected"] = exp
+    row["route_ok"] = None if exp is None else (route.startswith(exp["route"]) and wanted == exp["search"])
+    return row
 
 
 def followup_eval(out: Path, inputs: Path = FIXTURES, cases=("case1", "case5"), questions=None) -> int:
-    """Each case and question (default: case1 and case5, three questions) through followup.answer_followup (real
+    """Each case and question (default: case1 and case5, the FOLLOWUP_QUESTIONS) through followup.answer_followup (real
     Gemini; the rules-api re-run goes to RULES_API_URL). Writes out/golden/eval/followup_rewrite_<ts>.json."""
     from app import followup
 
@@ -363,10 +393,11 @@ def followup_eval(out: Path, inputs: Path = FIXTURES, cases=("case1", "case5"), 
                 status = 200
             except ReportError as e:
                 resp, status = {"error": {"code": e.code, "message": e.message}}, e.status
+                dbg["route"] = "error:" + e.code
             row = {"case": case, "question_id": qid, "question": q, "status": status,
                    "seconds": round(time.monotonic() - t0, 2), "response": resp,
                    "rewrite": dbg.get("rewrite"), "composed": dbg.get("composed"), "attempts": dbg.get("attempts"),
-                   "program": dbg.get("program")}
+                   "program": dbg.get("program"), **route_row(qid, dbg)}
             if dbg.get("composed"):
                 drafts = {f["id"]: f["draft"] for f in dbg.get("facts", [])}
                 row["similarity"] = [round(difflib.SequenceMatcher(
@@ -374,7 +405,13 @@ def followup_eval(out: Path, inputs: Path = FIXTURES, cases=("case1", "case5"), 
                     for c in dbg["composed"] if c["kind"] == "rewrite"]
             rows.append(row)
             texts = [a["text"] for a in resp.get("answer", [])]
-            print(f"{case} {qid}: HTTP {status} rewrite {dbg.get('rewrite')} {texts}", flush=True)
+            print(f"{case} {qid}: HTTP {status} route {row['route']} (insufficient {row['insufficient']}, search "
+                  f"{'wanted' if row['search_wanted'] else 'not wanted'}, route_ok {row['route_ok']}) "
+                  f"rewrite {dbg.get('rewrite')} {texts}", flush=True)
+    scored = [r for r in rows if r["route_ok"] is not None]
+    if scored:  # routing is scored here and nowhere else: the rewrite columns above say nothing about it
+        print(f"routing: {sum(r['route_ok'] for r in scored)}/{len(scored)} as expected "
+              f"({', '.join(r['case'] + ':' + r['question_id'] for r in scored if not r['route_ok']) or 'none off'})")
     out.mkdir(parents=True, exist_ok=True)
     path = out / f"followup_rewrite_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
     path.write_text(json.dumps(rows, indent=2, ensure_ascii=False) + "\n")

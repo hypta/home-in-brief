@@ -65,8 +65,8 @@ You sort one follow-up question about a property summary for first-home buyers i
 {_UNTRUSTED}
 The QUESTION may be in any language; understand it as asked. Use HISTORY only to see what a short QUESTION refers to.
 A short QUESTION that only reacts to the last answer in HISTORY ("are you sure?", "why?", "tell me more", in any
-language) is about what the question before it asked: give "out_of_scope" and "searchable" the values that earlier
-question gets.
+language) is about what the question before it asked: give "out_of_scope", "searchable" and "advice" the values that
+earlier question gets.
 Sort by what the QUESTION asks for. A remark beside it (a feeling, an opinion, why the asker wonders: "the valuation
 looks odd to me, ...") changes nothing: sort the question as if the remark were not there.
 Return JSON with these keys:
@@ -76,12 +76,18 @@ Return JSON with these keys:
   insurance and EQC/NHC notes, loan and deposit rules (LVR, DTI, First Home Loan), bank rates, buying process
   (auction, LIM, building inspection). Out of scope: schools, school zones, crime, commute, neighbours, future prices,
   investment returns, other properties, anything unrelated to buying this property.
-- "searchable": only matters when "out_of_scope" is true. true for a factual question about living at or near this address,
-  or about buying a home in New Zealand, that public web pages can answer: schools and school zones, commute and
-  public transport, shops and services nearby, published crime statistics, council plans, what stands at this address
-  (how many homes or units, what the building is used for). false when it asks for
-  advice, a verdict or a prediction (whether to buy, what to offer, what the home is worth, future prices,
-  investment returns), for legal or personal financial advice, or is unrelated to this property.
+- "searchable": true when the QUESTION asks for a fact that public web pages can state, whether or not the tool
+  covers the topic: schools and school zones, commute and public transport, shops and services nearby, published
+  crime statistics, council plans, what stands at this address (how many homes or units, what the building is used
+  for), what a term or document is. false for anything that asks for advice, a verdict or a prediction (whether to
+  buy, what to offer, whether a price is good, what the home is worth, future prices, investment returns), for legal
+  or personal financial advice, or that is unrelated to this property.
+- "advice": true when the QUESTION asks whether to buy, offer or bid, whether the price or the deal is good, for a
+  recommendation or a verdict about the property or the purchase, or for legal or personal financial advice, in any
+  language ("Should I buy this house?", "Is this a good price?", "我該買嗎"), even when it also asks a factual
+  question. false for a plain question of fact.
+- "reaction": true when the QUESTION only reacts to the last answer in HISTORY ("are you sure?", "why?", "tell me
+  more", "really?", in any language) and asks nothing new; false for any question with content of its own.
 - "year_built": the year or decade the asker states the building was built, copied exactly as written in the
   QUESTION ("1997" or "1990s"), else null. Never take it from HISTORY.
 - "cladding": one of {list(CLADDING_VALUES)} when the asker states this building's exterior cladding, else null.
@@ -152,6 +158,8 @@ How to answer:
   with facts about something else.
   A question about this property or this buyer (is it in a flood plain, what is my LVR, when was it built) is
   answered by a fact that states it, or says it could not be checked: true. When unsure about such a question: true.
+  "What is my LVR?" asks for this buyer's own figure: only a fact that gives it answers it (not the Reserve Bank
+  threshold, and not a fact that only says the loan is or is not high-LVR).
   A question that asks what a term, a document or a map layer is or means, or how two of them differ ("What is
   LVR?", "What is a LIM report?", "What is a flood plain?") is answered only by a fact that says what it is. A fact
   that only uses the term, gives this property's or this buyer's figure for it, or states a rule or a next step
