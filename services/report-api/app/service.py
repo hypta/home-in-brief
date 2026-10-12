@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 from b_common.report_schemas import Report, ReportRequest, Sentence
 
 from . import assemble, gemini, kb, mock, obs, prompt, protection, rewrite
-from .validator import (MAX_WORDS, PREFIX, WEB_PREFIX, build_evidence, check_rewrite, check_sentence, relies_on_user_input,
+from .validator import (MAX_WORDS, PREFIX, WEB_PREFIX, Rewrite, build_evidence, check_rewrite, check_sentence, relies_on_user_input,
                         validate, with_prefix)
 
 log = logging.getLogger("report-api")
@@ -92,11 +92,15 @@ def _build_report(req: ReportRequest, generate: Optional[gemini.Generator] = Non
         debug.mock_case = case
         model = "mock"
         if case:
-            # The golden reports predate the 25-word limit, so mock sentences skip the length check.
-            verdict = validate(mock.summary_for(case), ev, max_words=None)
-            passed, dropped = verdict.passed, verdict.dropped
-            debug.attempts.append(Attempt(0.0, None, [
-                {"text": s.text, "source_ids": s.source_ids, "fails": f} for s, f in verdict.rejected]))
+            # A known fixture gets the facts' drafts (no model call), through the same checks as a real summary.
+            fs = prompt.fact_list(req, ev, kbd.items)
+            blocked = [Rewrite(None, [f.id], []) for f in fs]
+            items = rewrite.compose(blocked, fs, MAX_SUMMARY, add_musts=True,
+                                    check_draft=lambda s: check_sentence(s, ev, MAX_WORDS))
+            passed, dropped = [it.sentence for it in items], 0
+            user_flags = [it.user for it in items]
+            item_fields = [it.fields for it in items]
+            debug.composed = [{"text": it.sentence.text, "fact_ids": it.fact_ids, "kind": it.kind} for it in items]
         else:
             passed, dropped = [Sentence(text=assemble.MOCK_SENTENCE, source_ids=[])], 0
     else:

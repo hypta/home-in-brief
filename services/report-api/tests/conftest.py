@@ -29,10 +29,6 @@ def load_input(case: str) -> dict:
     return json.loads((FIXTURES / "inputs" / f"{case}.json").read_text(encoding="utf-8"))
 
 
-def load_golden(writer: str, case: str) -> dict:
-    return json.loads((FIXTURES / "golden" / writer / f"{case}.report.json").read_text(encoding="utf-8"))
-
-
 def body(case: str) -> dict:
     d = load_input(case)
     return {k: d[k] for k in ("property_context", "user_inputs", "rules_output")}

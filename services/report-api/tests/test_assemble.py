@@ -18,7 +18,7 @@ def test_not_found_notes_case1_templates():
 
 def test_same_reason_fields_are_merged():
     n = notes("case2")
-    assert len(n) == 3  # 17 fields in the golden reports
+    assert len(n) == 3
     merged = next(v for k, v in n.items() if "," in k)
     assert merged.reason == "no_unique_council_property_match"
     assert merged.field.split(",")[:2] == ["cv", "year_built"]

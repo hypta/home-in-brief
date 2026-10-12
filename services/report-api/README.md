@@ -127,7 +127,7 @@ content beyond extra "says", causes and publishers. For Chinese, Japanese and Ko
 only CJK equivalents of the qualifiers (Chinese, Japanese and Korean lists in `QUALIFIERS`), at least one negation
 when the facts have one, English LVR/DTI/First Home Loan, the publishers, and the slot context words ("over",
 "at least", "times") anywhere in the sentence; there is no order, keep-phrase, added-cause or added-"says" check.
-Mock mode still returns the golden summaries.
+Mock mode returns the facts' drafts (see Mock mode).
 
 ## Follow-up (`app/followup.py`, `app/followup_prompt.py`)
 
@@ -533,10 +533,10 @@ Model text is held tighter because it goes through `check_rewrite`, where values
 
 ## Mock mode
 
-`REPORT_MOCK=true` returns the Claude golden summary for the nine fixtures in `fixtures/inputs/`
-(matched on `property_context.address.matched` and `user_inputs`), through the real validator (without
-the 25-word limit, which postdates the goldens) and the real code-built parts. Other inputs get one
-fixed mock sentence plus the code-built parts.
+`REPORT_MOCK=true` returns the facts' drafts (the `code-draft` sentences, no Gemini call) for the nine fixtures in
+`fixtures/inputs/` (matched on `property_context.address.matched` and `user_inputs`), through the real validator
+(including the 25-word limit) and the real code-built parts. Other inputs get one fixed mock sentence plus the
+code-built parts.
 
 ## Run and test
 
@@ -553,4 +553,3 @@ in git).
 ## Fixtures
 
 `fixtures/inputs/*.json`: the nine golden cases.
-`fixtures/golden/{claude,codex}/*.report.json`: the two reference reports, used by the validator tests and mock mode.

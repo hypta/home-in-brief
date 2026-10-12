@@ -1,7 +1,7 @@
 import json
 
 import pytest
-from conftest import CASES, body, load_golden
+from conftest import CASES, body
 from fastapi.testclient import TestClient
 
 from app import assemble, gemini
@@ -220,16 +220,16 @@ def test_summary_capped_at_five(monkeypatch):
 
 
 @pytest.mark.parametrize("case", CASES)
-def test_mock_returns_golden_summary(case, monkeypatch):
+def test_mock_returns_checked_drafts(case, monkeypatch):
     monkeypatch.setenv("REPORT_MOCK", "true")
     monkeypatch.setattr(gemini, "gemini_generate", fake(gemini.ModelUnavailable("must not be called")))
     r = client.post("/v1/report", json=body(case))
     assert r.status_code == 200, r.text
     rep = r.json()
-    golden = [s["text"] for s in load_golden("claude", case)["summary"]]
     assert rep["model"] == "mock"
-    assert all(s["text"] in golden or s["source_ids"] == [] for s in rep["summary"])
-    assert len(rep["summary"]) >= 3 and len(rep["next_steps"]) <= 6
+    assert rep["summary"] and all(s["text"].strip() for s in rep["summary"])
+    assert all(s["text"] != assemble.MOCK_SENTENCE for s in rep["summary"])
+    assert len(rep["summary"]) <= 5 and len(rep["next_steps"]) <= 6
 
 
 def test_mock_unknown_input(monkeypatch):

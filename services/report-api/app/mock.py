@@ -1,4 +1,4 @@
-"""REPORT_MOCK=true: per-fixture summaries from the Claude golden reports, no Gemini call.
+"""REPORT_MOCK=true: a request that matches a fixture gets the facts' drafts as its summary, no Gemini call.
 
 A request matches a fixture when its matched address and its user_inputs equal the fixture's.
 """
@@ -9,7 +9,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
-from b_common.report_schemas import ReportRequest, Sentence
+from b_common.report_schemas import ReportRequest
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 
@@ -32,7 +32,3 @@ def _index() -> dict[str, str]:
 def match_case(req: ReportRequest) -> Optional[str]:
     return _index().get(_key(req.property_context, req.user_inputs))
 
-
-def summary_for(case_id: str) -> list[Sentence]:
-    d = json.loads((FIXTURES / "golden" / "claude" / f"{case_id}.report.json").read_text(encoding="utf-8"))
-    return [Sentence.model_validate(s) for s in d["summary"]]

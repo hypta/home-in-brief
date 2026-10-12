@@ -1,60 +1,8 @@
 import pytest
 from b_common.report_schemas import Sentence
-from conftest import CASES, evidence, load_golden
+from conftest import evidence
 
 from app import validator as V
-
-# Claude golden sentences that the validator drops on purpose: with no loan (10/10 decision) the program
-# appends a fixed sentence and drops any model sentence about loans. The goldens were written before that.
-CLAUDE_SUPERSEDED = {("edge1", 3): [V.LENDING_WITHOUT_LOAN], ("edge2", 3): [V.LENDING_WITHOUT_LOAN]}
-
-# Codex golden sentences dropped for known problems (out/golden/COMPARISON_zh.md):
-# internal jargon ("standard loan scenario", "rules assessment"), region-wide landslide classes below High
-# (D5) and lending sentences in no-loan cases (D6).
-CODEX_KNOWN = {
-    ("case1", 2): [V.LANDSLIDE_RULE],
-    ("case1", 3): [V.INTERNAL_JARGON],
-    ("case1", 4): [V.INTERNAL_JARGON],
-    ("case2", 3): [V.INTERNAL_JARGON],
-    ("case2", 4): [V.INTERNAL_JARGON],
-    ("case3", 3): [V.INTERNAL_JARGON],
-    ("case4", 1): [V.BANNED_WORD, V.LANDSLIDE_RULE],  # "Unlikely" liquefaction class, Very Low landslide
-    ("case4", 2): [V.INTERNAL_JARGON],
-    ("case4", 3): [V.INTERNAL_JARGON],
-    ("case5", 1): [V.BANNED_WORD, V.LANDSLIDE_RULE],
-    ("edge1", 3): [V.LENDING_WITHOUT_LOAN],
-    ("edge2", 3): [V.LENDING_WITHOUT_LOAN],
-    ("edge3", 3): [V.INTERNAL_JARGON],
-    ("edge3", 4): [V.INTERNAL_JARGON],
-}
-
-
-def _failures(writer, max_words):
-    out = {}
-    for case in CASES:
-        _, _, ev = evidence(case)
-        for n, s in enumerate(load_golden(writer, case)["summary"], 1):
-            fails = V.check_sentence(Sentence(**s), ev, max_words)
-            if fails:
-                out[(case, n)] = fails
-    return out
-
-
-def test_claude_golden_passes_every_rule_except_superseded_no_loan_sentences():
-    assert _failures("claude", None) == CLAUDE_SUPERSEDED
-
-
-def test_claude_golden_length_is_the_only_extra_failure_at_25_words():
-    # The goldens (10/05) allowed up to 40 words; the 25-word limit was decided on 10/10.
-    fails = _failures("claude", V.MAX_WORDS)
-    for key, f in fails.items():
-        assert set(f) - {V.TOO_LONG} == set(CLAUDE_SUPERSEDED.get(key, [])), key
-    assert sum(V.TOO_LONG in f for f in fails.values()) >= 30
-
-
-def test_codex_golden_known_failures():
-    assert _failures("codex", None) == CODEX_KNOWN
-
 
 def chk(case, text, ids, max_words=V.MAX_WORDS):
     _, _, ev = evidence(case)
@@ -125,6 +73,10 @@ def test_good_sentences_pass(case, text, ids):
     ("edge2", "The Reserve Bank limits high-LVR lending.", ["rbnz_lvr"], V.LENDING_WITHOUT_LOAN),
     ("edge2", "No loan scenario applies to this purchase.", ["linz_titles"], V.LENDING_WITHOUT_LOAN),
     ("case1", "   ", ["ac_flood_plains"], V.EMPTY_TEXT),
+    ("case4", "The council's liquefaction layer calls this area Unlikely to liquefy.", ["ac_liquefaction"],
+     V.BANNED_WORD),
+    ("case4", "The standard loan scenario applies to this purchase.", ["rbnz_lvr"], V.INTERNAL_JARGON),
+    ("edge1", "The Reserve Bank limits high-LVR lending for this purchase.", ["rbnz_lvr"], V.LENDING_WITHOUT_LOAN),
 ])
 def test_bad_sentences_are_dropped(case, text, ids, code):
     assert code in chk(case, text, ids)
