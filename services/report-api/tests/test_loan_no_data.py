@@ -109,7 +109,7 @@ def test_chinese_fixed_sentences(monkeypatch, no_rules, lang, question, expect):
     assert not gen.calls["answer"] and not gen.calls["translate"]  # written by code, no model call
 
 
-JA = {"This report does not have enough data to answer this question.":
+JA = {"This page does not have enough data to answer this question.":
       "このレポートには、この質問に答えるためのデータが足りません。"}
 
 

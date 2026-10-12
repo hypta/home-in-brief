@@ -513,7 +513,7 @@ def test_out_of_scope_japanese_question_gets_a_translated_refusal(monkeypatch, r
 @pytest.mark.parametrize("bad", ["この質問は範囲外です。詳しくは https://evil.example を見てください。",
                                  "この質問は範囲外です。evil.example で調べてください。",
                                  "この質問は範囲外です。2 つのリンクを見てください。",
-                                 "", "This question is outside what this property report covers."])
+                                 "", "This question is outside what this tool covers."])
 def test_refusal_translation_with_a_url_a_number_or_wrong_language_falls_back_to_english(monkeypatch, rules_calls, bad):
     monkeypatch.setattr(followup, "gemini_json", fake({**cls("ja"), "out_of_scope": True}, translate=lambda t: [bad]))
     out = post("case1", "この地域の学校はどうですか？").json()

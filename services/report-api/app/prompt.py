@@ -23,7 +23,7 @@ from .validator import (MAX_WORDS, NO_SOURCE_IDS, PREFIX, Allowed, Evidence, che
 
 REWRITE_MAX_WORDS = MAX_WORDS - 3  # asked of Gemini; the validator allows MAX_WORDS
 
-RULES = f"""You write the plain-language summary of a property report for first-home buyers in Auckland, New Zealand.
+RULES = f"""You write the plain-language summary of one property's public records for first-home buyers in Auckland, New Zealand.
 You are given FACTS that code has checked. Rewrite them into a short summary in your own words.
 Return JSON: {{"summary": [{{"text": "...", "fact_ids": ["F1", "F2"]}}]}}.
 
@@ -433,7 +433,7 @@ def _topics(req: ReportRequest, ev: Evidence, kb_items: dict[str, dict]) -> list
             u = _Topic(O_USER, P_ERA, "user_year", user=True, fields=("year_built",))
             year_user = (u, f"the year {yg} differs from the council's property category, which gives "
                          + u.slot("council_year", yb.value, "year", "the year built the council's property "
-                                  "category gives", "ac_property_page") + "; this report uses the council figure")
+                                  "category gives", "ac_property_page") + "; this summary uses the council figure")
         else:
             if leaky:
                 say += ", a period covered by Settled.govt.nz's guidance on leaky buildings"

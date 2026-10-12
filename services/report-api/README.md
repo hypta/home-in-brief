@@ -210,8 +210,10 @@ Steps (INTERFACE_DRAFT 5 and 6.1):
    anything about what was asked (what a term or a map layer means, how two terms differ, a topic the facts do not
    hold). The reply is then never facts about something else: it is a Google Search answer as in step 3 (`web`,
    `answer: []`, `out_of_scope: false`), or, when there is no search (eval, `strict`, no answer), the one fixed
-   sentence "This report does not have enough data to answer this question." (Chinese by code, other languages
+   sentence "This page does not have enough data to answer this question." (Chinese by code, other languages
    by restricted translation) with the fallback links. Not applied when the question states a year or cladding.
+   The same search is made, before an error or a lead sentence with nothing after it, when the facts give no
+   sentence that can be shown: every rewrite and draft blocked, or none that could be put into the asker's language.
    A question about the loan or the First Home Loan with no loan fact in the list (no deposit or income entered) is
    searched for the same way, before any answer call; with no search answer it gets the two fixed sentences that
    say what is missing.

@@ -147,7 +147,8 @@ def test_found_year_is_answered_from_the_records_without_a_search(monkeypatch, s
     monkeypatch.setattr(followup, "call_rules", lambda *a: pytest.fail("no rules re-run"))
     monkeypatch.setattr(followup, "gemini_json", fake(cls(), [{"answer": [], "links": []}]))
     post("case3", "When was this place built?")
-    assert search.prompts == []
+    # no search for the field; the fake model gives no sentence at all, and that alone is searched for
+    assert not any(p.startswith(fp.TASK_FIELDS) for p in search.prompts)
 
 
 def test_statement_with_a_year_or_value_given_earlier_does_not_search(monkeypatch, search, rules):
@@ -917,3 +918,44 @@ def test_a_blocked_rewrite_falls_back_to_a_claim_longer_than_the_sentence_limit(
     out = r.json()
     assert [s["text"] for s in out["answer"]] == [lim.draft()] and out["dropped"] == 1
     assert out["answer"][0]["source_ids"] == ["kb_lim_next_step"]
+
+
+# ---- the facts give no sentence that can be shown: a search answer before an error or an empty reply -----------
+def lim_fact():
+    req = ReportRequest.model_validate(body("case1"))
+    data = kb.load(req.selected_kb_ids())
+    ev = V.build_evidence(req, data.items, data.sources.keys(), source_urls=data.sources.urls)
+    return next(f for f in facts_prompt.followup_facts(req, ev, data.items, {})
+                if f.source_ids == ["kb_lim_next_step"] and f.topic.startswith("kb:"))
+
+
+def test_when_no_sentence_passes_the_reply_is_a_search_answer(monkeypatch, search, rules):
+    search.reply = web("Auckland Council describes a LIM as a summary of what it holds about a property.")
+    # the sentence names no fact, so it is blocked and has no draft to fall back on
+    nothing = {"answer": [{"text": "A LIM is a council document.", "fact_ids": []}], "links": []}
+    monkeypatch.setattr(followup, "gemini_json", fake(cls(), [nothing]))
+    out = post("case1", "What is a LIM report?").json()
+    assert out["answer"] == [] and out["web"]["text"] == search.reply.text and out["out_of_scope"] is False
+    search.reply = None  # no search answer either: the error, as before
+    r = post("case1", "What is a LIM report?")
+    assert r.status_code == 502 and r.json()["error"]["code"] == "validation_failed"
+
+
+def test_an_answer_that_cannot_be_put_into_the_askers_language_is_searched_for(monkeypatch, search, rules):
+    lim = lim_fact()
+    search.reply = web("Auckland Council describes a LIM as a summary of what it holds about a property.")
+    # an English rewrite for a Chinese question is blocked; its draft is English and the fake translation leaves it
+    # in English, so no sentence is left in Chinese
+    blocked = {"answer": [{"text": "A LIM report is a key document to get before making an offer.", "fact_ids": [lim.id]}],
+               "links": []}
+    monkeypatch.setattr(followup, "gemini_json", fake(cls("zh-Hant"), [blocked]))
+    out = post("case1", followup.REFUSAL_ZH).json()  # a Chinese sentence the program already has, as the question
+    assert out["answer"] == [] and out["web"]["text"] == search.reply.text and out["language"] == "zh-Hant"
+    search.reply = None  # no search answer: the fixed lead sentence, as before
+    out = post("case1", followup.REFUSAL_ZH).json()
+    assert [s["text"] for s in out["answer"]] == [followup.FALLBACK_NONE["zh-Hant"]] and "web" not in out
+
+
+def test_a_chinese_sentence_may_name_the_lim_report_in_english():
+    assert not followup.mixed_latin("LIM report (Land Information Memorandum)", set())
+    assert followup.mixed_latin("LIM paperwork", set())

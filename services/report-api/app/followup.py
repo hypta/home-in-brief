@@ -56,7 +56,7 @@ from .validator import (BANNED_WORD, MAX_WORDS, NUMBER_WORD, TOO_LONG, URL_OR_HT
 log = logging.getLogger("report-api.followup")
 MAX_ANSWER = 3
 
-REFUSAL_EN = ("This question is outside what this property report covers; the original sources linked below "
+REFUSAL_EN = ("This question is outside what this tool covers; the original sources linked below "
               "may help you look it up.")
 # Chinese refusal written by code (zh-Hans via _zh); other languages get a restricted translation of REFUSAL_EN.
 REFUSAL_ZH = "這個問題超出本報告涵蓋的範圍；下方的原始連結可供你查詢。"
@@ -450,7 +450,8 @@ def tidy(text: str, language: str = "") -> str:
 # request) the values and labels code fills in and the property's own text values (latin_terms).
 _LATIN_TERMS = {*fp.KEEP_ENGLISH, "Auckland Council", "Auckland", "Reserve Bank", "RBNZ", "Kainga Ora",
                 "Natural Hazards Commission", "EQC", "CV", "body corporate", "high-LVR", "high-DTI", "loan-to-value",
-                "debt-to-income", *facts_prompt.LAYER_NAMES.values(), *facts_prompt.SHORT_NAMES.values(),
+                "debt-to-income", "LIM reports", "LIM report", "Land Information Memorandum",
+                *facts_prompt.LAYER_NAMES.values(), *facts_prompt.SHORT_NAMES.values(),
                 *TITLE_WORDS, *(c.label for c in cladding_table.CLADDINGS), *cladding_table.VALUES}
 _LATIN_WORD = re.compile(r"[A-Za-zĀ-ſ][A-Za-zĀ-ſ'’-]+")
 
@@ -669,7 +670,7 @@ def fallback_links(question: str, link_ids: list[str]) -> list[str]:
 # ---- REPORT_MOCK=true: no Gemini call ---------------------------------------------------------------
 _MOCK_OOS = re.compile(r"school|\bzon(?:e|es|ing)\b|commute|commuting|crime|neighbou?r|traffic|investment return|"
                        r"學區|學校|校區|通勤|治安|犯罪|鄰居|交通|学区|学校|通勤|治安", re.I)
-MOCK_ANSWER = "This is a mock answer; a real answer cites the public sources listed in this report."
+MOCK_ANSWER = "This is a mock answer; a real answer cites the public sources listed on this page."
 MOCK_ANSWER_ZH = "這是模擬回答；正式回答會引用本報告列出的公開來源。"
 
 
@@ -1133,7 +1134,7 @@ _FHL_Q = re.compile(r"first[- ]home[- ](?:loan|buyer|scheme)|\bFHL\b|k[aā]inga 
 _LOAN_Q = re.compile(r"\bloans?\b|mortgage|borrow|repayments?|\bLVR\b|\bDTI\b|deposit|interest rate|lender|lending|"
                      r"貸款|贷款|房貸|房贷|還款|还款|月供|頭期款|头期款|首付|利率|借多少|ローン|返済|頭金|대출|상환", re.I)
 _LOAN_TOPICS = frozenset({"lending", "lending_debts", "first_home_loan", "user_input", "kb:lending"})
-INSUFFICIENT_EN = "This report does not have enough data to answer this question."
+INSUFFICIENT_EN = "This page does not have enough data to answer this question."
 INSUFFICIENT_ZH = ("這份報告沒有足夠的資料可以回答這個問題。", "这份报告没有足够的资料可以回答这个问题。")
 _NEED = {"price": ("the price", "价格", "價格"), "deposit": ("the deposit", "头期款", "頭期款"),
          "income": ("the household income", "家庭收入", "家庭收入")}
@@ -1183,7 +1184,7 @@ def insufficient_texts(req: ReportRequest, kind: Optional[str]) -> tuple[list[st
         zh = (f"無法評估{what_t}，因為表單中沒有填寫{'、'.join(n[2] for n in names)}。",
               f"无法评估{what_s}，因为表单中没有填写{'、'.join(n[1] for n in names)}。")
     else:
-        en = f"The report has no {what_en} result for the details entered."
+        en = f"There is no {what_en} result for the details entered."
         zh = (f"報告中沒有根據目前填寫的資料得出的{what_t}結果。", f"报告中没有根据目前填写的资料得出的{what_s}结果。")
     return [INSUFFICIENT_EN, en], [INSUFFICIENT_ZH[0], zh[0]], [INSUFFICIENT_ZH[1], zh[1]]
 
@@ -1527,7 +1528,15 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
                 passed.append(Part(it.sentence, native=it.kind == rewrite.REWRITE,
                                    user=bool(it.user or set(it.sentence.source_ids) & ev.user_kb),
                                    keep=text_values([fmap[i] for i in it.fact_ids if i in fmap]), fields=it.fields))
+        def online() -> Optional[FollowupResponse]:
+            """The facts gave no sentence that can be shown (every rewrite and draft blocked, or none that could be put
+            into the asker's language): a search answer, when one may be made, before an error or an empty reply."""
+            return None if after_search or used or fixed else searched(False)
+
         if not passed and not fixed:
+            got = online()
+            if got:
+                return got
             if last is None and not clock.can_call():
                 raise ReportError(504, "deadline_exceeded", "The request ran out of time.")
             raise last or ReportError(502, "validation_failed", "No answer sentence passed validation.")
@@ -1536,6 +1545,10 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
                         facts_prompt.from_web(p.sentence.source_ids, eff, ev, data.items, p.fields), unavailable)
         out_links = [i for i in dict.fromkeys(out_links + links) if i in link_ids][:3]
         fallback = debug.get("fallback")
+        if fallback and len(answer) == 1:  # the lead sentence alone: nothing could be said in the asker's language
+            got = online()
+            if got:
+                return got
         if fallback and not out_links:
             out_links = fallback_links(question, link_ids)  # the fixed lead sentence points to the links
         return FollowupResponse(language=fallback["language"] if fallback else language, answer=answer,

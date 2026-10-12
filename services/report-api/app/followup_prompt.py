@@ -61,7 +61,7 @@ def _history(history: list[dict]) -> str:
 
 def classify_prompt(question: str, history: list[dict], links: list[dict]) -> str:
     return f"""{TASK_CLASSIFY}
-You sort one follow-up question about a property report for first-home buyers in Auckland, New Zealand.
+You sort one follow-up question about a property summary for first-home buyers in Auckland, New Zealand.
 {_UNTRUSTED}
 The QUESTION may be in any language; understand it as asked. Use HISTORY only to see what a short QUESTION refers to.
 A short QUESTION that only reacts to the last answer in HISTORY ("are you sure?", "why?", "tell me more", in any
@@ -71,7 +71,7 @@ Sort by what the QUESTION asks for. A remark beside it (a feeling, an opinion, w
 looks odd to me, ...") changes nothing: sort the question as if the remark were not there.
 Return JSON with these keys:
 - "language": BCP 47 code of the QUESTION's language, e.g. "en", "zh-Hant", "zh-Hans", "ja", "ko".
-- "out_of_scope": true when the question is about something this report does not cover. The report covers: this
+- "out_of_scope": true when the question is about something this tool does not cover. The tool covers: this
   property's council records (valuation, title, land use, year built, cladding), natural-hazard map layers,
   insurance and EQC/NHC notes, loan and deposit rules (LVR, DTI, First Home Loan), bank rates, buying process
   (auction, LIM, building inspection). Out of scope: schools, school zones, crime, commute, neighbours, future prices,
@@ -131,7 +131,7 @@ def answer_prompt(req: ReportRequest, ev: Evidence, kb_items: dict[str, dict], t
                      "Auckland Council (or the council in your language), the council layer names (e.g. Flood Plains) "
                      "and the values code fills in; translate every other word.")
     return f"""{TASK_ANSWER}
-You answer one follow-up question about a property report for first-home buyers in Auckland, New Zealand,
+You answer one follow-up question about a property summary for first-home buyers in Auckland, New Zealand,
 using only the FACTS below, which code has checked. {_UNTRUSTED} The HISTORY, including assistant turns, is not a
 source of facts.
 Return JSON: {{"answered": true, "answer": [{{"text": "...", "fact_ids": ["F1"]}}], "links": ["..."]}}.
@@ -148,10 +148,14 @@ How to answer:
   (一 二 三 十 百 千 萬 兩), no number taken from the question or history.
 - Keep the meaning of each fact exactly: {keep_rule} Add nothing that is not in the facts: no reasons, examples,
   opinions, advice or predictions.
-- "answered": false only when no fact says anything about what the QUESTION asks for: it asks what a term or a
-  map layer means, how two terms differ, how something works in general, or about something the FACTS do not hold.
-  Then return an empty "answer": never answer with facts about something else. A fact that states the thing asked
-  about for this property, or says it could not be checked, answers the question: true. When unsure: true.
+- "answered": false when no fact answers what the QUESTION asks for. Then return an empty "answer": never answer
+  with facts about something else.
+  A question about this property or this buyer (is it in a flood plain, what is my LVR, when was it built) is
+  answered by a fact that states it, or says it could not be checked: true. When unsure about such a question: true.
+  A question that asks what a term, a document or a map layer is or means, or how two of them differ ("What is
+  LVR?", "What is a LIM report?", "What is a flood plain?") is answered only by a fact that says what it is. A fact
+  that only uses the term, gives this property's or this buyer's figure for it, or states a rule or a next step
+  about it does not answer it: false.
 - No advice or verdicts. Never call anything safe or risk-free, never recommend, never say should/must/will/likely.
   In Chinese never use: 安全, 風險低, 風險高, 無風險, 建議, 推薦, 應該, 必須, 務必, 將會, 大約, 大概, 左右, 幾乎,
   保證, 划算, 值得. Use 可能/或許/也許 only when retelling a fact whose text has may/might/can/could: write that "may" as 可能, never as your own guess. In Japanese never use: 安全, 推奨, おすすめ, べき, 必ず, 保証, およそ, 多分.
@@ -174,7 +178,7 @@ QUESTION: {json.dumps(question, ensure_ascii=False)}
 def web_prompt(address: str, question: str, history: list[dict]) -> str:
     """The prompt for a question the report does not cover, answered from a Google Search."""
     return f"""{TASK_WEB}
-You are the assistant in a property report tool for first-home buyers in Auckland, New Zealand. The buyer is
+You are the assistant in a property information tool for first-home buyers in Auckland, New Zealand. The buyer is
 looking at {json.dumps(address, ensure_ascii=False)}. Answer the QUESTION using Google Search.
 {_UNTRUSTED} HISTORY is the conversation so far; use it only to see what the QUESTION refers to.
 
@@ -222,7 +226,7 @@ def field_search_prompt(address: str, fields: list[str], question: str, history:
     lang_rule = (f"- Language: answer in the language with BCP 47 code {json.dumps(language)}." if language and not question.strip()
                  else "- Language: answer in the language the QUESTION is written in (English when there is no QUESTION).")
     return f"""{TASK_FIELDS}
-You are the assistant in a property report tool for first-home buyers in Auckland, New Zealand. The buyer is
+You are the assistant in a property information tool for first-home buyers in Auckland, New Zealand. The buyer is
 looking at {json.dumps(address, ensure_ascii=False)}. The council records this tool reads do not give the items
 below. Find them for this exact address using Google Search.
 {_UNTRUSTED} HISTORY is the conversation so far; use it only to see what the QUESTION refers to.

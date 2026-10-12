@@ -93,7 +93,7 @@ def test_validate_drops_attack_and_keeps_fact():
 
 def test_implicit_user_year_comparison_needs_prefix():
     ev = evidence('edge4')[2]
-    sentence = Sentence(text='The council property category gives 1975, and this report uses the council figure.',
+    sentence = Sentence(text='The council property category gives 1975, and this summary uses the council figure.',
                         source_ids=['ac_property_page'])
     assert V.relies_on_user_input(sentence, ev)
     assert V.with_prefix(sentence).text.startswith(V.PREFIX)
