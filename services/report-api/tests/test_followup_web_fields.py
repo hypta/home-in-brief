@@ -632,7 +632,7 @@ def timed(clock, classify=None, classify_s=1.0, answers=()):
     return gen
 
 
-def test_codex_31_second_sequence_stays_within_25_seconds(monkeypatch, clock, rules):
+def test_31_second_sequence_stays_within_25_seconds(monkeypatch, clock, rules):
     """Classify 1 s, two field searches with no source, then an out-of-scope search: 31 s before.
     Now: at most 2 searches in all, each sent with >= 10 s and only with >= 11 s left; done within 25 s."""
     start = clock.t
@@ -903,6 +903,18 @@ def test_a_search_that_gives_no_answer_is_named_in_the_warnings(monkeypatch, sea
 
 # ---- a knowledge-base claim longer than the sentence limit is still the fallback of a blocked rewrite ------------
 def test_a_blocked_rewrite_falls_back_to_a_claim_longer_than_the_sentence_limit(monkeypatch, search, rules):
+    # every seed claim is within the limit now; a claim as it was before it was shortened stands in for a long one
+    real_load = kb.load
+
+    def long_claim_load(ids, timeout=5.0):
+        data = real_load(ids, timeout)
+        if "kb_lim_next_step" in data.items:
+            data.items["kb_lim_next_step"] = {**data.items["kb_lim_next_step"], "claim_en": (
+                "The Natural Hazards Commission states that LIM reports (Land Information Memorandum) are among the "
+                "key property documents to seek out before making an offer, and can be purchased from the local council.")}
+        return data
+
+    monkeypatch.setattr(kb, "load", long_claim_load)
     req = ReportRequest.model_validate(body("case1"))
     data = kb.load(req.selected_kb_ids())
     ev = V.build_evidence(req, data.items, data.sources.keys(), source_urls=data.sources.urls)
@@ -959,3 +971,104 @@ def test_an_answer_that_cannot_be_put_into_the_askers_language_is_searched_for(m
 def test_a_chinese_sentence_may_name_the_lim_report_in_english():
     assert not followup.mixed_latin("LIM report (Land Information Memorandum)", set())
     assert followup.mixed_latin("LIM paperwork", set())
+
+
+# ---- a search stopped by quota (429) or a missing key is named; the answer call failing says it could not answer ----
+@pytest.mark.parametrize("category", ["quota", "config"])
+def test_a_search_stopped_by_quota_or_a_missing_key_is_named_in_the_warnings(monkeypatch, rules, category):
+    from app import gemini, protection
+
+    def stopped_search(prompt, timeout_s):
+        protection.stop_request(category)  # what gemini.failed / gemini.no_key do before they raise
+        raise gemini.ModelUnavailable("429 RESOURCE_EXHAUSTED" if category == "quota" else "no key", category)
+
+    monkeypatch.setattr(followup, "gemini_search", stopped_search)
+    monkeypatch.setattr(followup, "gemini_json", fake(cls(), [UNANSWERED]))
+    out = post("case1", DEFINITION).json()
+    assert out["warnings"] == ["search_unavailable"]  # not generation_degraded: no allowance refused a call
+    assert [s["text"] for s in out["answer"]] == [followup.INSUFFICIENT_EN]
+    # the field search too
+    monkeypatch.setattr(followup, "gemini_json", fake(cls(), [UNANSWERED]))
+    assert post("case1", "When was it last sold?").json()["warnings"] == ["search_unavailable"]
+
+
+def test_a_search_refused_by_the_allowance_is_generation_degraded_only(monkeypatch, search, rules):
+    from app import protection
+
+    def refused(prompt, timeout_s):
+        protection._scope.get().refused.append("allowance_daily")  # what protection.admit records
+        protection.stop_request("allowance")
+        return None
+
+    monkeypatch.setattr(followup, "gemini_search", refused)
+    monkeypatch.setattr(followup, "gemini_json", fake(cls(), [UNANSWERED]))
+    out = post("case1", DEFINITION).json()
+    assert out["warnings"] == ["generation_degraded"]
+
+
+@pytest.mark.parametrize("language, text", [("en", followup.INSUFFICIENT_EN), ("zh-Hant", followup.INSUFFICIENT_ZH[0]),
+                                            ("zh-Hans", followup.INSUFFICIENT_ZH[1])])
+def test_when_the_answer_call_fails_the_reply_says_it_cannot_answer(monkeypatch, search, rules, language, text):
+    from app import gemini
+
+    gen = fake(cls(language))
+    inner = gen
+
+    def failing(prompt, schema, timeout_s):
+        if prompt.startswith(fp.TASK_ANSWER):
+            raise gemini.ModelUnavailable("503", "http_5xx")
+        return inner(prompt, schema, timeout_s)
+
+    monkeypatch.setattr(followup, "gemini_json", failing)
+    out = post("case1", "What else should I know about this property?" if language == "en" else followup.REFUSAL_ZH).json()
+    assert [s["text"] for s in out["answer"]] == [text] and out["language"] == language
+    assert out["warnings"] == ["generation_degraded"] and "web" not in out and out["out_of_scope"] is False
+    assert search.prompts == []
+
+
+def test_other_language_gets_the_english_sentence_when_the_answer_call_fails(monkeypatch, search, rules):
+    from app import gemini
+
+    inner = fake(cls("ko"))
+
+    def failing(prompt, schema, timeout_s):
+        if prompt.startswith(fp.TASK_ANSWER) or prompt.startswith(fp.TASK_TRANSLATE):
+            raise gemini.ModelUnavailable("timeout", "timeout")
+        return inner(prompt, schema, timeout_s)
+
+    monkeypatch.setattr(followup, "gemini_json", failing)
+    out = post("case1", "이 집에 대해 더 알려 주세요").json()
+    assert [s["text"] for s in out["answer"]] == [followup.INSUFFICIENT_EN]
+    assert out["language"] == "en" and out["warnings"] == ["generation_degraded"]
+
+
+# ---- a definition question reaches the LIM definition item --------------------------------------------------------
+def test_lim_definition_item_is_a_follow_up_fact_when_selected():
+    b = copy.deepcopy(body("case1"))
+    b["rules_output"]["kb_items"] = b["rules_output"]["kb_items"] + ["kb_lim_definition"]
+    req = ReportRequest.model_validate(b)
+    data = kb.load(req.selected_kb_ids())
+    item = data.items["kb_lim_definition"]
+    assert item["claim_en"].endswith("is a report prepared by the local council at your request.")
+    assert item["quote"] in item["claim_en"] and item["source_url"].endswith("/what-is-a-lim-report/")
+    ev = V.build_evidence(req, data.items, data.sources.keys(), source_urls=data.sources.urls)
+    fs = facts_prompt.followup_facts(req, ev, data.items, {})
+    assert any(f.source_ids == ["kb_lim_definition"] and f.topic.startswith("kb:") for f in fs)
+
+
+def test_an_allowance_refusal_of_the_answer_call_keeps_the_program_facts(monkeypatch, search, rules):
+    from app import gemini, protection
+
+    inner = fake(cls())
+
+    def refused(prompt, schema, timeout_s):
+        if prompt.startswith(fp.TASK_ANSWER):
+            protection._scope.get().refused.append("allowance_daily")
+            protection.stop_request("allowance")
+            raise gemini.ModelUnavailable("allowance", "allowance")
+        return inner(prompt, schema, timeout_s)
+
+    monkeypatch.setattr(followup, "gemini_json", refused)
+    out = post("case1", "Anything else?").json()
+    assert out["warnings"] == ["generation_degraded"]
+    assert out["answer"] and out["answer"][0]["text"] != followup.INSUFFICIENT_EN  # the must-mention drafts

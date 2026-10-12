@@ -1,4 +1,4 @@
-"""Structured logs for Cloud Logging (Codex F07, same format as report-api's app/obs.py): single-line JSON on
+"""Structured logs for Cloud Logging (same format as report-api's app/obs.py): single-line JSON on
 stdout and one completion record per /v1 request (endpoint, status, elapsed_ms, warnings count). The request body
 (prices, deposits, incomes, debts) is never logged."""
 from __future__ import annotations

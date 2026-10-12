@@ -183,13 +183,14 @@ def _rank(item_id: str, item: dict, req: ReportRequest, layers: set[str]) -> int
     topic = item.get("topic")
     if item_id == "kb_flood_insurance_limit" and layers & set(PRIMARY_FLOOD_LAYERS):
         return 1
-    if topic == "hazard" and item_id not in ("kb_flood_insurance_limit", "kb_lim_next_step", "kb_landslide_map_context"):
+    if topic == "hazard" and item_id not in ("kb_flood_insurance_limit", "kb_lim_next_step", "kb_lim_definition",
+                                           "kb_landslide_map_context"):
         return 2  # selected because a primary layer intersects (overland flow, coastal inundation)
     if topic in ("build_era", "cladding"):
         return 3
     if item_id in ("kb_rbnz_lvr", "kb_rbnz_dti"):
         return 4
-    if item_id == "kb_lim_next_step":
+    if item_id in ("kb_lim_next_step", "kb_lim_definition"):
         return 5
     if topic == "title_type" or item_id == "kb_unit_title_body_corporate_insurance":
         return 6

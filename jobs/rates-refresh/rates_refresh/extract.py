@@ -54,7 +54,7 @@ def gemini_extractor(text: str, bank: dict) -> Extracted:
 
     client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
     resp = client.models.generate_content(
-        model=os.environ.get("GEMINI_MODEL", DEFAULT_MODEL),
+        model=os.environ.get("GEMINI_MODEL") or DEFAULT_MODEL,
         contents=PROMPT.format(name=bank["name"], text=text[:MAX_CHARS]),
         config=types.GenerateContentConfig(
             response_mime_type="application/json",

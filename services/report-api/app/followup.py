@@ -59,7 +59,7 @@ MAX_ANSWER = 3
 REFUSAL_EN = ("This question is outside what this tool covers; the original sources linked below "
               "may help you look it up.")
 # Chinese refusal written by code (zh-Hans via _zh); other languages get a restricted translation of REFUSAL_EN.
-REFUSAL_ZH = "這個問題超出本報告涵蓋的範圍；下方的原始連結可供你查詢。"
+REFUSAL_ZH = "這個問題超出本工具涵蓋的範圍；下方的原始連結可供你查詢。"
 PREFIX_EN = "Based on what you told us, "
 PREFIXES = {"zh-Hant": "依你提供的資訊，", "zh-Hans": "根据你提供的信息，"}
 # A value code extracted from a Google Search answer; other languages translate it.
@@ -671,7 +671,7 @@ def fallback_links(question: str, link_ids: list[str]) -> list[str]:
 _MOCK_OOS = re.compile(r"school|\bzon(?:e|es|ing)\b|commute|commuting|crime|neighbou?r|traffic|investment return|"
                        r"學區|學校|校區|通勤|治安|犯罪|鄰居|交通|学区|学校|通勤|治安", re.I)
 MOCK_ANSWER = "This is a mock answer; a real answer cites the public sources listed on this page."
-MOCK_ANSWER_ZH = "這是模擬回答；正式回答會引用本報告列出的公開來源。"
+MOCK_ANSWER_ZH = "這是模擬回答；正式回答會引用本工具列出的公開來源。"
 
 
 def mock_classify(question: str) -> ClassifyOut:
@@ -1135,7 +1135,7 @@ _LOAN_Q = re.compile(r"\bloans?\b|mortgage|borrow|repayments?|\bLVR\b|\bDTI\b|de
                      r"貸款|贷款|房貸|房贷|還款|还款|月供|頭期款|头期款|首付|利率|借多少|ローン|返済|頭金|대출|상환", re.I)
 _LOAN_TOPICS = frozenset({"lending", "lending_debts", "first_home_loan", "user_input", "kb:lending"})
 INSUFFICIENT_EN = "This page does not have enough data to answer this question."
-INSUFFICIENT_ZH = ("這份報告沒有足夠的資料可以回答這個問題。", "这份报告没有足够的资料可以回答这个问题。")
+INSUFFICIENT_ZH = ("這裡沒有足夠的資料可以回答這個問題。", "这里没有足够的资料可以回答这个问题。")
 _NEED = {"price": ("the price", "价格", "價格"), "deposit": ("the deposit", "头期款", "頭期款"),
          "income": ("the household income", "家庭收入", "家庭收入")}
 
@@ -1185,7 +1185,7 @@ def insufficient_texts(req: ReportRequest, kind: Optional[str]) -> tuple[list[st
               f"无法评估{what_s}，因为表单中没有填写{'、'.join(n[1] for n in names)}。")
     else:
         en = f"There is no {what_en} result for the details entered."
-        zh = (f"報告中沒有根據目前填寫的資料得出的{what_t}結果。", f"报告中没有根据目前填写的资料得出的{what_s}结果。")
+        zh = (f"目前填寫的資料沒有得出{what_t}結果。", f"目前填写的资料没有得出{what_s}结果。")
     return [INSUFFICIENT_EN, en], [INSUFFICIENT_ZH[0], zh[0]], [INSUFFICIENT_ZH[1], zh[1]]
 
 
@@ -1283,9 +1283,10 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
     links = [i for i in dict.fromkeys(c.links) if i in link_ids][:3]
 
     def no_search() -> None:
-        """A search was called for and gave no answer (refused, failed, out of time, no source): the page can say so.
-        Not when the whole request is degraded: generation_degraded says that."""
-        if not halted() and SEARCH_UNAVAILABLE not in warnings:
+        """A search was called for and gave no answer (refused, failed, quota 429, no key or other setting error, out
+        of time, no source): the page can say so. Not when the request is degraded by the allowance:
+        generation_degraded says that."""
+        if not protection.degraded() and SEARCH_UNAVAILABLE not in warnings:
             warnings.append(SEARCH_UNAVAILABLE)
 
     def searched(out_of_scope: bool) -> Optional[FollowupResponse]:
@@ -1507,6 +1508,19 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
                 prompt = base + ("\nYour previous answer could not be used (" +
                                  ", ".join(sorted({f for r in checked for f in r.fails} or {"no sentences"})) +
                                  "). Follow every rule exactly.\n")
+            if best is None and last is not None and not fixed and not protection.degraded():
+                # every answer call failed (5xx, timeout, quota, no key, unusable output): the must-mention drafts
+                # answer a different question. Say that no answer could be made. A call the allowance refused keeps
+                # the program's facts as the answer (generation_degraded is added by answer_followup).
+                sure = insufficient_answer(eff, None)
+                if sure:
+                    debug["insufficient"] = "model_failed"
+                    if protection.GENERATION_DEGRADED not in warnings:
+                        warnings.append(protection.GENERATION_DEGRADED)
+                    return FollowupResponse(language=sure[1], answer=sure[0], out_of_scope=False,
+                                            user_supplied=supplied, user_supplied_source=_sources_out(supplied, sources),
+                                            links=links or fallback_links(question, link_ids), dropped=0,
+                                            warnings=warnings)
             prog = program_sentences(fs, named, question, ev, skip)[:limit]
             debug["program"] = [p.sentence.text for p in prog]
             passed.extend(prog)

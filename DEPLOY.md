@@ -19,7 +19,7 @@ All services and jobs share this one repo; the submission is a single GitHub lin
 - Each service/job has its own `Dockerfile` and `requirements.txt`.
 - The Docker build context is always the repo root (`docker build -f <dir>/Dockerfile .`), so Dockerfiles can `COPY shared/ ...`.
 - All paths in this file are relative to the repo root.
-- `cloudbuild.yaml` builds five of the six images with Cloud Build (it has no step for report-api). **The GitHub
+- `cloudbuild.yaml` builds the six images with Cloud Build. **The GitHub
   Actions workflow does not use it**; it is kept for building by hand (`gcloud builds submit --config cloudbuild.yaml ...`,
   see the comment at its top).
 
@@ -317,7 +317,7 @@ Per deploy run:
    report-api's `X-Report-Mode` (`gemini`, `drafts`, `mock`) and `X-Report-Degraded-Reason`, which web passes on,
    decide the Gemini check: `gemini` passes; `drafts` with `allowance_daily`, `allowance_event` or `disabled` is a
    warning; `drafts` with any other reason (`backend_error`, `model_error`, `prompt_too_large`, `deadline`) fails the
-   deploy. If `X-Report-Mode` is missing, or the mode is `drafts` with no reason header and the body carries the
+   deploy. If `X-Report-Mode` is missing (web forwards it, so this is a warning that something is wrong, not a pass), or the mode is `drafts` with no reason header and the body carries the
    warning `generation_degraded`, the Gemini path is reported as not verified and only status and shape are required.
    `drafts` with no reason and no such warning fails for `/api/report` and passes for the follow-up; `mock` fails.
    Latency, mode, reason and the estimated Gemini calls the smoke test used go to the job
@@ -459,7 +459,7 @@ Firestore documents (Native mode, default database; created on first use):
 | `protection/control` | `disabled` (bool, set by hand), `event_calls` (int, whole judging period), `event_searches` (int), `updated_at` |
 | `protection/daily-YYYY-MM-DD` | `date`, `calls` (int; Search calls included), `searches` (int), `updated_at`. One per **UTC** day |
 
-Env (the deploy sets the values in `targets.json`; the code defaults are the same except `PROTECTION_TIMEOUT_S`):
+Env (the deploy sets the values in `targets.json`; the code defaults are the same):
 
 | Env | Default | Meaning |
 |---|---|---|
@@ -471,7 +471,7 @@ Env (the deploy sets the values in `targets.json`; the code defaults are the sam
 | `GEMINI_MAX_OUTPUT_TOKENS` | `2048` | `max_output_tokens` on every call (thinking tokens included) |
 | `GEMINI_INPUT_MAX_BYTES` | `32000` | Larger prompts (UTF-8 bytes) are not sent (drafts) and not counted |
 | `REPORT_DEGRADED` | `false` | `true`: never call Gemini, drafts only (no Firestore read) |
-| `PROTECTION_TIMEOUT_S` | `1` in code, `3` on Cloud Run (`targets.json`) | Seconds for the allowance transaction; slower, unavailable or conflicting: the call is refused |
+| `PROTECTION_TIMEOUT_S` | `3` (code default and `targets.json`) | Seconds for the allowance transaction; slower, unavailable or conflicting: the call is refused |
 | `REPORT_CACHE_SIZE`, `REPORT_CACHE_TTL_S` | `100`, `600` | /v1/report result cache per instance (not in `targets.json`; 0 turns it off). It stores only answers in mode `gemini`, and never a request whose inputs carry a web-search value |
 
 Firestore unavailable, missing permission or a slow transaction: **every call is refused** (drafts), never allowed.

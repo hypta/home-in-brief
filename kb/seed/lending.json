@@ -185,7 +185,7 @@
     "applies_when": {
       "lvr_over": 80
     },
-    "claim_en": "The Reserve Bank LVR explainer states that with less than a 20% deposit you may pay higher interest rates and fees, such as a low equity premium or margin, until you reach 20% equity in the property.",
+    "claim_en": "The Reserve Bank says with under a 20% deposit you may pay higher interest rates and fees, such as a low equity premium.",
     "quote": "you may pay higher interest rates and fees, like a low equity premium or margin",
     "source_id": "rbnz_lvr",
     "source_url": "https://www.rbnz.govt.nz/education/explainers/loan-to-value-restrictions-explained",
@@ -196,7 +196,7 @@
     "verified_by": "Ting Wang",
     "verified_at": "2026-10-04T09:51:18Z",
     "verified_content_hash": "291e761f427dd84ee3bbf4e779951a8482b290aaf67d07864a31638640291c86",
-    "status": "verified",
+    "status": "needs_review",
     "last_check": null
   },
   {

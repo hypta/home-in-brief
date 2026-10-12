@@ -465,3 +465,9 @@ def test_completion_record_fields():
     st = obs.Stats(request_id="r", endpoint="report")
     f = obs.completion_fields(st, 200)
     assert f["allowance"] == "ok" and f["busy"] is False
+
+
+def test_protection_timeout_default_is_three_seconds(monkeypatch):
+    # the same as .github/deploy/targets.json (PROTECTION_TIMEOUT_S "3")
+    monkeypatch.delenv("PROTECTION_TIMEOUT_S", raising=False)
+    assert protection.TIMEOUT_S == 3.0

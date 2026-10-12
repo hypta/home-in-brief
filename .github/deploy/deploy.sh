@@ -180,8 +180,9 @@ if [ -n "$PUBLIC" ] && [ -n "$(describe service "$PUBLIC")" ]; then
        and (((.answer // []) | type) == "array" and ([.answer[]? | if type == "object" then .text else . end | select(nonempty)] | length) > 0
             or ((.web // {}) | type) == "object" and ((.web // {}).text | nonempty))
     then "ok" else "bad" end'
-  # Gemini path check from the two headers, which web passes on. Sets verdict: ok | unverified | warn | fail.
-  #   no X-Report-Mode (the header did not arrive): unverified, only status and sentences are checked;
+  # Gemini path check from the two headers, which web passes on. Sets verdict: ok | unverified | nohdr | warn | fail.
+  #   no X-Report-Mode (the header did not arrive): nohdr, an anomaly because web forwards it (PASSED_ON in
+  #   services/web/app/main.py); only status and sentences are checked;
   #   gemini: ok; drafts with reason allowance_daily / allowance_event / disabled: warn (refused on purpose);
   #   drafts with any other reason (backend_error, model_error, prompt_too_large, deadline): fail;
   #   drafts without a reason header: unverified if the body says generation_degraded (the reason is unknown, so
@@ -189,7 +190,7 @@ if [ -n "$PUBLIC" ] && [ -n "$(describe service "$PUBLIC")" ]; then
   #   sentences are drafts without any failure); mock or anything else: fail.
   gemini_verdict() {
     local what=$1
-    if [ -z "$mode" ]; then verdict=unverified
+    if [ -z "$mode" ]; then verdict=nohdr
     elif [ "$mode" = gemini ]; then verdict=ok
     elif [ "$mode" = drafts ]; then
       case "$reason" in
@@ -221,18 +222,20 @@ if [ -n "$PUBLIC" ] && [ -n "$(describe service "$PUBLIC")" ]; then
 
   # Report and follow-up through web with a public address (740 Sandringham Road Extension), real Gemini. Only when
   # a target on that path was deployed, so other deploys cost no Gemini calls. Each POST is sent once (no retry, not
-  # even after 503 busy). web passes X-Report-Mode / X-Report-Degraded-Reason on; if X-Report-Mode is missing, the
-  # Gemini path is reported as not verified and only 200 and the response shape are required.
+  # even after 503 busy). web passes X-Report-Mode / X-Report-Degraded-Reason on; if X-Report-Mode is missing (it should not
+  # be: warning, web is not forwarding it), the Gemini path is reported as not verified and only 200 and the response shape are required.
   if grep -qxE 'report-api|rules-api|web' <<<"$TO_DEPLOY"; then
     calls=0; calls_note=""
     smoke_post /api/report '{"address_id": 2100210, "user_inputs": {"deposit": 34000, "household_income": 130000}}'
     n=$(jq -r '.summary | length' "$WORK/body" 2>/dev/null || echo 0)
-    echo "- $PUBLIC POST /api/report: $c, ${secs}s, $n sentences, model $(jq -r '.model // "?"' "$WORK/body" 2>/dev/null), mode ${mode:-header not passed}${reason:+, degraded reason $reason}" >> "$SUMMARY"
+    echo "- $PUBLIC POST /api/report: $c, ${secs}s, $n sentences, model $(jq -r '.model // "?"' "$WORK/body" 2>/dev/null), mode ${mode:-missing}${reason:+, degraded reason $reason}" >> "$SUMMARY"
     gemini_verdict report
     if [ "$c" != 200 ] || [ "${n:-0}" -lt 1 ]; then echo "::error::report returned $c with ${n:-0} sentences"; fail=1
     else
       case "$verdict" in
-        unverified) echo "  - report: Gemini path not verified (${mode:+mode $mode, no degraded reason header; }${mode:-X-Report-Mode header not forwarded})" >> "$SUMMARY" ;;
+        nohdr) echo "::warning::report response has no X-Report-Mode header, although web forwards it; Gemini path not checked"
+               echo "  - report: **X-Report-Mode header missing** (web should forward it): Gemini path not checked" >> "$SUMMARY" ;;
+        unverified) echo "  - report: Gemini path not verified (mode $mode, no degraded reason header)" >> "$SUMMARY" ;;
         warn) echo "::warning::report answered from drafts (${reason:-generation_degraded}: Gemini allowance used up or switched off); Gemini path not checked"
               echo "  - report-api refused the Gemini call on purpose (${reason:-generation_degraded}): Gemini path **not checked** by this deploy" >> "$SUMMARY" ;;
         fail) echo "::error::report mode is ${mode}${reason:+ (degraded reason $reason)}, not gemini"; fail=1 ;;
@@ -244,10 +247,10 @@ if [ -n "$PUBLIC" ] && [ -n "$(describe service "$PUBLIC")" ]; then
       gemini:*) calls=$((calls + 1)); calls_note="report 1 (0 if cached, 2 after a retry)" ;;
       drafts:allowance_*|drafts:disabled|drafts:prompt_too_large) calls_note="report 0" ;;
       drafts:*) calls=$((calls + 1)); calls_note="report 0-2 (failed call)" ;;
-      *) calls=$((calls + 1)); calls_note="report 0-2 (mode not forwarded)" ;;
+      *) calls=$((calls + 1)); calls_note="report 0-2 (mode header missing)" ;;
     esac
     smoke_post /api/followup '{"address_id": 2100210, "user_inputs": {"deposit": 34000, "household_income": 130000}, "question": "What is the flood risk for this address?", "history": []}'
-    echo "- $PUBLIC POST /api/followup: $c, ${secs}s, mode ${mode:-header not passed}${reason:+, degraded reason $reason}" >> "$SUMMARY"
+    echo "- $PUBLIC POST /api/followup: $c, ${secs}s, mode ${mode:-missing}${reason:+, degraded reason $reason}" >> "$SUMMARY"
     # shape: language is a non-empty string; answer has a non-empty sentence or web.text is a non-empty string
     shape=$(jq -r "$FOLLOWUP_SHAPE_JQ" "$WORK/body" 2>/dev/null || echo bad)
     gemini_verdict followup
@@ -255,7 +258,9 @@ if [ -n "$PUBLIC" ] && [ -n "$(describe service "$PUBLIC")" ]; then
     elif [ "$shape" != ok ]; then echo "::error::followup response has no non-empty answer sentence or web text, or no language: $(head -c 300 "$WORK/body")"; fail=1
     else
       case "$verdict" in
-        unverified) echo "  - follow-up: Gemini path not verified (${mode:+mode $mode, no degraded reason header; }${mode:-X-Report-Mode header not forwarded})" >> "$SUMMARY" ;;
+        nohdr) echo "::warning::follow-up response has no X-Report-Mode header, although web forwards it; Gemini path not checked"
+               echo "  - follow-up: **X-Report-Mode header missing** (web should forward it): Gemini path not checked" >> "$SUMMARY" ;;
+        unverified) echo "  - follow-up: Gemini path not verified (mode $mode, no degraded reason header)" >> "$SUMMARY" ;;
         warn) echo "::warning::follow-up answered from fixed sentences (${reason:-generation_degraded}); Gemini path not checked"
               echo "  - follow-up: Gemini refused on purpose (${reason:-generation_degraded}): Gemini path **not checked**" >> "$SUMMARY" ;;
         fail) echo "::error::follow-up mode is ${mode}${reason:+ (degraded reason $reason)}"; fail=1 ;;

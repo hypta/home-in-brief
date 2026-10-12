@@ -624,14 +624,17 @@ def test_bad_history_role_is_422(rules_calls):
 
 
 def test_gemini_timeout_falls_back_to_program_facts(monkeypatch, rules_calls):
-    # classify and answer both fail -> 200 with the must-mention facts' drafts, not 503
+    # classify and answer both fail -> 200 with the fixed "not enough data" sentence and generation_degraded, not 503
+    # and not the must-mention facts' drafts, which answer a different question
     t = gemini.ModelUnavailable("ReadTimeout", "timeout")
     gen = fake(t, [t])
     monkeypatch.setattr(followup, "gemini_json", gen)
     r = post("case1", "Anything else?")
     assert r.status_code == 200, r.text
     out = r.json()
-    assert out["answer"] and out["answer"][0]["text"].startswith("Council maps show")
+    assert [s["text"] for s in out["answer"]] == [followup.INSUFFICIENT_EN]
+    assert [s["source_ids"] for s in out["answer"]] == [[]] and out["language"] == "en"
+    assert out["warnings"] == ["generation_degraded"]
     assert out["user_supplied"] == {} and out["out_of_scope"] is False and "web" not in out
     assert len(gen.calls["answer"]) == 2  # a timeout is retried once
 

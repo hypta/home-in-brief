@@ -133,14 +133,15 @@ MERGED_MAX_WORDS = MAX_WORDS - 1  # a merged draft leaves one word of slack
 # Display order is fixed (O_* below). Priority decides which topics are must-mentions within the 5-sentence cap: the
 # core topics first (hazards that intersect, lending meaning, First Home Loan, title, non-residential
 # use, build era with a KB note or a user fact, not checked), then High landslide ratings, other hazard layers, a
-# bare council decade and an unflagged lending sentence. Facts outside the cap, and the user-input meaning facts,
-# are optional extras for Gemini (must=False).
+# bare council decade and an unflagged lending sentence. The note that no debts were entered ranks right after the
+# title, so a report with several hazard topics, a flagged loan and a First Home Loan still mentions the title.
+# Facts outside the cap, and the user-input meaning facts, are optional extras for Gemini (must=False).
 # A user fact that triggered a leaky-building KB item (P_USER_LEAKY) ranks right after the title: it is a must-mention,
 # and a non-residential use sentence it pushes out is merged into the title sentence when that fits.
 (O_PRIMARY, O_SECONDARY, O_LANDSLIDE, O_LENDING, O_DEBTS, O_FHL, O_TITLE, O_USE, O_ERA, O_USER,
  O_MISSING) = range(11)
-P_HAZARD, P_LENDING, P_FHL, P_TITLE, P_USER_LEAKY, P_USE, P_ERA, P_MISSING, P_LANDSLIDE, P_SECONDARY, P_ERA_PLAIN, \
-    P_LENDING_PLAIN, P_EXTRA = range(13)
+P_HAZARD, P_LENDING, P_FHL, P_TITLE, P_DEBTS, P_USER_LEAKY, P_USE, P_ERA, P_MISSING, P_LANDSLIDE, P_SECONDARY, \
+    P_ERA_PLAIN, P_LENDING_PLAIN, P_EXTRA = range(14)
 LEAKY_KB = ("kb_leaky_build_era", "kb_monolithic_cladding")
 
 
@@ -289,7 +290,7 @@ def _lending(req: ReportRequest, sel: list[str], ev: Evidence) -> list[_Topic]:
             say = f"Your loan is {term} lending ({define}), which the Reserve Bank lets banks offer only in limited amounts."
         out.append(t.set(_lvr_slot(t, say), cite, keep=["your loan"]))
         if debts:
-            out.append(_Topic(O_DEBTS, P_LENDING, "lending_debts").set(
+            out.append(_Topic(O_DEBTS, P_DEBTS, "lending_debts").set(
                 "Because no existing debts were entered, the DTI shown assumes you have none.", ["rbnz_dti"],
                 keep=["entered"]))
     elif req.rules_output.get("lvr_pct") is not None:

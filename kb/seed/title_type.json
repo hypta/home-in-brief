@@ -51,7 +51,7 @@
         "Cross Lease"
       ]
     },
-    "claim_en": "Settled.govt.nz says a cross lease title includes a flats plan showing the footprint of the building the holder is entitled to occupy, although older titles may not supply one.",
+    "claim_en": "Settled.govt.nz says a cross lease title includes a flats plan showing the holder's building footprint, though older titles may not supply one.",
     "quote": "whether it matches the physical location and footprint of the property you are looking at",
     "source_id": "src_settled_ownership",
     "source_url": "https://www.settled.govt.nz/buying-a-home/finding-a-property/understanding-types-of-ownership/",
@@ -62,7 +62,7 @@
     "verified_by": "Kevin",
     "verified_at": "2026-10-04T08:56:02Z",
     "verified_content_hash": "a939b856748da2170e6a3e692dae5cafb5c39da27eed3f08a7b6b8b8e759a3c0",
-    "status": "verified",
+    "status": "needs_review",
     "last_check": null
   },
   {

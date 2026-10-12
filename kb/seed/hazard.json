@@ -25,7 +25,7 @@
     "applies_when": {
       "always": true
     },
-    "claim_en": "The Natural Hazards Commission states that LIM reports (Land Information Memorandum) are among the key property documents to seek out before making an offer, and can be purchased from the local council.",
+    "claim_en": "The Natural Hazards Commission says LIM reports (Land Information Memorandum) are key documents to seek before an offer, available from the council.",
     "quote": "LIM reports (Land Information Memorandum), which can be purchased from the local council",
     "source_id": "src_nhc_home_buyers",
     "source_url": "https://www.naturalhazards.govt.nz/be-prepared/home-buyers/before-you-make-an-offer-on-a-house/",
@@ -36,7 +36,27 @@
     "verified_by": "Ting Wang",
     "verified_at": "2026-10-04T09:30:47Z",
     "verified_content_hash": "92d80f11c12834087926e9018a3580eb9eff2243d6cea56922dfda60ceee42ef",
-    "status": "verified",
+    "status": "needs_review",
+    "last_check": null
+  },
+  {
+    "id": "kb_lim_definition",
+    "topic": "hazard",
+    "applies_when": {
+      "always": true
+    },
+    "claim_en": "Settled.govt.nz says a LIM (Land Information Memorandum) is a report prepared by the local council at your request.",
+    "quote": "a report prepared by the local council at your request",
+    "source_id": "src_settled_lim",
+    "source_url": "https://www.settled.govt.nz/blog/what-is-a-lim-report/",
+    "source_title": "What is a LIM Report? - settled.govt.nz",
+    "source_type": "official",
+    "licence": "Copyright Real Estate Authority (not Creative Commons); may be reproduced free of charge for personal or in-house use only",
+    "next_step_en": "Ask your lawyer to obtain and review the LIM report and other property documents from the council.",
+    "verified_by": null,
+    "verified_at": null,
+    "verified_content_hash": null,
+    "status": "draft",
     "last_check": null
   },
   {
@@ -47,7 +67,7 @@
         "overland_flow_path"
       ]
     },
-    "claim_en": "Auckland Council says overland flow paths are routes where water naturally flows across the ground, and water can build up and enter homes if a path is blocked (for example by fences, buildings or stored items).",
+    "claim_en": "Auckland Council says overland flow paths carry water across the ground, and water can build up and enter homes if a path is blocked.",
     "quote": "Water can build up and enter homes if an overland flow path is blocked",
     "source_id": "src_akl_overland_flow",
     "source_url": "https://www.aucklandcouncil.govt.nz/en/environment/looking-after-aucklands-water/managing-overland-flow-paths.html",
@@ -58,7 +78,7 @@
     "verified_by": "Ting Wang",
     "verified_at": "2026-10-04T10:02:39Z",
     "verified_content_hash": "f71582a17a30e852582ced0bf60bb880b9f5ee807fd10660d55f8aa887ef5e02",
-    "status": "verified",
+    "status": "needs_review",
     "last_check": null
   },
   {
@@ -92,7 +112,7 @@
         "landslide_large_scale"
       ]
     },
-    "claim_en": "Auckland Council says its regional landslide susceptibility ratings are not a measure of landslide risk on individual properties and do not predict if or when a landslide might happen.",
+    "claim_en": "Auckland Council says its landslide susceptibility ratings are not a measure of risk on individual properties and do not predict if a landslide will happen.",
     "quote": "The susceptibility ratings are not a measure of landslide risk on individual properties.",
     "source_id": "src_akl_landslide_maps",
     "source_url": "https://ourauckland.aucklandcouncil.govt.nz/news/2026/08/understanding-auckland-s-regional-landslide-susceptibility-maps/",
@@ -103,7 +123,7 @@
     "verified_by": "Ting Wang",
     "verified_at": "2026-10-04T10:07:26Z",
     "verified_content_hash": "073248888dfed0a9863e4d66311c166cfa91c1437602caa38037e72dfe547d95",
-    "status": "verified",
+    "status": "needs_review",
     "last_check": null
   }
 ]

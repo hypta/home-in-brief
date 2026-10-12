@@ -165,9 +165,10 @@ stays, and no search, extraction or translation is made after it; with nothing f
 program's facts or fixed sentences; see "Abuse and cost protection") and `search_unavailable` (a Google Search was
 called for and gave no answer: refused by the daily Search allowance, failed, out of time or no source. The reply is
 then made without it: the fixed refusal for an out-of-scope question, otherwise the usual steps without the search
-(the answer from the facts, or the fixed "not enough data" sentence). Not added once the request has been stopped:
-after an allowance refusal `generation_degraded` says so; after a provider quota error (429) or a missing key neither
-warning is added and only `X-Report-Degraded-Reason: model_error` tells).
+(the answer from the facts, or the fixed "not enough data" sentence). A provider quota error (429), a missing key
+or another setting error counts as a failed search and adds it. Not added when an allowance refusal stopped the
+request: `generation_degraded` says so). `generation_degraded` is also added when the answer call itself failed (5xx,
+timeout, 429, no key) and nothing else answers: the reply is then the fixed "not enough data" sentence.
 1 or more passing sentences gives 200 (at most 3, plus the fixed lead sentence when no model call could be made); 0 gives 502 `validation_failed`.
 
 Steps:
@@ -236,11 +237,12 @@ Steps:
    `answer: []`, `out_of_scope: false`), or, when there is no search (eval, `strict`, no answer), the one fixed
    sentence "This page does not have enough data to answer this question." (Chinese by code, other languages
    by restricted translation) with the fallback links. Not applied when the question states a year or cladding.
-   This holds when the answer call returns. When no model call answers (every call failed, was refused or had no
-   time), the reply is the program's own, whatever was asked, including a question classify could not sort: the
+   This holds when the answer call returns. When the answer call failed (a 5xx, a timeout, 429, no key) and
+   nothing else answers, the reply is the fixed "not enough data" sentence (Chinese written by code, other languages
+   English with `language` "en") with `generation_degraded`, not the must-mention drafts. When no model call answers
+   because every call was refused or had no time, the reply is the program's own, whatever was asked, including a question classify could not sort: the
    program sentence of a field the question names, when there is one (step 9), else the summary's must-mention drafts
-   (at most 3). `generation_degraded` marks a refusal; after a failure only `X-Report-Degraded-Reason: model_error`
-   does.
+   (at most 3). `generation_degraded` marks a refusal; after a failure `X-Report-Degraded-Reason: model_error` tells too.
    The same search is made, before an error or a lead sentence with nothing after it, when the facts give no
    sentence that can be shown: every rewrite and draft blocked, or none that could be put into the asker's language.
    A question about the loan or the First Home Loan (and nothing else the facts cover) with no loan fact in the list
@@ -485,7 +487,7 @@ Model text is held tighter because it goes through `check_rewrite`, where values
 | `REPORT_MOCK` | false | `true`: no Gemini call (below) |
 | `GEMINI_TIMEOUT_S` | 20 | Limit for one Gemini call |
 | `REQUEST_DEADLINE_S` | 25 | Total budget; a Gemini call only with at least 11 s left, sent with at least 10 s; one retry (invalid JSON, 0 passing sentences, model error) only if the remaining time covers another attempt; no time for a call: drafts |
-| `PROTECTION_BACKEND` (`firestore` on Cloud Run, `memory` elsewhere; `off` turns the allowance off), `GEMINI_DAILY_CALLS` (100), `SEARCH_DAILY_CALLS` (30), `GEMINI_EVENT_CALLS` (3000), `GENERATION_SLOTS` (2), `GEMINI_MAX_OUTPUT_TOKENS` (2048), `GEMINI_INPUT_MAX_BYTES` (32000), `REPORT_DEGRADED` (false), `PROTECTION_TIMEOUT_S` (1; `.github/deploy/targets.json` sets 3), `REPORT_CACHE_SIZE` (100), `REPORT_CACHE_TTL_S` (600) | | See "Abuse and cost protection" |
+| `PROTECTION_BACKEND` (`firestore` on Cloud Run, `memory` elsewhere; `off` turns the allowance off), `GEMINI_DAILY_CALLS` (100), `SEARCH_DAILY_CALLS` (30), `GEMINI_EVENT_CALLS` (3000), `GENERATION_SLOTS` (2), `GEMINI_MAX_OUTPUT_TOKENS` (2048), `GEMINI_INPUT_MAX_BYTES` (32000), `REPORT_DEGRADED` (false), `PROTECTION_TIMEOUT_S` (3, the same as `.github/deploy/targets.json`), `REPORT_CACHE_SIZE` (100), `REPORT_CACHE_TTL_S` (600) | | See "Abuse and cost protection" |
 
 ## Abuse and cost protection (`app/protection.py`)
 

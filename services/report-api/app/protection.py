@@ -12,7 +12,7 @@ Search) reserves one call BEFORE it is sent (`admit`), in one Firestore transact
 A call is refused when `disabled` is true, `event_calls` >= GEMINI_EVENT_CALLS (whole judging period),
 `calls` >= GEMINI_DAILY_CALLS, or (Search only) `searches` >= SEARCH_DAILY_CALLS. A Search call counts once in
 `calls` and once in `searches`. Reserved calls are never refunded (failures and timeouts count). The transaction
-makes no Gemini call; it gets PROTECTION_TIMEOUT_S (1 s; never more than the request has left) for its whole life:
+makes no Gemini call; it gets PROTECTION_TIMEOUT_S (3 s; never more than the request has left) for its whole life:
 begin, reads, commit and rollback each get only what is left of that limit, at most 2 attempts on
 contention. The caller stops waiting at the limit and the next reservation may start at once; at most
 MAX_IN_FLIGHT transactions run per process (a further one is refused at once). Firestore unavailable, slow or
@@ -68,7 +68,7 @@ CONTROL_DOC = "control"
 
 DEFAULTS = {"GEMINI_DAILY_CALLS": 100, "SEARCH_DAILY_CALLS": 30, "GEMINI_EVENT_CALLS": 3000,
             "GENERATION_SLOTS": 2, "GEMINI_MAX_OUTPUT_TOKENS": 2048, "GEMINI_INPUT_MAX_BYTES": 32000}
-TIMEOUT_S = 1.0
+TIMEOUT_S = 3.0
 
 
 def env_int(name: str) -> int:
@@ -176,6 +176,12 @@ def stop_request(why: str) -> None:
 def stopped() -> bool:
     sc = _scope.get()
     return sc is not None and sc.stop is not None
+
+
+def degraded() -> bool:
+    """True when this request already has a refused model call (generation_degraded will be added to its warnings)."""
+    sc = _scope.get()
+    return sc is not None and sc.degraded
 
 
 def refused_after_reservation() -> None:

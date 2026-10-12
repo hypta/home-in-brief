@@ -126,3 +126,28 @@ def test_null_lvr_and_dti_when_no_loan_are_handled():
     tops = prompt.topics(req, ev, data.items)
     assert ev.no_loan and not any("loan" in t["say"].lower() for t in tops)
     assert not any("lending" in t["say"].lower() for t in tops)
+
+
+def test_title_stays_a_must_mention_with_unchecked_flood_layer_and_no_debts_entered():
+    # hazard hit + an unchecked flood layer + a flagged loan + a First Home Loan are four of the five must-mentions;
+    # the "no existing debts entered" note used to be the fifth, which pushed the title out of the summary
+    from b_common.report_schemas import ReportRequest
+    from conftest import body
+
+    from app import kb
+
+    for case in ("case1", "edge3"):
+        b = body(case)
+        b["rules_output"]["warnings"].append("existing_debts_assumed_zero")
+        for h in b["property_context"]["hazards"]:
+            if h["layer"] == "coastal_inundation":
+                h["status"], h["reason"] = "unavailable", "source_unavailable"
+        req = ReportRequest.model_validate(b)
+        data = kb.load(req.selected_kb_ids())
+        ev = V.build_evidence(req, data.items, data.sources.keys())
+        fs = prompt.fact_list(req, ev, data.items)
+        by_topic = {f.topic: f for f in fs}
+        assert {"hazard", "hazard_unknown", "lending", "first_home_loan"} <= set(by_topic), case
+        assert by_topic["title"].must, case
+        assert sum(f.must for f in fs) == prompt.MAX_TOPICS
+        assert not by_topic["lending_debts"].must  # the lower-priority note became an optional extra

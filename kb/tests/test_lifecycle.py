@@ -246,3 +246,14 @@ def test_partial_publication_dates_are_checked(tmp_path, capsys):
     out = V.validate(d)
     capsys.readouterr()
     assert any("published_or_updated" in e for e in out)
+
+
+def test_every_seed_claim_is_within_25_words():
+    # the summary and follow-up show a claim as written when a rewrite is blocked; the validator allows 25 words
+    for path in sorted((ROOT / "kb" / "seed").glob("*.json")):
+        if path.name == "sources.json":
+            continue
+        for it in json.loads(path.read_text(encoding="utf-8")):
+            n = len(it["claim_en"].split())
+            # kb_unit_title_levies is 26 words and was not in the list to shorten; reported separately
+            assert n <= 25 or it["id"] == "kb_unit_title_levies", (it["id"], n)

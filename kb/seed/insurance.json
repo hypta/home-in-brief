@@ -107,7 +107,7 @@
     "applies_when": {
       "always": true
     },
-    "claim_en": "Where NHCover applies, the Natural Hazards Commission states that its land cover is limited to the land under the home and under some related buildings and structures within 8 metres of the home, and that land outside the covered areas is not insured.",
+    "claim_en": "The Natural Hazards Commission says NHCover only covers land under the home and some related structures within 8 metres; other land is uninsured.",
     "quote": "some related buildings and structures within 8 metres of your home",
     "source_id": "src_nhc_about",
     "source_url": "https://www.naturalhazards.govt.nz/insurance-and-claims/about-nhcover/",
@@ -118,7 +118,7 @@
     "verified_by": "Ting Wang",
     "verified_at": "2026-10-04T09:30:47Z",
     "verified_content_hash": "e05d3f6193048b35a95ba80269a627ab793084ec63c96679f23d88ed32c04edd",
-    "status": "verified",
+    "status": "needs_review",
     "last_check": null
   }
 ]

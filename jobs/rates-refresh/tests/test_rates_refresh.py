@@ -576,3 +576,39 @@ def test_redirect_hop_is_checked_against_robots():
         safe_get("https://a.example/rates", client=_client(handler), allow=allow)
     assert seen == ["https://a.example/private/rates"]
     assert safe_get("https://a.example/rates", client=_client(handler), allow=lambda u: (True, "ok")).text == "ok"
+
+
+@pytest.mark.parametrize("env,expected", [("", "gemini-3.5-flash-lite"), (None, "gemini-3.5-flash-lite"),
+                                          ("gemini-other", "gemini-other")])
+def test_empty_gemini_model_env_means_the_default(monkeypatch, env, expected):
+    # .env.example has "GEMINI_MODEL=" (empty): that must not be sent as the model name
+    import sys
+    import types
+
+    from rates_refresh import extract
+
+    seen = {}
+
+    class Models:
+        def generate_content(self, model, contents, config):
+            seen["model"] = model
+            return types.SimpleNamespace(parsed=Extracted(items=[]), text="")
+
+    class Client:
+        def __init__(self, api_key):
+            self.models = Models()
+
+    fake_genai = types.SimpleNamespace(Client=Client, types=types.SimpleNamespace(
+        GenerateContentConfig=lambda **kw: kw))
+    google = types.ModuleType("google")
+    google.genai = fake_genai
+    monkeypatch.setitem(sys.modules, "google", google)
+    monkeypatch.setitem(sys.modules, "google.genai", fake_genai)
+    monkeypatch.setitem(sys.modules, "google.genai.types", fake_genai.types)
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    if env is None:
+        monkeypatch.delenv("GEMINI_MODEL", raising=False)
+    else:
+        monkeypatch.setenv("GEMINI_MODEL", env)
+    extract.gemini_extractor("page", {"name": "Bank"})
+    assert seen["model"] == expected

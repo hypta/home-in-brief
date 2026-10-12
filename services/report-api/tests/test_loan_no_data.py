@@ -98,8 +98,8 @@ def test_cash_purchase_says_there_is_no_loan(monkeypatch, no_rules):
 
 
 @pytest.mark.parametrize("lang,question,expect", [
-    ("zh-Hant", "我可以申請 First Home Loan 嗎？", ("這份報告沒有足夠的資料可以回答這個問題。", "價格、頭期款、家庭收入")),
-    ("zh-Hans", "我可以申请 First Home Loan 吗？", ("这份报告没有足够的资料可以回答这个问题。", "价格、头期款、家庭收入")),
+    ("zh-Hant", "我可以申請 First Home Loan 嗎？", ("這裡沒有足夠的資料可以回答這個問題。", "價格、頭期款、家庭收入")),
+    ("zh-Hans", "我可以申请 First Home Loan 吗？", ("这里没有足够的资料可以回答这个问题。", "价格、头期款、家庭收入")),
 ])
 def test_chinese_fixed_sentences(monkeypatch, no_rules, lang, question, expect):
     gen = fake(cls(lang), [ans(("x", ["F1"]))])
@@ -220,3 +220,16 @@ def test_codes_md_year_built_and_cladding_unavailable():
     for code, line in rows.items():
         assert "Ask the user" not in line and "do not guess" in line.lower()
         assert "once" in line and "This home" in line and "form" in line, line
+
+
+def test_chinese_fixed_sentences_do_not_call_the_output_a_report():
+    # the page and the English sentences say "this tool" / "this page"; the Chinese ones must not say 報告 / 报告
+    req = request("edge1")
+    texts = [followup.REFUSAL_ZH, followup.MOCK_ANSWER_ZH, *followup.INSUFFICIENT_ZH]
+    for kind in ("fhl", "loan"):
+        _, zh_t, zh_s = followup.insufficient_texts(req, kind)
+        texts += zh_t + zh_s
+    assert len(texts) > 6 and not [t for t in texts if "報告" in t or "报告" in t]
+    assert "本工具" in followup.REFUSAL_ZH
+    no_result = followup.insufficient_texts(request("case1"), "fhl")[1][1]  # nothing missing: "no result for the details"
+    assert no_result == "目前填寫的資料沒有得出First Home Loan結果。"
