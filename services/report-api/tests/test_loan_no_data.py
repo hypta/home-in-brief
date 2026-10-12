@@ -31,7 +31,31 @@ def no_rules(monkeypatch):
     monkeypatch.setattr(followup, "call_rules", boom)
 
 
+@pytest.fixture(autouse=True)
+def search(monkeypatch):
+    """Google Search is a fake: search.reply = WebAnswer | None (no answer, as when the search names no source)."""
+    class S:
+        reply = None
+        prompts: list = []
+
+    s = S()
+    s.prompts = []
+    monkeypatch.setattr(followup, "gemini_search", lambda prompt, timeout_s: s.prompts.append(prompt) or s.reply)
+    return s
+
+
 # ---- 1. a topic with no facts is answered "not enough data", never with an unrelated fact -----------------------
+def test_a_loan_question_without_loan_details_is_searched_for_first(monkeypatch, no_rules, search):
+    search.reply = followup.WebAnswer(text="Kāinga Ora describes the First Home Loan as a loan with a 5% deposit.",
+                                      sources=[followup.WebSource(title="kaingaora.govt.nz", url="https://example.com/a")],
+                                      search_suggestions="<div>chips</div>")
+    gen = fake(cls(), [ans(("x", ["F1"]))])
+    monkeypatch.setattr(followup, "gemini_json", gen)
+    out = post_body(no_loan_details(), "What is a First Home Loan?").json()
+    assert out["web"]["text"] == search.reply.text and out["answer"] == [] and out["out_of_scope"] is False
+    assert len(search.prompts) == 1 and not gen.calls["answer"] and out["warnings"] == []
+
+
 def test_first_home_loan_question_without_loan_details_says_it_cannot_answer(monkeypatch, no_rules):
     # the model would answer with the hazard fact F1: the program must not even ask it
     gen = fake(cls(), [ans(("The council could not check these hazard layers.", ["F1"]))])
@@ -45,6 +69,7 @@ def test_first_home_loan_question_without_loan_details_says_it_cannot_answer(mon
     assert not any(w in text.lower() for w in ("hazard", "flood", "landslide", "council", "title"))  # no unrelated fact
     assert all(s["source_ids"] == [] for s in out["answer"])
     assert out["language"] == "en" and out["out_of_scope"] is False and not gen.calls["answer"]
+    assert out["warnings"] == [followup.SEARCH_UNAVAILABLE]  # the search was tried first and gave nothing
 
 
 def test_missing_only_the_income(monkeypatch, no_rules):

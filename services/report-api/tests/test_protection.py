@@ -422,7 +422,7 @@ def test_search_allowance_exhausted_only_skips_the_search(monkeypatch, caplog):
     assert r.status_code == 200
     out = r.json()
     assert out["answer"][0]["text"] == followup.REFUSAL_EN and "web" not in out
-    assert out["warnings"] == []  # the model still answered: not degraded
+    assert out["warnings"] == [followup.SEARCH_UNAVAILABLE]  # the model still answered: not degraded
     assert len(fake.calls) == 1 and fake.searches == 0 and counters() == (1, 1, 0)
     rec = [x.json_fields for x in caplog.records if getattr(x, "json_fields", {}).get("event") == "request_complete"]
     assert rec[-1]["allowance"] == protection.SEARCH

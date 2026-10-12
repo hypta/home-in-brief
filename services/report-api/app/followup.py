@@ -124,7 +124,9 @@ class FollowupResponse(BaseModel):
     user_supplied_source: Optional[dict[str, str]] = None
     links: list[str]
     dropped: int
-    warnings: list[str] = Field(default_factory=list)  # e.g. rules_rerun_unavailable (mock mode only)
+    # rules_rerun_unavailable (mock mode only), generation_degraded, search_unavailable (a Google Search was called
+    # for and gave no answer: refused, failed, out of time or no source)
+    warnings: list[str] = Field(default_factory=list)
     web: Optional[WebAnswer] = None  # a Google Search answer: out of scope (with an empty `answer`) or a field search
 
 
@@ -140,7 +142,10 @@ class ClassifyOut(BaseModel):
 
 
 class AnswerOut(BaseModel):
-    answer: list[RewriteSentence]
+    # False: no fact in the list says anything about what was asked (a definition, a comparison of two terms, a
+    # topic the facts do not hold). The reply is then a Google Search answer, or the fixed "cannot answer" sentence.
+    answered: bool = True
+    answer: list[RewriteSentence] = Field(default_factory=list)
     links: list[str] = Field(default_factory=list)
 
 
@@ -1047,6 +1052,7 @@ def _sources_out(supplied: dict[str, Any], sources: dict[str, str]) -> Optional[
 
 # ---- multi-owner titles: a search value is shown, never filled in (user decision 10/11) -----------
 MULTI_UNIT = "multi_unit_title"
+SEARCH_UNAVAILABLE = "search_unavailable"
 
 
 def multi_unit_kind(req: ReportRequest) -> Optional[str]:
@@ -1076,8 +1082,10 @@ def skipped_answer(kind: str, found: dict[str, Any], language: str,
                    translate: Callable[..., Optional[list[str]]], debug: dict,
                    unavailable: Callable[[], bool] = lambda: False) -> list[Sentence]:
     """Code-written sentences for a search value that was not filled in: what was found, why it was not added, and
-    that the user may enter it. Chinese is written by code; other languages are translated under the usual checks
-    (English when a check fails). Each sentence passes the validator against the found values only."""
+    that the user may enter it. With no value held back (a last-sale search: nothing is ever filled in) only the
+    middle one, that the result may be about another unit. Chinese is written by code; other languages are translated
+    under the usual checks (English when a check fails). Each sentence passes the validator against the found values
+    only."""
     year, cladding = found.get("year_built"), found.get("cladding")
     en_bits, zh_bits, nums, terms = [], [], [], set()
     if year is not None:
@@ -1100,6 +1108,8 @@ def skipped_answer(kind: str, found: dict[str, Any], language: str,
     zh = ["網路搜尋找到的" + "，".join(zh_bits) + "。", reason_zh, f"搜尋結果尚未填入表單；若與{mine_zh}相符，可自行輸入。"]
     parts = []
     for n, text in enumerate(en):
+        if not found and n != 1:
+            continue
         s = Sentence(text=text, source_ids=[])
         if check_answer(s, ev, "en", base):
             continue  # not expected; a sentence that fails its own check is left out
@@ -1153,9 +1163,12 @@ def missing_loan_inputs(req: ReportRequest) -> list[str]:
                               ("income", u.get("household_income") is None)) if gone]
 
 
-def insufficient_texts(req: ReportRequest, kind: str) -> tuple[list[str], list[str], list[str]]:
+def insufficient_texts(req: ReportRequest, kind: Optional[str]) -> tuple[list[str], list[str], list[str]]:
     """The fixed answer in English, Traditional and Simplified Chinese: that the report cannot answer, then what
-    is missing (the loan details not entered, a deposit that covers the price, or no result for these inputs)."""
+    is missing (the loan details not entered, a deposit that covers the price, or no result for these inputs).
+    `kind` None (the question is not about the loan: no fact answers it): the first sentence alone."""
+    if kind is None:
+        return [INSUFFICIENT_EN], [INSUFFICIENT_ZH[0]], [INSUFFICIENT_ZH[1]]
     gone = missing_loan_inputs(req)
     cash = any(w in req.warnings() for w in ("cash_purchase_no_loan", "deposit_exceeds_price"))
     what_en, what_t, what_s = ("First Home Loan", "First Home Loan", "First Home Loan") if kind == "fhl" else \
@@ -1268,7 +1281,35 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
     sources = {k: USER for k in supplied}
     links = [i for i in dict.fromkeys(c.links) if i in link_ids][:3]
 
-    def insufficient_answer(eff: ReportRequest, kind: str) -> Optional[tuple[list[Sentence], str]]:
+    def no_search() -> None:
+        """A search was called for and gave no answer (refused, failed, out of time, no source): the page can say so.
+        Not when the whole request is degraded: generation_degraded says that."""
+        if not halted() and SEARCH_UNAVAILABLE not in warnings:
+            warnings.append(SEARCH_UNAVAILABLE)
+
+    def searched(out_of_scope: bool) -> Optional[FollowupResponse]:
+        """The whole reply from a Google Search (fp.web_prompt): for a question the report does not cover, or one no
+        fact answers. None when search is off (eval, strict or mock mode) or gave no answer; the latter is named in
+        warnings.
+        The model does not always search: asked once more, time allowing, when the answer names no source. Neither
+        call gets all the time that is left: web, the caller, has its own limit for the whole request. The search limit
+        is shared with the field search: at most gemini.MAX_SEARCHES calls per request."""
+        address = str((req.property_context.get("address") or {}).get("matched") or "")
+        if mock or not (web_search and refusal_mode == "exempt" and address):
+            return None
+        prompt = fp.web_prompt(address, question, history)
+        try:
+            web = _search(prompt, clock, 0.6) or _search(prompt, clock, 0.6)
+        except gemini.ModelUnavailable as e:
+            log.warning("web answer unavailable: %s", type(e).__name__)
+            web = None
+        if not web:
+            no_search()
+            return None
+        return FollowupResponse(language=language, answer=[], out_of_scope=out_of_scope, user_supplied=supplied,
+                                links=links, dropped=0, warnings=warnings, web=web)
+
+    def insufficient_answer(eff: ReportRequest, kind: Optional[str]) -> Optional[tuple[list[Sentence], str]]:
         """The fixed "not enough data" answer in the asker's language (English or code-written Chinese; another
         language by restricted translation, else English with language "en"), or None if a sentence fails its check."""
         en, zh_t, zh_s = insufficient_texts(eff, kind)
@@ -1292,9 +1333,11 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
         return out, lang
 
     def in_scope(question: str, supplied: dict[str, Any], sources: dict[str, str],
-                 skip: frozenset = frozenset()) -> FollowupResponse:
+                 skip: frozenset = frozenset(), after_search: bool = False) -> FollowupResponse:
         """Steps 3-4 for an in-scope question. `sources`: "web_search" for values extracted from a search answer;
-        `skip`: the fields a web search answered (their fixed program sentences are left out)."""
+        `skip`: the fields a web search answered (their fixed sentences are left out). When the model finds no fact
+        that answers the question, the reply is a Google Search answer, else the fixed "cannot answer" sentence;
+        `after_search` (a field search answer is already there): ReportError instead, and that answer stands alone."""
         nonlocal stopped
         # 3. merge user_supplied; property values with status "found" win; re-run rules when something new is used
         pf = req.property_fields()
@@ -1376,6 +1419,11 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
         all_facts = facts_prompt.followup_facts(eff, ev, data.items, said)
         kind = loan_topic(question)
         if kind and not fixed and not used and not loan_facts(all_facts, kind):
+            # a search first (what a First Home Loan is, how a loan works: Ting 10/12); the fixed sentences when it
+            # gives nothing
+            online = None if after_search else searched(False)
+            if online:
+                return online
             got = insufficient_answer(eff, kind)
             if got:
                 debug["insufficient"] = kind
@@ -1389,8 +1437,9 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
             passed = [Part(s, native=is_english(language) or script_matches(s.text, language),
                            user=bool(set(s.source_ids) & ev.user_kb)) for s in sentences[:limit]]
         else:
+            # a field a search answered: neither its program sentence nor "could not be checked" is said beside it
             fs = [f for f in all_facts
-                  if not (f.program and f.topic.removeprefix("program:") in skip)]
+                  if not ((f.program or f.topic.startswith("missing:")) and f.topic.split(":", 1)[-1] in skip)]
             ev.latin_terms |= latin_terms(eff, fs)
             for f in fs:
                 for sid in f.source_ids:
@@ -1424,6 +1473,19 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
                         stopped = True
                         break
                     continue
+                if not out.answered and not fixed and not used:
+                    # no fact answers it (a definition, a topic the facts do not hold): never facts about something else
+                    if after_search:
+                        raise ReportError(502, "validation_failed", "No fact answers the question.")
+                    got = searched(False)
+                    if got:
+                        return got
+                    sure = insufficient_answer(eff, None)
+                    if sure:
+                        debug["insufficient"] = "unanswered"
+                        return FollowupResponse(language=sure[1], answer=sure[0], out_of_scope=False,
+                                                user_supplied=supplied, links=links or fallback_links(question, link_ids),
+                                                dropped=0, warnings=warnings)
                 # a sentence naming a program fact is replaced by that fact's draft (program_sentences)
                 prog_named = [i for s in out.answer for i in s.fact_ids if i in prog_ids]
                 rewrites = [s for s in out.answer if not set(s.fact_ids) & prog_ids]
@@ -1451,8 +1513,12 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
             # no model answer (out of time, or every call failed: F01) and no fixed sentence: the must-mention facts'
             # drafts
             musts = best is None and not prog and not fixed
+            # A draft is the program's own sentence or a verified claim as written: the sentence limit, which keeps the
+            # model's rewrites short, does not hold it back (six claims are longer than MAX_WORDS, and a question about
+            # one of them had no answer when its rewrite was blocked).
             items = rewrite.compose(best or [], fs, limit, add_musts=musts, sort=False,
-                                    check_draft=lambda s: check_answer(s, ev, "en")) if limit else []
+                                    check_draft=lambda s: [f for f in check_answer(s, ev, "en") if f != TOO_LONG]
+                                    ) if limit else []
             dropped = sum(r.sentence is None for r in best or [])
             debug["composed"] = [{"text": it.sentence.text, "fact_ids": it.fact_ids, "kind": it.kind} for it in items]
             debug["rewrite"] = rewrite.stats(items, best or [])
@@ -1489,6 +1555,8 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
     if fields and web_search and refusal_mode == "exempt" and not classify_failed:
         web = field_search(req, fields, question, history, generate, clock, mock, debug,
                            language if button and not req.question.strip() else "")
+        if not web:
+            no_search()
         if web:
             chat = req.chat_supplied()  # values only add: a value the user already gave is never replaced
             kind = multi_unit_kind(req)
@@ -1499,8 +1567,11 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
                         held[k] = web.extracted[k]
                     else:
                         supplied[k], sources[k] = web.extracted[k], WEB_SEARCH
-            if held:  # shown, not filled in: no user_supplied value, no rules-api call
-                web = web.model_copy(update={"autofill_skipped": MULTI_UNIT})
+            # shown, not filled in: no user_supplied value, no rules-api call. A sale found online is never filled in,
+            # but it too may be another unit's: the button's reply says so (a typed question is answered as usual).
+            if held or (kind and button == "last_sale"):
+                if held:
+                    web = web.model_copy(update={"autofill_skipped": MULTI_UNIT})
                 answer = skipped_answer(kind, held, language, translate, debug, unavailable)
                 fallback = debug.get("fallback")
                 return FollowupResponse(language=fallback["language"] if fallback else language, answer=answer,
@@ -1518,7 +1589,7 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
             try:
                 # the fixed sentence of a searched field is left out unless a value found online fills it
                 out = in_scope(question, supplied, sources,
-                               frozenset(f for f in fields if sources.get(f) != WEB_SEARCH))
+                               frozenset(f for f in fields if sources.get(f) != WEB_SEARCH), after_search=True)
             except ReportError as e:  # the search answer still stands
                 log.info("answer after the field search failed (%s); search answer only", e.code)
                 return only_web
@@ -1526,22 +1597,9 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
 
     # 2. out of scope: an answer from a Google Search when web pages can answer it, else the fixed refusal
     if c.out_of_scope:
-        address = str((req.property_context.get("address") or {}).get("matched") or "")
-        if c.searchable and web_search and refusal_mode == "exempt" and address:
-            prompt = fp.web_prompt(address, question, history)
-            # The model does not always search: asked once more, time allowing, when the answer names no source.
-            # Neither call gets all the time that is left: web, the caller, has its own limit for the whole request.
-            # The search limit is shared with the field search: at most gemini.MAX_SEARCHES calls per request.
-            try:
-                web = _search(prompt, clock, 0.6)
-                if not web:
-                    web = _search(prompt, clock, 0.6)
-            except gemini.ModelUnavailable as e:
-                log.warning("web answer unavailable: %s", type(e).__name__)
-                web = None
-            if web:
-                return FollowupResponse(language=language, answer=[], out_of_scope=True, user_supplied=supplied,
-                                        links=links, dropped=0, warnings=warnings, web=web)
+        got = searched(True) if c.searchable else None
+        if got:
+            return got
         refusal, refusal_lang = Sentence(text=REFUSAL_EN, source_ids=[]), "en"
         if is_zh(language):
             refusal, refusal_lang = Sentence(text=_zh(REFUSAL_ZH, language), source_ids=[]), language

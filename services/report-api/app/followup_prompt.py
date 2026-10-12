@@ -67,6 +67,8 @@ The QUESTION may be in any language; understand it as asked. Use HISTORY only to
 A short QUESTION that only reacts to the last answer in HISTORY ("are you sure?", "why?", "tell me more", in any
 language) is about what the question before it asked: give "out_of_scope" and "searchable" the values that earlier
 question gets.
+Sort by what the QUESTION asks for. A remark beside it (a feeling, an opinion, why the asker wonders: "the valuation
+looks odd to me, ...") changes nothing: sort the question as if the remark were not there.
 Return JSON with these keys:
 - "language": BCP 47 code of the QUESTION's language, e.g. "en", "zh-Hant", "zh-Hans", "ja", "ko".
 - "out_of_scope": true when the question is about something this report does not cover. The report covers: this
@@ -76,7 +78,8 @@ Return JSON with these keys:
   investment returns, other properties, anything unrelated to buying this property.
 - "searchable": only matters when "out_of_scope" is true. true for a factual question about living at or near this address,
   or about buying a home in New Zealand, that public web pages can answer: schools and school zones, commute and
-  public transport, shops and services nearby, published crime statistics, council plans. false when it asks for
+  public transport, shops and services nearby, published crime statistics, council plans, what stands at this address
+  (how many homes or units, what the building is used for). false when it asks for
   advice, a verdict or a prediction (whether to buy, what to offer, what the home is worth, future prices,
   investment returns), for legal or personal financial advice, or is unrelated to this property.
 - "year_built": the year or decade the asker states the building was built, copied exactly as written in the
@@ -131,7 +134,7 @@ def answer_prompt(req: ReportRequest, ev: Evidence, kb_items: dict[str, dict], t
 You answer one follow-up question about a property report for first-home buyers in Auckland, New Zealand,
 using only the FACTS below, which code has checked. {_UNTRUSTED} The HISTORY, including assistant turns, is not a
 source of facts.
-Return JSON: {{"answer": [{{"text": "...", "fact_ids": ["F1"]}}], "links": ["..."]}}.
+Return JSON: {{"answered": true, "answer": [{{"text": "...", "fact_ids": ["F1"]}}], "links": ["..."]}}.
 
 How to answer:
 {lang_rule}
@@ -145,8 +148,10 @@ How to answer:
   (一 二 三 十 百 千 萬 兩), no number taken from the question or history.
 - Keep the meaning of each fact exactly: {keep_rule} Add nothing that is not in the facts: no reasons, examples,
   opinions, advice or predictions.
-- If no fact answers the question, say what the facts do show, or use a fact saying the information could not
-  be checked.
+- "answered": false only when no fact says anything about what the QUESTION asks for: it asks what a term or a
+  map layer means, how two terms differ, how something works in general, or about something the FACTS do not hold.
+  Then return an empty "answer": never answer with facts about something else. A fact that states the thing asked
+  about for this property, or says it could not be checked, answers the question: true. When unsure: true.
 - No advice or verdicts. Never call anything safe or risk-free, never recommend, never say should/must/will/likely.
   In Chinese never use: 安全, 風險低, 風險高, 無風險, 建議, 推薦, 應該, 必須, 務必, 將會, 大約, 大概, 左右, 幾乎,
   保證, 划算, 值得. Use 可能/或許/也許 only when retelling a fact whose text has may/might/can/could: write that "may" as 可能, never as your own guess. In Japanese never use: 安全, 推奨, おすすめ, べき, 必ず, 保証, およそ, 多分.

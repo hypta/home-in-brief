@@ -403,7 +403,7 @@ def test_search_allowance_alone_does_not_stop_the_answer(monkeypatch):
     monkeypatch.setenv("SEARCH_DAILY_CALLS", "0")
     r = post_followup("When was this home built? Is there a flood risk?")
     assert r.status_code == 200 and fake.tasks == ["classify", "answer"]
-    assert r.headers["x-report-mode"] == "gemini" and r.json()["warnings"] == []
+    assert r.headers["x-report-mode"] == "gemini" and r.json()["warnings"] == [followup.SEARCH_UNAVAILABLE]
 
 
 # ---- R6: fixed sentences in the asker's language when written, else English --------------------------------------

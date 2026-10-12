@@ -138,9 +138,11 @@ call: a Chinese question gets fixed Chinese sentences written by code (a lead "�
 or "…請查看下方的原始資料連結。" when no fact has Chinese wording, plus the code-written Chinese of the comparison and
 missing-field sentences; English sentences without a Chinese version are left out); any other language gets the
 English sentences with an English lead, and `language` is then `"en"`. An English question is answered as usual.
-`warnings` is `[]` except `rules_rerun_unavailable` (mock mode answered from the input RulesOutput) and
+`warnings` is `[]` except `rules_rerun_unavailable` (mock mode answered from the input RulesOutput),
 `generation_degraded` (protection refused a model call: the answer is the program's facts or fixed sentences, with no
-search, no extracted values and no translation; see "Abuse and cost protection").
+search, no extracted values and no translation; see "Abuse and cost protection") and `search_unavailable` (a Google
+Search was called for and gave no answer: refused by the daily Search allowance, failed, out of time or no source;
+the reply is then the fixed sentences; not added when `generation_degraded` applies).
 1 or more passing sentences gives 200 (at most 3, plus the fixed lead sentence when no model call could be made); 0 gives 502 `validation_failed`.
 
 Steps (INTERFACE_DRAFT 5 and 6.1):
@@ -199,10 +201,20 @@ Steps (INTERFACE_DRAFT 5 and 6.1):
    the value the user just gave, cited only to the KB items it selected). After a rules re-run the list is
    rebuilt from the new RulesOutput. Gemini returns `{"answer": [{"text", "fact_ids"}], "links"}` with values as
    placeholders, written in the question's language; each sentence goes through `validator.check_rewrite` (step 6
-   is its final check) and a blocked one falls back to its facts' English drafts (model order kept, at most 3),
+   is its final check) and a blocked one falls back to its facts' English drafts (model order kept, at most 3;
+   a draft may be longer than the 25-word limit, which is for rewrites: some verified claims are),
    which step 7 translates. `question` and `history`
    (including assistant turns) are quoted as untrusted data and never enter the evidence. The one exception: a
    used `year_built` is an allowed number for the `kb_items_from_user_input` items only.
+   **No fact answers the question** (Ting 10/12): the model also returns `"answered"`, false when no fact says
+   anything about what was asked (what a term or a map layer means, how two terms differ, a topic the facts do not
+   hold). The reply is then never facts about something else: it is a Google Search answer as in step 3 (`web`,
+   `answer: []`, `out_of_scope: false`), or, when there is no search (eval, `strict`, no answer), the one fixed
+   sentence "This report does not have enough data to answer this question." (Chinese by code, other languages
+   by restricted translation) with the fallback links. Not applied when the question states a year or cladding.
+   A question about the loan or the First Home Loan with no loan fact in the list (no deposit or income entered) is
+   searched for the same way, before any answer call; with no search answer it gets the two fixed sentences that
+   say what is missing.
 6. Every sentence goes through `followup.check_answer`: `validator.check_sentence` plus language rules.
    - The sentence must be in the detected language (`language_mismatch`): English has no CJK script; Chinese has
      Han and no kana/Hangul; Japanese has kana; Korean has Hangul. Other Latin-script languages are not told
@@ -335,11 +347,15 @@ chose plan C). For `year_built`, `cladding` and `last_sale` (`app/web_fields.py`
 - **`/v1/report`.** report-api reads the source from `user_inputs.chat_supplied_source: {"year_built":
   "web_search"}` next to `chat_supplied` (a missing or malformed value, or any value other than `"web_search"`,
   means `"user"`). The summary then says "found online" instead of "you gave" and uses the web prefix by the same
-  rule (`prompt.chat_sources`, `prompt.from_web`). **Not wired in web yet (teammate A's work):** web fills the form
-  from `user_supplied` but does not yet keep `user_supplied_source` or send `chat_supplied_source` on the report
-  recalculation and later follow-ups, so today a search-filled value comes back as the user's own value. web needs
-  to store the source with each form value (`"web_search"` from the follow-up response, `"user"` after a manual
-  edit) and send it as `user_inputs.chat_supplied_source`.
+  rule (`prompt.chat_sources`, `prompt.from_web`). web keeps the source with each form value (`"web_search"` from
+  the follow-up response until the visitor changes the value) and sends it as `user_inputs.chat_supplied_source` on
+  the report recalculation and later follow-ups.
+- **The last-sale button on a property with several owners** (Ting 10/12): nothing is ever filled in for a sale, but
+  the result may be another unit's, so `answer` holds the one sentence that says so ("This is a unit title property,
+  so the result may describe another unit or the whole building."); `autofill_skipped` stays absent.
+- **Nothing to fill in and no fact to add** (Ting 10/12): beside a search answer, neither the program sentence nor
+  the "could not be checked from public records" fact of a searched field is said, and when the model finds no fact
+  that answers the rest of the question the reply is the search answer alone (`answer: []`).
 - **Mock** (`REPORT_MOCK=true`): no search; `web` is `followup.MOCK_WEB` (text starting "MOCK web search answer",
   source `example.com`), and extraction by code gives `year_built: 1985`, `cladding: "wood"`, `last_sale: {date:
   "March 2019", price: "$850,000"}` (only the fields asked for).

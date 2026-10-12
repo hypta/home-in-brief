@@ -831,3 +831,89 @@ def test_mock_mode_also_skips_the_form(monkeypatch, search, rules):
     assert out["user_supplied"] == {} and rules == [] and out["web"]["extracted"] == {"year_built": 1985}
     assert out["web"]["autofill_skipped"] == "multi_unit_title"
     assert "cross lease property" in out["answer"][1]["text"]
+
+
+# ---- a question the facts cannot answer: a search, else a plain "cannot answer" (Ting 10/12) -------------
+UNANSWERED = {"answered": False, "answer": [], "links": []}
+DEFINITION = "What is the difference between a flood plain and a flood prone area?"
+
+
+def test_a_question_the_facts_cannot_answer_is_answered_from_a_search(monkeypatch, search, rules):
+    search.reply = web("Auckland Council describes a flood plain as land covered by water in a 1-in-100-year storm.")
+    gen = fake(cls(), [UNANSWERED])
+    monkeypatch.setattr(followup, "gemini_json", gen)
+    out = post("case1", DEFINITION).json()
+    assert out["answer"] == [] and out["out_of_scope"] is False and out["warnings"] == []
+    assert out["web"]["text"] == search.reply.text and out["web"]["fields"] == []
+    assert len(search.prompts) == 1 and search.prompts[0].startswith(fp.TASK_WEB)
+    assert len(gen.calls["answer"]) == 1  # the answer is not asked for again
+
+
+@pytest.mark.parametrize("language, text", [("en", followup.INSUFFICIENT_EN), ("zh-Hant", followup.INSUFFICIENT_ZH[0])])
+def test_with_no_search_answer_the_reply_says_the_report_cannot_answer(monkeypatch, search, rules, language, text):
+    search.reply = None
+    monkeypatch.setattr(followup, "gemini_json", fake(cls(language), [UNANSWERED]))
+    # the Chinese case asks with a Chinese sentence the program already has: only its script matters to the fake model
+    out = post("case1", DEFINITION if language == "en" else followup.REFUSAL_ZH).json()
+    assert [s["text"] for s in out["answer"]] == [text] and "web" not in out
+    assert out["language"] == language and out["out_of_scope"] is False and out["links"]
+    assert out["warnings"] == ["search_unavailable"]
+
+
+def test_eval_runs_say_the_report_cannot_answer_without_a_search(monkeypatch, search, rules):
+    monkeypatch.setattr(followup, "gemini_json", fake(cls(), [UNANSWERED]))
+    req = followup.FollowupRequest.model_validate(body("case1") | {"question": DEFINITION})
+    out = followup.answer_followup(req)  # web_search off
+    assert search.prompts == [] and [s.text for s in out.answer] == [followup.INSUFFICIENT_EN] and out.warnings == []
+
+
+def test_a_field_search_with_nothing_to_fill_in_is_the_search_answer_alone(monkeypatch, search, rules):
+    search.reply = web("OneRoof states that the building is from the 1970s.")
+    gen = fake(cls(), [UNANSWERED], extract={})
+    monkeypatch.setattr(followup, "gemini_json", gen)
+    out = post("case1", "When was this building built?").json()
+    assert out["answer"] == [] and out["web"]["extracted"] == {} and out["user_supplied"] == {}
+    assert len(search.prompts) == 1  # no second search for a question the field search answered
+    assert "The year built could not be checked" not in gen.calls["answer"][0]
+
+
+def test_last_sale_on_a_multi_owner_title_says_it_may_be_another_unit(monkeypatch, search):
+    monkeypatch.setattr(followup, "call_rules", lambda *a: pytest.fail("no rules re-run"))
+    search.reply = web("Homes.co.nz shows it last sold in March 2019 for $850,000.")
+    monkeypatch.setattr(followup, "gemini_json", fake(None))
+    out = post("case1", b=with_title("Unit Title"), search_field="last_sale").json()
+    assert [s["text"] for s in out["answer"]] == [
+        "This is a unit title property, so the result may describe another unit or the whole building."]
+    assert out["user_supplied"] == {} and "autofill_skipped" not in out["web"]
+    assert out["web"]["extracted"] == {"last_sale": {"price": "$850,000", "date": "March 2019"}}
+
+
+def test_a_search_that_gives_no_answer_is_named_in_the_warnings(monkeypatch, search, rules):
+    search.reply = None
+    monkeypatch.setattr(followup, "gemini_json", fake(cls(), [{"answer": [], "links": []}]))
+    assert post("case1", "When was it last sold?").json()["warnings"] == ["search_unavailable"]
+    monkeypatch.setattr(followup, "gemini_json", fake(cls(out_of_scope=True, searchable=True)))
+    out = post("case1", "Which schools are near here?").json()
+    assert out["warnings"] == ["search_unavailable"] and out["answer"][0]["text"] == followup.REFUSAL_EN
+    # a field search and the search for the rest of the question both gave nothing: named once
+    monkeypatch.setattr(followup, "gemini_json", fake(cls(out_of_scope=True, searchable=True)))
+    assert post("case1", "When was it last sold, and which schools are near?").json()["warnings"] == ["search_unavailable"]
+
+
+# ---- a knowledge-base claim longer than the sentence limit is still the fallback of a blocked rewrite ------------
+def test_a_blocked_rewrite_falls_back_to_a_claim_longer_than_the_sentence_limit(monkeypatch, search, rules):
+    req = ReportRequest.model_validate(body("case1"))
+    data = kb.load(req.selected_kb_ids())
+    ev = V.build_evidence(req, data.items, data.sources.keys(), source_urls=data.sources.urls)
+    lim = next(f for f in facts_prompt.followup_facts(req, ev, data.items, {})
+               if f.source_ids == ["kb_lim_next_step"] and f.topic.startswith("kb:"))
+    assert len(lim.draft().split()) > V.MAX_WORDS  # the claim as verified: 32 words
+    # the rewrite drops the attribution, so it is blocked; a rewrite of that length would be blocked as too long
+    blocked = {"answer": [{"text": "A LIM report is a key document to get before making an offer.", "fact_ids": [lim.id]}],
+               "links": []}
+    monkeypatch.setattr(followup, "gemini_json", fake(cls(), [blocked]))
+    r = post("case1", "What is a LIM report?")
+    assert r.status_code == 200, r.text
+    out = r.json()
+    assert [s["text"] for s in out["answer"]] == [lim.draft()] and out["dropped"] == 1
+    assert out["answer"][0]["source_ids"] == ["kb_lim_next_step"]
