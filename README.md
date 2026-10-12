@@ -78,11 +78,14 @@ shows the program's own sentences, built from the same facts and checked the sam
 suggested links). Code checks the extracted year or cladding value, merges it into the user's inputs without
 overriding a value the council records, **re-calls rules-api** with it, and Gemini answers from the new fact list.
 Answers go through the same validator (at most 3 sentences). An out-of-scope question that public web pages can answer
-is answered with Gemini's Google Search grounding, shown exactly as returned with its search suggestions and sources,
-and marked as not checked by this tool; a search answer that gives a purchase or price verdict is not shown. Advice,
-verdicts and predictions are never searched and get one fixed refusal and links; a purchase question that also names a
-report topic ("should I buy, it's in a flood plain") gets the checked facts on that topic after a fixed sentence saying
-the tool cannot decide for the buyer. When the
+(schools, commute), an in-scope factual question the facts do not answer, or a question that only asks what a term or
+document is ("What is a LIM report?") and that the facts do not answer, is answered with Gemini's Google Search grounding, shown exactly as returned with its search
+suggestions and sources, and marked as not checked by this tool; an answer that judges this property, gives a verdict
+wording the program knows, or (for a definition) is not about the term is not shown. Advice, verdicts, predictions and
+any question with a purchase clause are never searched and get one fixed refusal and links; a
+purchase question that also names a report topic ("should I buy, it's in a flood plain") gets the program's own
+sentences only: a fixed sentence saying the tool cannot decide for the buyer, then the checked fact drafts on that
+topic, with no Gemini wording or translation. When the
 records lack the year built, cladding or last sale and the question asks for it, report-api searches for that field
 the same way; a year or cladding found there fills the inputs, marked "from a web search, not checked", except where
 the address is one of several units on a site (Unit Title, Cross Lease, or more than one title type), where it is

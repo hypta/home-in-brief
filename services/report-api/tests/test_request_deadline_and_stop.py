@@ -331,7 +331,7 @@ def test_all_draft_summary_says_code_draft_and_mixed_keeps_the_model(monkeypatch
 class StageGenai(FakeGenai):
     """Answers every task; raises a provider 429 at `fail` (classify, search, extract, answer, translate)."""
 
-    def __init__(self, fail, classify, answers=(), search_text="Listing pages describe this home."):
+    def __init__(self, fail, classify, answers=(), search_text="Listing pages say when this home was built only vaguely."):
         super().__init__()
         self.fail, self.classify, self.answers, self.search_text, self.tasks = fail, classify, list(answers), \
             search_text, []

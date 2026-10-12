@@ -208,7 +208,7 @@ def test_a_chinese_search_answer_keeps_the_chinese_label(monkeypatch):
 
 
 def test_a_french_question_with_an_english_answer_is_labelled_english(monkeypatch):
-    # code does not read French definitions: classify's searchable flag is the affirmative reason to search
+    # a French definition question (definition_question reads "qu'est-ce que")
     out, _ = run(monkeypatch, "Qu'est-ce qu'un rapport LIM ?", cls("fr", searchable=True))
     assert out["language"] == "en"
     out, _ = run(monkeypatch, "Qu'est-ce qu'un rapport LIM ?", cls("fr", searchable=True),

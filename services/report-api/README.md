@@ -149,7 +149,8 @@ answer and the derived sentences; ignored when a question is sent (its language 
 code is a 422 `validation_error`.
 
 Response 200: `{language, answer: [{text, source_ids}], out_of_scope, user_supplied, links, dropped, warnings}`,
-plus `web` when an out-of-scope question was answered from a Google Search (step 3; `answer` is then `[]`) or a
+plus `web` when a question was answered from a Google Search (step 3, or an in-scope question no fact answers;
+`answer` is then `[]`) or a
 field was searched for (below), plus `user_supplied_source` when a `user_supplied` value came from a web search.
 `language` is the detected language of the question (BCP 47: `en`, `zh-Hant`, `zh-Hans`, `ja`, `ko`, ...). A
 sentence whose translation failed its checks (step 7) is in English even when `language` is not. When no translation
@@ -174,7 +175,8 @@ timeout, 429, no key) and nothing else answers: the reply is then the fixed "not
 Steps:
 
 1. Gemini call 1 (classify): the question's language, out of scope, whether public web pages can answer it
-   (`searchable`), a stated year built or cladding, suggested links. The language is corrected by script
+   (`searchable`), a stated year built or cladding, suggested links.
+   The language is corrected by script
    (`followup.normalize_language`): Hangul gives `ko`, kana `ja`, Han `zh-Hant` or `zh-Hans` (a bare `zh` is decided
    by common simplified/traditional characters; `ja` is kept for Han-only Japanese); a question without CJK script
    is never zh/ja/ko; an invalid code gives `en`.
@@ -186,8 +188,10 @@ Steps:
    negation word (`if`, `not`, `如果`, `假如`, `不是`, ...) gives no value, and so does a value the question only
    asks about (`followup.affirmed`: "Was it built in 1997?", `這房子是 1997 年蓋的嗎？`; "It was built in 1997, what
    does that mean?" states it). Logged as `user_supplied_ignored`.
-3. Out of scope, and classify says web pages can answer it (schools, commute, services nearby, published crime
-   statistics; never advice, verdicts or predictions): a Gemini call with the Google Search tool
+3. An out-of-scope question of fact that classify says web pages can answer (schools, commute, services nearby,
+   published crime statistics), or a complete definition question ("What is a LIM report?", "What does overpriced
+   mean?", `什麼是 LIM 報告？`; `followup.definition_question`) that the facts do not answer: a Gemini call with the
+   Google Search tool
    (`followup.gemini_search`, prompt `followup_prompt.web_prompt` with the matched address, the question and the
    history), made once more, time allowing, when the first answer names no source. Field searches (below) and this
    search share one limit: at most 2 search calls per request. The response carries `web: {text, sources: [{title, url}], search_suggestions}`: the answer in the
@@ -200,18 +204,36 @@ Steps:
    below is returned instead. Only the route searches: `answer_followup` called directly (the eval script) does
    not, because an eval run stores what it gets.
 
-   Who may be searched (`followup.search_eligible`): only a question of fact with an affirmative reason (classify's
-   `searchable`, or code recognises a question about what a term or document is, `term_question`); never advice
-   (`asks_advice`: the keywords, or classify's `advice` flag unless code recognises a question of fact such as what a
-   word means, what to check or look out for, or what a report item means for this property), a prediction, a worth or
-   the buyer's own LVR. A field search (button or question) sends a fixed query for the field in the asker's language,
-   never the question or the history. A search answer with a purchase or price verdict (`followup.web_advice`) is not
-   shown, and not edited; the reply is then as if the search gave nothing (`search_unavailable`). A short reaction with
-   nothing new ("Are you sure?", "你確定嗎") is replaced by the earlier user question when that turn reads as a question,
-   not an instruction; when the earlier answer is inferred to be a search answer (a definition question whose answer is
-   not a fixed sentence), the search is asked again. A purchase question that also names a report topic (hazards,
-   title, year built or cladding, loan, LIM) is answered from the facts on that topic after `DECLINE_EN` (Chinese
-   written by code, `DECLINE_ZH`); with no such topic, or only the price, the fixed refusal below.
+   Who may be searched: (a) a property field's fixed query (`field_search`: the button, or a typed question about a
+   field the records lack), in the asker's language, never the question or the history; (b) a typed question
+   (`followup.search_eligible`) that is either one complete request for what a term or document is
+   (`definition_question`: a single clause, a term wording, no wish to buy or bid in it, no prediction, worth or own
+   figure; a price word only as the term asked about) or a question classify flags `searchable` (out of scope, or in
+   scope when no fact answers it or every sentence is blocked); in both cases only when classify did not flag advice
+   and no clause wishes to buy or bid (`purchase_intent`). Never searched: advice (`asks_advice`: the keywords anywhere in the
+   question, or classify's `advice` flag unless the whole question asks for facts, `factual_request`: a definition,
+   what to check or look out for, or what a report item means for this property; a term or diligence clause beside a
+   purchase clause never cancels the flag), any wish to buy or bid in any clause, a prediction, a worth or the buyer's
+   own LVR. A search answer is shown whole as returned or not at all (`followup.web_unusable`): a definition answer
+   must name the term asked about and say nothing about "this property" or "your home"; any other answer must
+   not judge this property or the buyer's home (`judges_property`: a sentence naming it together with a judging word
+   such as safe, good, worth, recommend, 值得, 安全, 適合; a fact such as "This home is zoned for X" passes, and it need
+   not repeat the question's words); a field answer must speak of that field (its words, a year or an era); and
+   `web_advice` catches the verdict wordings it lists. A rejected answer
+   is not edited; the reply is then as if the search gave nothing (`search_unavailable`). This screen narrows what
+   model text reaches the page; it is not a proof (see "Known limitations" below). A short reaction with nothing new
+   ("Are you sure?", "你確定嗎") is replaced by the earlier user question when that turn reads as a question, not an
+   instruction; when the earlier answer is inferred to be a search answer (a definition question whose answer is not a
+   fixed sentence), the search is asked again.
+
+   A purchase question that also names a report topic (hazards, title, year built or cladding, loan, LIM; `mixed`)
+   has no model text at all: no answer call, no search, no translation. The reply is the fixed `DECLINE_EN` (Chinese
+   written by code, `DECLINE_ZH`) followed by the checked drafts of the facts about the topics it names
+   (`topic_fact_ids`, at most 3) and the program sentence of a field it asks about. Every language other than Chinese
+   gets the English sentences and `language: "en"`; Chinese gets the Chinese decline, code-written Chinese where code
+   has it (comparisons, missing-field sentences) and the other drafts in their English original, which `DECLINE_ZH`
+   says ("以下是紀錄中的事實（英文原文）"). With no such topic, only the price, or no fact on the topic, the fixed
+   refusal below.
 
    Otherwise the answer is one fixed refusal chosen by code: English, Chinese written by code (`REFUSAL_ZH`,
    zh-Hans by character mapping), or for other languages a restricted translation of the English (step 7; English
@@ -315,6 +337,32 @@ Steps:
    local board, building site coverage) get ordinary cited facts ("Council records could not be read from our
    server, so the floor area is unknown.").
 
+### Known limitations (follow-up routing)
+
+- **Search answers.** A search answer is shown as returned (the Gemini API terms) and is checked only by
+  `web_unusable`: a definition answer must name the term and must not speak of this property; any other answer (out of
+  scope, or in scope with no fact) must not judge this property in the words `judges_property` knows (it is not checked for relevance to the question);
+  every answer must avoid the verdict wordings `web_advice` lists. A web page that gives advice in other words ("LIM
+  reports are useful; go ahead with the purchase", "families love this suburb, don't miss out") can pass, in any
+  language. The page labels it as an unverified web search answer; the risk is narrowed (never searched for advice
+  or a purchase clause), not removed.
+- **Translated answers.** A non-English, non-Chinese answer to a factual question still uses Gemini's restricted
+  translation of the program's English sentences (step 7). Its checks pin numbers, terms, length and, for CJK,
+  negation; they do not read meaning in other languages. Purchase answers (the decline and its facts) and the buyer's
+  own LVR are never translated (English, `language: "en"`).
+- **Language label of a search answer** (`followup.web_language`) is a script/word-count heuristic: capitalised
+  words are left out, quoted text is left out even when it is the substantive answer, and an unexpected Latin-script
+  language (Spanish to an English question) is labelled `en`; Han-only Japanese can be labelled Chinese. The text is
+  never changed; only the label can be wrong.
+- **Where a reaction came from.** web sends only role and text, so whether the earlier answer was a search answer
+  is inferred from the earlier question's wording (a definition) and from the first matching turn, not from a
+  recorded origin. A repeated question, a non-definition earlier search, or an instruction reworded to avoid the
+  instruction words (`_INSTRUCTION`) can be resolved or rechecked wrongly; the resolved question is still checked for
+  advice and search eligibility like any other.
+- **Keyword lists.** `_ADVICE_*`, `purchase_intent` and `_TERM_Q` cover common English, Chinese, Japanese and Korean
+  (and a few French, Spanish, German definition) wordings. They only withhold a search or a model answer; a
+  rewording they miss falls back on classify's `advice` flag, and a definition wording they miss is not searched.
+
 ### Fields the records do not have: web search
 
 For `year_built`, `cladding` and `last_sale`, which the first-hand sources often lack, a Google Search may be used
@@ -331,7 +379,7 @@ For `year_built`, `cladding` and `last_sale`, which the first-hand sources often
   button.
 - **Search.** One Gemini call with the Google Search tool (`followup_prompt.field_search_prompt`: the matched
   address and the fields; it asks for plain sentences such as "built in 1987"), a second only when the first names
-  no source; at most 2 search calls per request in all (with the out-of-scope search), each only with at least 11 s
+  no source; at most 2 search calls per request in all (with the question search), each only with at least 11 s
   left (see Time). Sources are not filtered by domain. No answer, no source, a failed call,
   `strict` mode or no `web_search` (eval): the usual steps run (fixed program sentences and links).
 - **Shown as returned.** `web: {text, sources, search_suggestions, fields, extracted}`: `text`, `sources` and
@@ -419,7 +467,7 @@ entered (`gemini.request_budget`): `REQUEST_DEADLINE_S` (25 s; web waits 30 s), 
 left; a duplicate that gives up generates with what is left, never a fresh budget), each allowance reservation and
 every call count against it. After a reservation the time left is checked again and the call's timeout recomputed;
 under 11 s the reserved call is kept (not refunded), nothing is sent and the drafts answer (`deadline`). Every Gemini call (summary and its retry, classify, answer and its retry, translations,
-extraction, field and out-of-scope searches) is made only when at least 11 s are left (`gemini.ADMIT_S`) and is sent
+extraction, field and question searches) is made only when at least 11 s are left (`gemini.ADMIT_S`) and is sent
 with a deadline of at least 10 s (`gemini.MIN_CALL_S`; the API refuses shorter ones with 400 "Minimum allowed
 deadline is 10s"), at most `GEMINI_TIMEOUT_S` and 1 s less than what is left, so a call's timeout ends before the
 request's deadline.

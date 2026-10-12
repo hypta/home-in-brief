@@ -363,7 +363,7 @@ FOLLOWUP_EXPECT = {
     "definition": {"route": "insufficient", "search": True},
     "advice": {"route": "refusal:advice", "search": False},
     "my_lvr": {"route": "facts", "search": False},
-    "mixed_advice": {"route": "facts", "search": False},  # the flood facts, after the sentence that the tool cannot decide
+    "mixed_advice": {"route": "mixed", "search": False},  # the flood facts' drafts, after the fixed decline sentence
     "diligence": {"route": "facts", "search": False},
 }
 

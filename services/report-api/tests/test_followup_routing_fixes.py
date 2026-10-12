@@ -78,15 +78,25 @@ def test_reworded_advice_with_a_wrong_classification_is_not_searched(monkeypatch
 
 def test_not_flagged_as_advice_is_not_a_reason_to_search(monkeypatch):
     # no keyword, classify wrong about advice and not saying searchable: no search at all (affirmative eligibility)
-    out, fake = run(monkeypatch, "Is this one for me?", cls(searchable=False, advice=False), answers=[UNANSWERED],
+    out, fake = run(monkeypatch, "Is this the right one?", cls(searchable=False, advice=False), answers=[UNANSWERED],
                     search_text=ADVICE_WEB)
     assert fake.searches == 0 and texts(out) == [followup.INSUFFICIENT_EN]
 
 
 def test_a_search_answer_that_gives_a_verdict_is_not_shown(monkeypatch):
     # classify wrong on both flags (searchable, not advice) and no keyword: the search runs, its verdict is not shown
+    out, fake = run(monkeypatch, "Is this the right one?", cls(searchable=True, advice=False), answers=[UNANSWERED],
+                    search_text=ADVICE_WEB)
+    assert fake.searches == 1  # not asked again: the same question gets the same kind of answer
+    assert "web" not in out and out["warnings"] == ["search_unavailable"] and texts(out) == [followup.INSUFFICIENT_EN]
+    no_advice(out)
+    # "Is this one for me?" asks for a verdict (the keywords): refused, never searched, whatever classify says
     out, fake = run(monkeypatch, "Is this one for me?", cls(searchable=True, advice=False), answers=[UNANSWERED],
                     search_text=ADVICE_WEB)
+    assert fake.searches == 0 and texts(out) == [followup.REFUSAL_EN]
+    no_advice(out)
+    # a definition question that may be searched: its verdict answer is not shown
+    out, fake = run(monkeypatch, "What is a LIM report?", cls(), answers=[UNANSWERED], search_text=ADVICE_WEB)
     assert fake.searches == 1  # not asked again: the same question gets the same kind of answer
     assert "web" not in out and out["warnings"] == ["search_unavailable"] and texts(out) == [followup.INSUFFICIENT_EN]
     no_advice(out)
@@ -164,7 +174,7 @@ def test_web_language_follows_the_main_text(text, asked, expected):
 
 
 def test_the_route_labels_a_mostly_english_answer_english(monkeypatch):
-    text = "The council report is called 土地資料備忘錄 and contains the property records."
+    text = "The council LIM report is called 土地資料備忘錄 and contains the property records."
     out, _ = run(monkeypatch, "什麼是 LIM 報告？", cls("zh-Hant"), search_text=text)
     assert out["web"]["text"] == text and out["language"] == "en"
 
@@ -259,7 +269,7 @@ def test_should_i_buy_in_a_flood_plain_gets_the_flood_facts_and_the_decline(monk
     assert fake.searches == 0 and "web" not in out and out["out_of_scope"] is False
     got = texts(out)
     assert got[0] == followup.DECLINE_EN and draft_of("case1", "ac_flood_plains") in got[1:]
-    assert 'cannot decide for the buyer' in fake.prompts("answer")[0]
+    assert "answer" not in fake.tasks  # no model text: the drafts as written
     no_advice(out)
     assert not any(V._BANNED_RE[0][1].search(t) for t in got)  # never "safe"
 

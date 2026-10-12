@@ -671,14 +671,15 @@ def fallback_links(question: str, link_ids: list[str]) -> list[str]:
 
 
 # ---- who may be searched for -------------------------------------------------------------------------
-# Google Search answers are shown as returned, so what may be searched for is decided before any search, by code as
-# well as by classify, and what comes back is screened once more (web_advice):
-# - a search needs an affirmative reason: classify says web pages can state the answer (`searchable`), or code
-#   recognises a question about what a term or a document is (term_question). Not being flagged as advice is not enough.
-# - never for advice, a prediction, what the home is worth or the buyer's own figure (classify's flag or the keywords;
-#   the keywords are a backstop, not the only line).
-# - a property-field search (field_search) sends a fixed query for the field, never the question or the history.
-# - an answer that gives a purchase or price verdict is not shown; its text is never edited (web_advice).
+# Google Search answers are shown as returned, so what may be searched for is decided before any search, by code,
+# and what comes back is screened once more (web_unusable):
+# - a property field's fixed query (field_search: the button, or a typed question about a field the records lack),
+#   never the question or the history; a typed question that code recognises as a complete request for what a term or
+#   a document is (definition_question); or one classify flags searchable (out of scope, or in scope with no fact).
+# - never for advice (classify's flag or the keywords), a wish to buy or bid in any clause (purchase_intent), a
+#   prediction, what the home is worth or the buyer's own figure.
+# - an answer that judges this property (out of scope), is not about the term (definition), or gives a verdict
+#   web_advice recognises, is not shown; its text is never edited. This screen narrows the risk; it does not prove an answer gives no advice (README).
 _ADVICE_EN = re.compile(
     r"\bshould (?:i|we) (?:buy|purchase|offer|bid|make an offer|go for|get (?:this|it)|take (?:this|it)|walk away|pass|"
     r"proceed|sign|pay)\b|\bwhat (?:should|shall) (?:i|we) (?:offer|bid|do)\b|\bhow much (?:should|shall) (?:i|we) "
@@ -688,7 +689,8 @@ _ADVICE_EN = re.compile(
     r"\b(?:over|under)-?(?:priced|valued)\b|\bbargain\b|\brip-?off\b|\b(?:do you |would you )?(?:recommend|advise|suggest) "
     r"(?:me |that i |i |us )?(?:to )?(?:buy|buying|purchase|purchasing|this|it)\b|"
     r"\b(?:would|will) you (?:go ahead|buy|purchase|proceed|take it|recommend|advise)\b|"
-    r"\bgo ahead with (?:this|it|the (?:purchase|house|home|property))\b|\b(?:do|would) you think (?:i|we) (?:should|could|"
+    r"\bgo ahead with (?:this|it|the (?:purchase|house|home|property))\b|"
+    r"\bis (?:this|it) (?:one |place |house |home |property )?(?:the one |right )?for (?:me|us)\b|\b(?:do|would) you think (?:i|we) (?:should|could|"
     r"ought)\b|\bis (?:it|this|now) (?:a )?(?:good|right|wise) time to\b", re.I)
 _ADVICE_CJK = re.compile(
     r"該買|该买|該不該買|该不该买|要不要買|要不要买|應不應該買|应不应该买|買不買|买不买|值不值得|值得買|值得买|值得投資|值得投资|"
@@ -711,7 +713,8 @@ _MY_LVR = re.compile(
 _TERM_Q = re.compile(
     r"^\W*(?:what(?:'s| is| are) (?:a |an |the )?[^?]{1,40}\?*\W*$|what (?:does|do) [^?]{1,40} mean\b|what is meant by\b|"
     r"what(?:'s| is) the (?:meaning|definition) of\b|what(?:'s| is) the difference between\b|define\b|meaning of\b)|"
-    r"什麼是|什么是|是什麼|是什么|什麼意思|什么意思|的意思|的定義|的定义|とは|って何|の意味|이란|뭐예요|무슨 뜻", re.I)
+    r"什麼是|什么是|是什麼|是什么|什麼意思|什么意思|的意思|的定義|的定义|とは|って何|の意味|이란|뭐예요|무슨 뜻|"
+    r"^\W*qu['’]est[- ]ce qu|que (?:veut dire|signifie)\b|^\W*qu[ée] (?:es|significa)\b|^\W*was (?:ist|bedeutet)\b", re.I)
 _THIS_ONE = re.compile(r"\b(?:this|these|here|my|our|mine|me|us|i|we|it)\b|這|这|此|我|この|ここ|私|이 |내 |우리", re.I)
 # What an item on the report means for this property ("What do the hazard maps mean for this property?"): answered by
 # the facts about those items, not a definition.
@@ -756,16 +759,59 @@ def diligence_question(question: str) -> bool:
     return bool(_DILIGENCE.search(question))
 
 
+# Any wish to buy, bid or offer, in any clause. Used to keep a question out of the search and to stop a "what is" or
+# "what to check" wording from cancelling an advice flag; never to decide what a sentence says. Names that only contain
+# such a word (a First Home loan, the sale and purchase agreement, "before I buy") are not an intent.
+_PURCHASE_INTENT = re.compile(
+    r"\b(?:buy|buys|buying|purchas(?:e|es|ed|ing)|bid|bids|bidding|make an offer|put in an offer|offer on|acquir\w*)\b|"
+    r"買|买|購|购|出價|出价|入手|下手|購入|구매|구입|사야|살까|사도|사는", re.I)
+_PURCHASE_NAMES = re.compile(
+    r"before (?:i|we|you|they|a buyer|buyers) (?:buy|purchase)|before (?:buying|purchasing)|sale and purchase|"
+    r"purchase price|first[- ]home buyers?|首購|首购|買賣|买卖|購買前|购买前|買之前|买之前|買前|买前|購入前", re.I)
+_CLAUSE_PUNCT = re.compile(r"[,，;；、。!！?？\n]+|\.(?:\s|$)")
+_MEANING = re.compile(r"\bmean(?:s|ing|t)?\b|\bdefin(?:e|ition)\b|意思|定義|定义|意味|の意味|뜻", re.I)
+
+
+def purchase_intent(question: str) -> bool:
+    return bool(_PURCHASE_INTENT.search(_PURCHASE_NAMES.sub(" ", question)))
+
+
+def clauses(question: str) -> list[str]:
+    return [c.strip() for c in _CLAUSE_PUNCT.split(question) if re.search(r"\w", c)]
+
+
+def definition_question(question: str) -> bool:
+    """A complete request for what a term or a document is, and nothing else: one clause, a term question
+    (term_question), no wish to buy or bid in it, no prediction, worth or own figure. A price word in it ("What does
+    overpriced mean?") must be the term asked about (a meaning wording), never a verdict asked for ("What is a good
+    price?"). The only typed question a Google Search may answer (search_eligible)."""
+    if len(clauses(question)) != 1 or not term_question(question) or purchase_intent(question):
+        return False
+    if _NO_SEARCH.search(question) or personal_lvr_question(question):
+        return False
+    if (_ADVICE_EN.search(question) or _ADVICE_CJK.search(question)) and not _MEANING.search(question):
+        return False
+    return True
+
+
+def factual_request(question: str) -> bool:
+    """The whole question asks for facts: what a term or document is (definition_question), what to check or look out
+    for (diligence), or what the report's items mean for this property. Never when any clause wishes to buy or bid."""
+    if purchase_intent(question):
+        return False
+    return definition_question(question) or diligence_question(question) or property_meaning(question)
+
+
 def is_advice(question: str) -> bool:
-    """Purchase or price verdict keywords; asking what such a word means is not advice."""
-    return bool(_ADVICE_EN.search(question) or _ADVICE_CJK.search(question)) and not term_question(question)
+    """Purchase or price verdict keywords anywhere in the question; asking only what such a word means
+    (definition_question) is not advice."""
+    return bool(_ADVICE_EN.search(question) or _ADVICE_CJK.search(question)) and not definition_question(question)
 
 
 def asks_advice(c: "ClassifyOut", question: str) -> bool:
-    """The question asks for a verdict: the keywords, or classify's flag unless code recognises a question of fact
-    (what a term means, what to check, what an item means for this property)."""
-    return is_advice(question) or (c.advice and not (diligence_question(question) or term_question(question)
-                                                       or property_meaning(question)))
+    """The question asks for a verdict: the keywords, or classify's flag unless the whole question is a request for
+    facts (factual_request). A term or diligence clause beside a purchase clause never cancels the flag."""
+    return is_advice(question) or (c.advice and not factual_request(question))
 
 
 def personal_lvr_question(question: str) -> bool:
@@ -850,12 +896,14 @@ def prior_answer_searched(resolved: str, history: list[dict]) -> bool:
 
 
 def search_eligible(c: "ClassifyOut", question: str) -> bool:
-    """A question of fact that public web pages can answer, decided affirmatively: classify flags it searchable, or it
-    asks what a term or a document is (term_question). Never advice (asks_advice), a prediction, a worth or the buyer's
-    own figure, whatever the scope."""
-    if asks_advice(c, question) or no_search_question(question):
+    """Whether a typed question may be answered from a Google Search: a complete definition question
+    (definition_question), or a question of fact that web pages can state (classify's `searchable`: schools, commute,
+    or an in-scope question no fact answers). Never when classify flags advice, the keywords find a verdict, any
+    clause wishes to buy or bid (purchase_intent), or it asks for a prediction, a worth or the buyer's own figure. The
+    other search is a property field's fixed query (field_search), never the question."""
+    if c.advice or asks_advice(c, question) or no_search_question(question) or purchase_intent(question):
         return False
-    return bool(c.searchable) or term_question(question)
+    return definition_question(question) or bool(c.searchable)
 
 
 # A Google Search answer that gives a purchase or price verdict is not shown (it is never edited either).
@@ -875,6 +923,65 @@ _WEB_ADVICE = re.compile(
 
 def web_advice(text: str) -> bool:
     return bool(_WEB_ADVICE.search(text or ""))
+
+
+# The whole search answer is shown as returned or not at all (never edited). Beside web_advice, which only catches the
+# verdict wordings it lists, an answer must be about what was asked: a definition names the term asked about and says
+# nothing about this property or this buyer; a property field's answer speaks of that field. This narrows what model
+# text reaches the page; it is not proof that an answer gives no advice (README: known limitations).
+_PROPERTY_CLAIM = re.compile(r"\b(?:this|your) (?:house|home|property|place|unit|dwelling|purchase)\b|這間|这间|這棟|这栋|"
+                             r"此物業|此物业|你的房|この(?:物件|家|住宅)|あなたの|이 집", re.I)
+_TERM_SCAFFOLD = re.compile(
+    r"\b(?:what(?:'s)?|is|are|does|do|mean(?:s|t|ing)?|by|the|a|an|of|definition|define|difference|between|and|or|in|"
+    r"nz|new zealand|qu'est-ce|que|qu'un|qu'une|veut|dire|signifie|un|une|le|la|les|des|qué|es|significa|was|ist|"
+    r"bedeutet|ein|eine|der|die|das)\b|什麼是|什么是|是什麼|是什么|什麼意思|什么意思|的意思|的定義|的定义|意思|定義|定义|とは|って何|"
+    r"の意味|何ですか|이란|뭐예요|무슨 뜻|[?？!！.,，、「」『』\"'“”()（）]", re.I)
+_YEAR_IN_TEXT = re.compile(r"\b(?:18|19|20)\d{2}s?\b|\b\d0s\b|post-?war|pre-?war|\bera\b|\bvilla\b|bungalow|century|"
+                           r"年代|年", re.I)
+
+
+def term_words(question: str) -> list[str]:
+    """The words of the term a definition question asks about ("LIM report" in "What is a LIM report?"): Latin words
+    of three letters or more, two-letter acronyms, and two-character pieces of CJK text."""
+    rest = _TERM_SCAFFOLD.sub(" ", question)
+    words = re.findall(r"[A-Za-zĀ-ſ][A-Za-zĀ-ſ'-]{2,}|\b[A-Z]{2}\b", rest)
+    runs = re.findall(r"[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]+", rest)
+    return words + [r[i:i + 2] for r in runs for i in range(max(1, len(r) - 1))]
+
+
+# A judgment about the buyer's property in an out-of-scope answer ("this home is a safe choice", "這間很值得"): a sentence
+# that names this property or the buyer's home and also judges it. Facts about it ("This home is zoned for X") pass.
+_JUDGES = re.compile(r"\b(?:safe|unsafe|risk(?:y|-free)?|good|bad|great|ideal|perfect|excellent|poor|suitable|right|wise|"
+                     r"smart|worth\w*|recommend\w*|should|must|fine|okay|ok|bargain|deal|choice|investment)\b|安全|危險|危险|"
+                     r"風險|风险|值得|划算|適合|适合|推薦|推荐|建議|建议|放心|不錯|不错|很好|理想|大丈夫|安心|おすすめ|お勧め|"
+                     r"買い|안전|추천|좋", re.I)
+_SENTENCE = re.compile(r"[^.!?。！？]+[.!?。！？]?")
+
+
+def judges_property(text: str) -> bool:
+    return any(_PROPERTY_CLAIM.search(s) and _JUDGES.search(s) for s in _SENTENCE.findall(text or ""))
+
+
+def web_unusable(text: str, question: Optional[str] = None, fields: Optional[list[str]] = None) -> Optional[str]:
+    """Why a search answer is not shown, or None. `question`: the typed question searched, a definition question
+    (the strict check below) or an out-of-scope question of fact (no verdict wording, no judgment of this property:
+    judges_property); `fields`: the fields a fixed field query asked for (field_search)."""
+    text = text or ""
+    if web_advice(text):
+        return "advice"
+    if fields is None and not definition_question(question or ""):
+        return "property_claim" if judges_property(text) else None
+    if fields is not None:
+        about = any(_FIELD_Q[f].search(text) for f in fields if f in _FIELD_Q) or (
+            "year_built" in fields and bool(_YEAR_IN_TEXT.search(text)))
+        return None if about else "off_topic"
+    words = term_words(question or "")
+    low = text.lower()
+    if not words or not any(w.lower() in low for w in words):
+        return "off_topic"
+    if _PROPERTY_CLAIM.search(text):
+        return "property_claim"
+    return None
 
 
 # ---- the language of a Google Search answer -------------------------------------------------------------
@@ -1288,9 +1395,10 @@ def field_search(req: ReportRequest, fields: list[str], question: str, history: 
             log.warning("field search unavailable: %s", type(e).__name__)
             web = None
         info["searches"] = clock.searches
-    if web and web_advice(web.text):
-        log.info("field search answer not used: it gives a purchase or price verdict")
-        info["rejected"] = "advice"
+    why_not = web_unusable(web.text, fields=list(fields)) if web else None
+    if why_not:
+        log.info("field search answer not used: %s", why_not)
+        info["rejected"] = why_not
         web = None
     info["web"] = bool(web)
     if not web:
@@ -1567,8 +1675,14 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
             debug["recovered"] = "field"
             c = c.model_copy(update={"out_of_scope": False})
     search_ok = not button and not advice and search_eligible(c, question)
-    field_ok = bool(button) or (not advice and not no_search_question(question))
+    field_ok = bool(button) or (not advice and not no_search_question(question)
+                                and not purchase_intent(f"{question} {original}"))
     debug["search_eligible"] = search_ok
+    # Sentences no model may put into another language: the buyer's own LVR (its computed value is allowed only in the
+    # program's own sentence) and every sentence of a purchase question's answer (drafts and the fixed decline). English
+    # or code-written Chinese; any other language gets the English sentences, labelled "en".
+    if (mixed or personal_lvr_question(question)) and not is_english(language) and not is_zh(language):
+        debug["language"]["used"] = language = "en"
 
     def no_search() -> None:
         """A search was called for and gave no answer (refused, failed, quota 429, no key or other setting error, out
@@ -1597,9 +1711,10 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
         except gemini.ModelUnavailable as e:
             log.warning("web answer unavailable: %s", type(e).__name__)
             web = None
-        if web and web_advice(web.text):  # a verdict is not shown, and never edited into something else
-            log.info("web answer not used: it gives a purchase or price verdict")
-            debug["web_rejected"] = "advice"
+        why_not = web_unusable(web.text, question) if web else None
+        if why_not:  # not shown, and never edited into something else
+            log.info("web answer not used: %s", why_not)
+            debug["web_rejected"] = why_not
             web = None
         if not web:
             no_search()
@@ -1633,8 +1748,9 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
         return out, lang
 
     def in_scope(question: str, supplied: dict[str, Any], sources: dict[str, str],
-                 skip: frozenset = frozenset(), after_search: bool = False) -> FollowupResponse:
-        """Steps 3-4 for an in-scope question. `sources`: "web_search" for values extracted from a search answer;
+                 skip: frozenset = frozenset(), after_search: bool = False) -> Optional[FollowupResponse]:
+        """Steps 3-4 for an in-scope question. A purchase question with a factual part (`mixed`): the checked drafts
+        of the facts about the topics it names, no answer call, no translation; None when there is no such fact. `sources`: "web_search" for values extracted from a search answer;
         `skip`: the fields a web search answered (their fixed sentences are left out). When the model finds no fact
         that answers the question, the reply is a Google Search answer, else the fixed "cannot answer" sentence;
         `after_search` (a field search answer is already there): ReportError instead, and that answer stands alone."""
@@ -1696,9 +1812,6 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
         if question != original:
             notes.append("The buyer only reacted to the last answer; the QUESTION is the earlier question they asked. "
                          "Answer it again from the facts.")
-        if mixed:
-            notes.append("The QUESTION also asks whether to purchase. Never answer that part: the program says it cannot "
-                         "decide for the buyer. Answer only the factual part, from the facts about the topics it names.")
 
         # Program sentences comparing the user's value with the property value (both values, cited).
         # Chinese wording is written by code; other non-English languages translate the English sentence later.
@@ -1737,6 +1850,33 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
                 return FollowupResponse(language=got[1], answer=got[0], out_of_scope=False, user_supplied=supplied,
                                         user_supplied_source=_sources_out(supplied, sources), links=links,
                                         dropped=0, warnings=warnings)
+        if mixed and not mock:
+            # a purchase question with a factual part: no answer call. The facts about the topics it names, as their
+            # checked drafts (program facts of a field it asks about too), each shown as written
+            fs = [f for f in all_facts
+                  if not ((f.program or f.topic.startswith("missing:")) and f.topic.split(":", 1)[-1] in skip)]
+            topical = topic_fact_ids(f"{question} {original}", fs, price=False, limit=max(1, limit))
+            debug["facts"] = [{"id": f.id, "text": f.text, "draft": f.draft(), "user": f.user,
+                               "source_ids": f.source_ids} for f in fs]
+            debug["mixed_facts"] = topical
+            prog = program_sentences(fs, [], question, ev, skip, language)[:limit]
+            passed.extend(prog)
+            limit -= len(prog)
+            items = rewrite.compose([Rewrite(None, topical, [])] if topical else [], fs, limit, add_musts=False,
+                                    sort=False, check_draft=lambda s: [f for f in check_answer(s, ev, "en")
+                                                                       if f != TOO_LONG]) if limit else []
+            debug["composed"] = [{"text": it.sentence.text, "fact_ids": it.fact_ids, "kind": it.kind} for it in items]
+            passed.extend(Part(it.sentence, native=False, user=bool(it.user or set(it.sentence.source_ids) & ev.user_kb),
+                               fields=it.fields) for it in items)
+            if not passed and not fixed:
+                return None
+            web_part = lambda p: p.web if p.web is not None else facts_prompt.from_web(  # noqa: E731
+                p.sentence.source_ids, eff, ev, data.items, p.fields)
+            answer, out_lang = as_written(fixed + passed, language, ev, web_part)
+            debug["route"] = "mixed"
+            return FollowupResponse(language=out_lang, answer=answer, out_of_scope=False, user_supplied=supplied,
+                                    user_supplied_source=_sources_out(supplied, sources),
+                                    links=[i for i in links if i in link_ids][:3], dropped=0, warnings=warnings)
         if mock:
             sentences, dropped = mock_answer(ev, data.items, used, language)
             if fixed and not used:
@@ -1786,10 +1926,10 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
                     best, named, last = [], [], None
                     break
                 if (not out.answered or not out.answer) and not fixed and (
-                        mixed or property_meaning(question) or diligence_question(question)):
-                    # what this property's items mean, what to check, or the factual part beside a purchase question:
-                    # the facts about the topics the question names are the answer, as their drafts (not a search)
-                    topical = topic_fact_ids(question, fs, price=not mixed, limit=max(1, limit))
+                        property_meaning(question) or diligence_question(question)):
+                    # what this property's items mean, or what to check: the facts about the topics the question
+                    # names are the answer, as their drafts (not a search)
+                    topical = topic_fact_ids(question, fs, limit=max(1, limit))
                     if topical:
                         debug["unanswered_topics"] = topical
                         best, named, last = [Rewrite(None, topical, [])], [], None
@@ -1953,11 +2093,9 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
                 return only_web
             return out.model_copy(update={"web": web})
 
-    # 2. out of scope: an answer from a Google Search when web pages can answer it, else the fixed refusal
-    if c.out_of_scope:
-        got = searched(True, "out_of_scope")
-        if got:
-            return got
+    def refuse() -> FollowupResponse:
+        """The fixed refusal: English, code-written Chinese, another language by restricted translation (English,
+        labelled "en", when it fails its checks)."""
         debug["route"] = "refusal:" + ("advice" if c.advice else "not_searchable" if not search_ok else "search_failed")
         refusal, refusal_lang = Sentence(text=REFUSAL_EN, source_ids=[]), "en"
         if is_zh(language):
@@ -1971,42 +2109,74 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
                 log.info("refusal translation not used; English")
                 if not mock:
                     refusal_lang = "en"  # the English refusal, said to be English
-        links = links or fallback_links(question, link_ids)
+        out_links = links or fallback_links(question, link_ids)
         if refusal_mode == "strict":
             data = _kb(req, clock)
             ev = build_evidence(req, data.items, data.sources.keys(), source_urls=data.sources.urls)
             if check_answer(refusal, ev, refusal_lang):
                 raise ReportError(502, "validation_failed", "No answer sentence passed validation.")
         return FollowupResponse(language=refusal_lang, answer=[refusal], out_of_scope=True, user_supplied=supplied,
-                                links=links, dropped=0, warnings=warnings)
+                                links=out_links, dropped=0, warnings=warnings)
+
+    # 2. out of scope: an answer from a Google Search when the question may be searched, else the fixed refusal
+    if c.out_of_scope:
+        got = searched(True, "out_of_scope")
+        if got:
+            return got
+        return refuse()
 
     resp = in_scope(question, supplied, sources)
-    return with_decline(resp, translate) if mixed else resp
+    if mixed:
+        if resp is None:  # no fact about the topic it names: the purchase question is refused as a whole
+            c = c.model_copy(update={"out_of_scope": True})
+            return refuse()
+        return with_decline(resp)
+    return resp
 
 
 DECLINE_EN = "This tool cannot decide for you whether to purchase this property; the facts on record are below."
-DECLINE_ZH = ("本工具無法替你決定是否購買這間房屋；以下是紀錄中的事實。", "本工具无法替你决定是否购买这间房屋；以下是记录中的事实。")
+DECLINE_ZH = ("本工具無法替你決定是否購買這間房屋；以下是紀錄中的事實（英文原文）。",
+              "本工具无法替你决定是否购买这间房屋；以下是记录中的事实（英文原文）。")
 
 
-def decline_sentence(language: str, translate: Callable[..., Optional[list[str]]]) -> Sentence:
-    """The fixed sentence beside the facts for a purchase question that also names a report topic: English, Chinese
-    written by code, another language by restricted translation (English when the translation fails its checks, as for
-    any program sentence in finish)."""
-    no_ids = lambda p, mw: [f for f in check_sentence(p, Evidence(), mw) if f != "no_source_ids"]  # noqa: E731
-    en = Sentence(text=DECLINE_EN, source_ids=[])
-    if is_english(language):
-        return en
+def decline_sentence(language: str) -> Sentence:
+    """The fixed sentence beside the facts for a purchase question that also names a report topic, never translated by
+    a model: code-written Chinese for Chinese, else English (the answer is then labelled "en": as_written)."""
     if is_zh(language):
         return Sentence(text=DECLINE_ZH[_variant(language)], source_ids=[])
-    got = translate([DECLINE_EN])
-    if got and len(got) == 1 and not check_translation(en, got[0], language, Evidence(), no_ids):
-        return Sentence(text=tidy(got[0], language), source_ids=[])
-    return en
+    return Sentence(text=DECLINE_EN, source_ids=[])
 
 
-def with_decline(resp: FollowupResponse, translate: Callable[..., Optional[list[str]]]) -> FollowupResponse:
+def with_decline(resp: FollowupResponse) -> FollowupResponse:
     """The decline sentence first, in the language the answer is delivered in."""
-    return resp.model_copy(update={"answer": [decline_sentence(resp.language, translate), *resp.answer]})
+    return resp.model_copy(update={"answer": [decline_sentence(resp.language), *resp.answer]})
+
+
+def as_written(parts: list[Part], language: str, ev: Evidence,
+               web_part: Callable[[Part], bool] = lambda p: False) -> tuple[list[Sentence], str]:
+    """Sentences with no model text in them, in no model's translation: English, labelled "en", for every language but
+    Chinese. Chinese: a sentence code writes in Chinese (a comparison, the buyer's own LVR, a field the records do not
+    have: zh_fixed) is shown in Chinese; a fact's draft is shown in its English original, which the Chinese decline
+    sentence says (DECLINE_ZH). The label is the asker's Chinese."""
+    out_lang = language if is_zh(language) else "en"
+    out: list[Sentence] = []
+    for p in parts:
+        s, native = p.sentence, p.native
+        if out_lang != "en" and not native:
+            zh = zh_fixed(strip_prefix(s.text), out_lang)
+            z = Sentence(text=zh or "", source_ids=s.source_ids)
+            if zh and not check_answer(z, ev, out_lang, p.base):
+                s, native = z, True
+        if native and out_lang == "en" and not is_english(language):
+            continue  # written in the asker's language, which the answer is not delivered in
+        if native:
+            s = Sentence(text=tidy(s.text, out_lang), source_ids=s.source_ids)
+        if p.user:
+            k = web_part(p)
+            s = add_prefix(s, (WEB_PREFIXES if k else PREFIXES)[out_lang] if native and out_lang != "en"
+                           else (WEB_PREFIX_EN if k else PREFIX_EN))
+        out.append(s)
+    return out, out_lang
 
 
 

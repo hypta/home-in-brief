@@ -799,6 +799,12 @@ def _program_topics(req: ReportRequest, ev: Evidence, kb_items: dict[str, dict],
     return out
 
 
+def _personal_lvr_sentence(text: str, value: str) -> bool:
+    """`text` is the program's own sentence for the buyer's LVR with this value (spacing aside)."""
+    squash = lambda t: re.sub(r"\s+", "", t)  # noqa: E731
+    return squash(text) in {squash(t.format(v=value)) for t in (PERSONAL_LVR_TEXT, *PERSONAL_LVR_ZH)}
+
+
 def check_program(s: Sentence, ev: Evidence, slots: Optional[dict[str, Slot]] = None,
                   max_words: Optional[int] = MAX_WORDS) -> list[str]:
     """validator.check_sentence for a program fact: a year the user entered is allowed under the ids the sentence
@@ -808,9 +814,10 @@ def check_program(s: Sentence, ev: Evidence, slots: Optional[dict[str, Slot]] = 
     years = [to_decimal(sl.value) for sl in (slots or {}).values() if sl.kind in ("year", "decade")]
     for sid in s.source_ids:
         allowed.setdefault(sid, []).extend(Allowed(y) for y in years if y is not None)
-    # the buyer's own LVR (_personal_lvr): the computed ratio, in this code-written sentence only, under its one source
+    # the buyer's own LVR (_personal_lvr): the computed ratio, only in the program's own sentence as written (English
+    # or the code-written Chinese, never a translation or any other text), under its one source
     typed = {sl.source_id: [Allowed(Decimal(str(sl.value)))] for sl in (slots or {}).values()
              if sl.name == PERSONAL_LVR_SLOT and sl.kind == "pct" and sl.source_id == "rbnz_lvr"
-             and isinstance(sl.value, (Decimal, int, float))}
+             and isinstance(sl.value, (Decimal, int, float)) and _personal_lvr_sentence(s.text, sl.render())}
     fails = check_sentence(s, replace(ev, allowed=allowed, typed_computed=typed), max_words)
     return [f for f in fails if not (f == NO_SOURCE_IDS and not s.source_ids)]
