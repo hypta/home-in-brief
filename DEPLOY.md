@@ -282,10 +282,10 @@ being deployed (`git diff`). So a deploy that failed is retried on the next push
 
 | Target | Kind | Access | Paths that trigger it | Env / secrets |
 |---|---|---|---|---|
-| rules-api | service | private (`--no-allow-unauthenticated`) | `services/rules-api/`, `shared/`, `kb/`, `data/` | `DATA_BACKEND=firestore` |
-| property-api | service | private | `services/property-api/`, `shared/` | secret `LINZ_API_KEY` |
-| report-api | service | private, `--max-instances=2` | `services/report-api/`, `shared/` | `RULES_API_URL`, secret `GEMINI_API_KEY`, allowance env (section 8d) |
-| web | service | **public** (`--allow-unauthenticated`) | `services/web/`, `shared/` | `RULES_API_URL`, `PROPERTY_API_URL`, `REPORT_API_URL` |
+| rules-api | service | private (`--no-allow-unauthenticated`), `--max-instances=2 --concurrency=8` | `services/rules-api/`, `shared/`, `kb/`, `data/` | `DATA_BACKEND=firestore` |
+| property-api | service | private, `--max-instances=2 --concurrency=8` | `services/property-api/`, `shared/` | secret `LINZ_API_KEY` |
+| report-api | service | private, `--max-instances=2 --concurrency=4` | `services/report-api/`, `shared/` | `RULES_API_URL`, secret `GEMINI_API_KEY`, allowance env (section 8d) |
+| web | service | **public** (`--allow-unauthenticated`), `--max-instances=3 --concurrency=16` | `services/web/`, `shared/` | `RULES_API_URL`, `PROPERTY_API_URL`, `REPORT_API_URL` |
 | kb-refresh | job | - | `jobs/kb-refresh/`, `kb/`, `shared/` | `DATA_BACKEND=firestore` |
 | rates-refresh | job | - | `jobs/rates-refresh/`, `shared/` | `DATA_BACKEND=firestore`, `GEMINI_MODEL`, secret `GEMINI_API_KEY` |
 

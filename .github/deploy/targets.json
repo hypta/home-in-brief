@@ -17,7 +17,7 @@
       "public": false,
       "env": {"DATA_BACKEND": "firestore"},
       "secrets": {},
-      "flags": []
+      "flags": ["--max-instances=2", "--concurrency=8"]
     },
     {
       "name": "property-api",
@@ -27,7 +27,7 @@
       "public": false,
       "env": {},
       "secrets": {"LINZ_API_KEY": "LINZ_API_KEY:latest"},
-      "flags": []
+      "flags": ["--max-instances=2", "--concurrency=8"]
     },
     {
       "name": "report-api",
@@ -40,7 +40,7 @@
               "GEMINI_INPUT_MAX_BYTES": "32000", "REPORT_DEGRADED": "false", "PROTECTION_TIMEOUT_S": "3"},
       "secrets": {"GEMINI_API_KEY": "GEMINI_API_KEY:latest"},
       "url_env": {"RULES_API_URL": "rules-api"},
-      "flags": ["--max-instances=2"]
+      "flags": ["--max-instances=2", "--concurrency=4"]
     },
     {
       "name": "web",
@@ -51,7 +51,7 @@
       "env": {},
       "secrets": {},
       "url_env": {"RULES_API_URL": "rules-api", "PROPERTY_API_URL": "property-api", "REPORT_API_URL": "report-api"},
-      "flags": []
+      "flags": ["--max-instances=3", "--concurrency=16"]
     },
     {
       "name": "kb-refresh",
