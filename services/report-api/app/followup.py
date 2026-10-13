@@ -827,10 +827,21 @@ def factual_request(question: str) -> bool:
     return definition_question(question) or diligence_question(question) or property_meaning(question)
 
 
+# A verdict asked in a buying context without the verdict keywords: "Is a flood plain a problem when buying?",
+# "買這種房子有問題嗎". It judges the purchase, so it is answered like any purchase question (the fixed decline and the
+# checked facts of the topics it names), never by a model's yes or no.
+_BUY_VERDICT = re.compile(r"\b(?:problems?|issues?|concerns?|worr(?:y|ies|ied)|deal-?\s?breakers?|risky|risks?|bad|"
+                          r"dangerous|okay|ok|fine|alright|a (?:big )?deal)\b|問題|问题|風險|风险|擔心|担心|麻煩|麻烦|"
+                          r"問題ない|大丈夫|문제|걱정", re.I)
+
+
 def is_advice(question: str) -> bool:
-    """Purchase or price verdict keywords anywhere in the question; asking only what such a word means
-    (definition_question) is not advice."""
-    return bool(_ADVICE_EN.search(question) or _ADVICE_CJK.search(question)) and not definition_question(question)
+    """Purchase or price verdict keywords anywhere in the question, or a verdict asked in a buying context
+    (_BUY_VERDICT); asking only what such a word means (definition_question) is not advice."""
+    if definition_question(question):
+        return False
+    return bool(_ADVICE_EN.search(question) or _ADVICE_CJK.search(question)
+                or (purchase_intent(question) and _BUY_VERDICT.search(question)))
 
 
 def asks_advice(c: "ClassifyOut", question: str) -> bool:
@@ -961,8 +972,9 @@ _TERM_SCAFFOLD = re.compile(
     r"nz|new zealand|qu'est-ce|que|qu'un|qu'une|veut|dire|signifie|un|une|le|la|les|des|qué|es|significa|was|ist|"
     r"bedeutet|ein|eine|der|die|das)\b|什麼是|什么是|是什麼|是什么|什麼意思|什么意思|的意思|的定義|的定义|意思|定義|定义|とは|って何|"
     r"の意味|何ですか|이란|뭐예요|무슨 뜻|[?？!！.,，、「」『』\"'“”()（）]", re.I)
-_YEAR_IN_TEXT = re.compile(r"\b(?:18|19|20)\d{2}s?\b|\b\d0s\b|post-?war|pre-?war|\bera\b|\bvilla\b|bungalow|century|"
-                           r"年代|年", re.I)
+# \b is no boundary between a digit and a CJK character (both are \w), so a year is delimited by digit lookarounds.
+_YEAR_IN_TEXT = re.compile(r"(?<![\d.,])(?:18|19|20)\d{2}(?![\d])|\b\d0s\b|post-?war|pre-?war|\bera\b|\bvilla\b|bungalow|century|"
+                           r"年代|년대|年|\d\s?년", re.I)
 
 
 def term_words(question: str) -> list[str]:
