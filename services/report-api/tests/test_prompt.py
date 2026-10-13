@@ -36,9 +36,26 @@ def test_case1_prompt_has_placeholders_and_no_values():
 
 
 @pytest.mark.parametrize("case,user_year", [("case5", "1998"), ("edge4", "1999")])
-def test_user_year_never_reaches_the_prompt(case, user_year):
-    text, _ = build(case)
-    assert user_year not in text
+def test_user_year_reaches_the_prompt_only_as_a_placeholder(case, user_year):
+    text, tops = build(case)
+    assert user_year not in text and "{{F" in text  # the number itself never goes to the model
+    req, data, ev = evidence(case)
+    fs = prompt.fact_list(req, ev, data.items)
+    uf = next(f for f in fs if f.topic.startswith("user_year"))
+    assert "{{" + uf.id + ".user_year}}" in uf.text and uf.slots["user_year"].value == int(user_year)
+    # the final draft states it, labelled as the user's own
+    assert any(f"the year you gave, {user_year}," in t["say"] for t in tops)
+
+
+@pytest.mark.parametrize("case,user_year", [("case5", "1998"), ("edge4", "1999")])
+def test_web_search_year_never_appears_in_the_summary(case, user_year):
+    req, data, ev = evidence(case)
+    req.user_inputs["chat_supplied_source"] = {"year_built": "web_search"}
+    tops = prompt.topics(req, ev, data.items)
+    assert not any(user_year in t["say"] for t in tops)
+    assert any("the year found online" in t["say"] for t in tops)
+    fs = prompt.fact_list(req, ev, data.items)
+    assert not any("user_year" in f.slots for f in fs)
 
 
 def test_no_loan_case_has_no_lending_topic():
@@ -53,13 +70,14 @@ def test_landslide_topic_only_when_high():
 
 def test_user_year_relation():
     assert any("same decade" in t["say"] for t in build("case5")[1])
-    assert any("the year you gave differs" in t["say"] and "1975" in t["say"] for t in build("edge4")[1])
+    assert any("the year you gave, 1999, differs" in t["say"] and "1975" in t["say"] for t in build("edge4")[1])
 
 
 @pytest.mark.parametrize("case", CASES)
 def test_every_draft_passes_the_validator_as_written(case):
     """Gemini copies the drafts, so each draft must already be a valid sentence (with room to spare)."""
     req, data, ev = evidence(case)
+    ev = V.with_user_year(ev, prompt.fact_list(req, ev, data.items))  # the year the user typed, in its own fact
     for t in prompt.topics(req, ev, data.items):
         s = Sentence(text=t["say"], source_ids=t["cite"])
         assert V.check_sentence(s, ev) == [], t
@@ -94,8 +112,24 @@ def test_drafts_cover_every_rubric_must_mention(case):
     if fixed:
         summary.append({"text": fixed.text, "source_ids": []})
     checks = [c for c in ev_mod.rubric(case, {"summary": summary, "next_steps": []}, data.items)
-              if c["kind"] in ("S", "not")]
+              if c["kind"] in ("S", "not", "year")]
     assert [c["check"] for c in checks if not c["ok"]] == []
+
+
+@pytest.mark.parametrize("case,user_year", [("case5", "1998"), ("edge4", "1999")])
+def test_rubric_wants_the_users_year_but_never_a_web_search_year(case, user_year):
+    """The same drafts: shown with "you gave" for a typed year (rubric passes), and the rubric flags the number
+    when the year came from a web search."""
+    ev_mod = _eval_module()
+    req, data, ev = evidence(case)
+    summary = [{"text": V.PREFIX + t["say"], "source_ids": t["cite"]} for t in prompt.topics(req, ev, data.items)]
+    rep = {"summary": summary, "next_steps": []}
+    year = lambda src: [c for c in ev_mod.rubric(case, rep, data.items, src) if c["kind"] == "year"]  # noqa: E731
+    assert [c["ok"] for c in year("user")] == [True]
+    assert [c["ok"] for c in year("web_search")] == [False]
+    rep = {"summary": [{"text": "Your year could not be checked.", "source_ids": []}], "next_steps": []}
+    assert [c["ok"] for c in ev_mod.rubric(case, rep, data.items, "user") if c["kind"] == "year"] == [False]
+    assert [c["ok"] for c in ev_mod.rubric(case, rep, data.items, "web_search") if c["kind"] == "year"] == [True]
 
 
 def test_known_wording_fixes():

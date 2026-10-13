@@ -110,6 +110,24 @@ def from_web(source_ids: list[str], req: ReportRequest, ev: Evidence, kb_items: 
 def _gave(req: ReportRequest, key: str) -> str:
     """ "you gave", or "found online" for a value a web search found."""
     return "found online" if chat_sources(req).get(key) == WEB_SEARCH else "you gave"
+
+
+def _year_phrase(req: ReportRequest, t: "_Topic", uy: Any) -> str:
+    """The user's year in a summary fact, lower case, ending with a comma: "the year you gave, {{year}},". Only a year the
+    user typed (chat source "user") is shown, as a placeholder next to "you gave" (the validator allows exactly this
+    slot's value); a year a web search found stays out of the text ("the year found online")."""
+    if _gave(req, "year_built") != "you gave":
+        return "the year found online"
+    m = re.fullmatch(r"(\d{3}0)s", str(uy))
+    if not m and not (isinstance(uy, int) and not isinstance(uy, bool)) and not re.fullmatch(r"\d{4}", str(uy)):
+        return "the year you gave"
+    v = t.slot("user_year", int(m.group(1)) if m else int(uy), "decade" if m else "year",
+               "the year built the user entered (unverified)", "ac_property_page", before=r"\byou gave,(?:\s+the)?")
+    return f"the year you gave, {'the ' if m else ''}{v},"
+
+
+def _cap(text: str) -> str:
+    return text[:1].upper() + text[1:]
 COUNCIL_REFUSED = "council_site_refuses_this_server"  # property-api reason: council page not read from the cloud
 from .assemble import SOURCE_UNAVAILABLE, page_unreadable  # noqa: E402  live reason for any read failure
 _DRAFT_RE = re.compile(r"\{\{\$\.([A-Za-z0-9_]+)\}\}")
@@ -163,6 +181,8 @@ class _Topic:
     def set(self, say: str, cite: list[str], keep: Optional[list[str]] = None) -> "_Topic":
         self.say, self.cite = say, list(dict.fromkeys(c for c in cite if c))
         self.keep = list(keep or [])
+        if "user_year" in self.slots and "you gave," in say and "you gave" not in self.keep:
+            self.keep.append("you gave")  # a rewrite may not drop the label that marks the year as the user's own
         return self
 
     def rendered(self) -> str:
@@ -414,7 +434,6 @@ def _topics(req: ReportRequest, ev: Evidence, kb_items: dict[str, dict]) -> list
     clad = chat.get("cladding")
     clad_ok = isinstance(clad, str) and "monolithic" in clad.lower() and "kb_monolithic_cladding" in sel
     user_leaky = {i for i in LEAKY_KB if i in sel and i in ev.user_kb}
-    yg = _gave(req, "year_built")
     year_user = None  # (clause, slots) for the user-year sentence, when there is one
     if yb_found:
         is_decade = (isinstance(decade, list) and len(decade) == 2 and all(isinstance(x, int) for x in decade)
@@ -432,7 +451,7 @@ def _topics(req: ReportRequest, ev: Evidence, kb_items: dict[str, dict]) -> list
                             "ac_property_page"))
         if uy is not None and not inside:
             u = _Topic(O_USER, P_ERA, "user_year", user=True, fields=("year_built",))
-            year_user = (u, f"the year {yg} differs from the council's property category, which gives "
+            year_user = (u, f"{_year_phrase(req, u, uy)} differs from the council's property category, which gives "
                          + u.slot("council_year", yb.value, "year", "the year built the council's property "
                                   "category gives", "ac_property_page") + "; this summary uses the council figure")
         else:
@@ -440,24 +459,24 @@ def _topics(req: ReportRequest, ev: Evidence, kb_items: dict[str, dict]) -> list
                 say += ", a period covered by Settled.govt.nz's guidance on leaky buildings"
             out.append(t.set(say + ".", ["ac_property_page"] + (["kb_leaky_build_era"] if leaky else [])))
             if inside:
-                year_user = (_Topic(O_USER, P_ERA, "user_year", user=True, fields=("year_built",)),
-                             f"the year {yg} falls in the same decade")
+                u = _Topic(O_USER, P_ERA, "user_year", user=True, fields=("year_built",))
+                year_user = (u, f"{_year_phrase(req, u, uy)} falls in the same decade")
     elif uy is not None:
         u = _Topic(O_USER, P_ERA, "user_year", user=True, fields=("year_built",))
         if "kb_leaky_build_era" in user_leaky and clad_ok:
             # both leaky-building items from what the user told us: one sentence names both
-            out.append(u.set(f"The year {yg} and the monolithic cladding are both discussed in Settled.govt.nz's "
+            out.append(u.set(f"{_cap(_year_phrase(req, u, uy))} and the monolithic cladding are both discussed in Settled.govt.nz's "
                              "guidance on leaky buildings; public data could not confirm them.",
                              ["ac_property_page", "kb_leaky_build_era", "kb_monolithic_cladding"],
                              keep=["monolithic cladding", "leaky buildings", "could not confirm them"]))
             u.topic, clad_ok = "user_year_cladding", False
             u.fields.add("cladding")
         elif "kb_leaky_build_era" in user_leaky:
-            out.append(u.set(f"The year {yg} falls in a period covered by Settled.govt.nz's guidance on leaky "
+            out.append(u.set(f"{_cap(_year_phrase(req, u, uy))} falls in a period covered by Settled.govt.nz's guidance on leaky "
                              "buildings; council records could not confirm it.",
                              ["ac_property_page", "kb_leaky_build_era"], keep=["leaky buildings", "could not confirm it"]))
         else:
-            year_user = (u, f"the year {yg} could not be checked against council records")
+            year_user = (u, f"{_year_phrase(req, u, uy)} could not be checked against council records")
     clad_text = "the cladding is monolithic, which Settled.govt.nz discusses in its leaky-building guidance"
     if year_user:
         u, clause = year_user

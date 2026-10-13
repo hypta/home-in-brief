@@ -98,7 +98,7 @@ again, and the answer uses the RulesOutput that was sent.
 | Field | Values | Presentation |
 |---|---|---|
 | `kb_empty_reason` | `no_verified_items`, `no_matching_items`, `kb_unavailable` | Only set when `kb_items` is empty. Do not invent notes. |
-| `kb_items_from_user_input` | item ids | Items chosen because of a year built or cladding that is not in the records: entered by the user, or found by a web search (`user_inputs.chat_supplied_source`). Say "Based on what you told us" for the first and "Based on a web search (not checked by this service)" for the second. |
+| `kb_items_from_user_input` | item ids | Items chosen because of a year built or cladding that is not in the records: entered by the user, or found by a web search (`user_inputs.chat_supplied_source`). Say "Based on what you told us" for the first and "Based on a web search (not checked by this service)" for the second. The report summary repeats only the year the user typed, labelled "you gave" (for example "the year you gave, 1998, ..."); a year found by a web search is not repeated in the summary. |
 | `kb_includes_draft` | boolean | True only in development mode (`INCLUDE_DRAFT`, which `.github/deploy/targets.json` does not set). The page then marks draft notes as not yet checked. |
 | `hazard_gaps` | `{layer, status, reason}` | Why a primary layer was not checked. |
 | `price_used.basis` | `cv`, `user`, `none` | Say whether the price is the council valuation or the user's own figure. |

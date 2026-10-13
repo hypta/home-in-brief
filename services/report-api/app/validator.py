@@ -395,6 +395,21 @@ def relies_on_user_input(s: Sentence, ev: Evidence) -> bool:
     return bool(_USER_FACT_RE.search(body) and _USER_TOPIC_RE.search(body))
 
 
+def with_user_year(ev: Evidence, facts: Any) -> Evidence:
+    """ev with the year the user typed allowed for these summary facts: the value of each fact's `user_year` slot
+    (a year or a decade), under that fact's source ids only. Any other number is still checked as before."""
+    from dataclasses import replace
+    allowed = None
+    for f in facts:
+        for sl in f.slots.values():
+            d = to_decimal(sl.value) if sl.name == "user_year" and sl.kind in ("year", "decade") else None
+            if d is not None:
+                allowed = allowed or {k: list(v) for k, v in ev.allowed.items()}
+                for sid in f.source_ids:
+                    allowed.setdefault(sid, []).append(Allowed(d))
+    return replace(ev, allowed=allowed) if allowed is not None else ev
+
+
 def with_prefix(s: Sentence, prefix: str = PREFIX) -> Sentence:
     body = strip_prefix(s.text).strip()
     if len(body) > 1 and not body[1].isupper():  # keep acronyms such as "LINZ"
@@ -642,6 +657,6 @@ def check_rewrite(s: Any, facts: Any, ev: Evidence, max_words: Optional[int] = M
     filled = fill(text, {f.id: f for f in cited})
     sids = list(dict.fromkeys(i for f in cited for i in f.source_ids))
     sentence = Sentence(text=filled, source_ids=sids)
-    fails += final(sentence) if final else check_sentence(sentence, ev, max_words)
+    fails += final(sentence) if final else check_sentence(sentence, with_user_year(ev, cited), max_words)
     fails = list(dict.fromkeys(fails))
     return Rewrite(None if fails else sentence, ids, fails, filled)

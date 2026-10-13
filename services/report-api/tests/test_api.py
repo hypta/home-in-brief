@@ -189,14 +189,14 @@ def test_kb_from_rules_api(monkeypatch):
 def test_user_input_prefix_added_by_code(monkeypatch):
     answer = [{"text": "LINZ records a {{F3.title_type}} title; Settled.govt.nz says owners automatically become "
                        "members of the body corporate.", "fact_ids": ["F3"]},
-              {"text": "Your year falls in the same decade, and the cladding is monolithic, which Settled.govt.nz "
-                       "discusses in its leaky-building guidance.", "fact_ids": ["F5"]}]
+              {"text": "The year you gave, {{F5.user_year}}, falls in the same decade, and the cladding is monolithic, "
+                       "which Settled.govt.nz discusses in its leaky-building guidance.", "fact_ids": ["F5"]}]
     monkeypatch.setattr(gemini, "gemini_generate", fake(answer))
     rep = client.post("/v1/report", json=body("case5")).json()
     texts = [s["text"] for s in rep["summary"]]
     assert texts[2] == ("LINZ records a Unit Title title; Settled.govt.nz says owners automatically become members "
                         "of the body corporate.")
-    assert texts[4].startswith("Based on what you told us, your year falls in the same decade")
+    assert texts[4].startswith("Based on what you told us, the year you gave, 1998, falls in the same decade")
     assert sum(t.startswith("Based on") for t in texts) == 1
 
 

@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 from b_common.report_schemas import Report, ReportRequest, Sentence
 
 from . import assemble, gemini, kb, mock, obs, prompt, protection, rewrite
-from .validator import (MAX_WORDS, PREFIX, WEB_PREFIX, Rewrite, build_evidence, check_rewrite, check_sentence, relies_on_user_input,
+from .validator import (MAX_WORDS, PREFIX, WEB_PREFIX, Rewrite, build_evidence, check_rewrite, check_sentence, relies_on_user_input, with_user_year,
                         validate, with_prefix)
 
 log = logging.getLogger("report-api")
@@ -96,7 +96,7 @@ def _build_report(req: ReportRequest, generate: Optional[gemini.Generator] = Non
             fs = prompt.fact_list(req, ev, kbd.items)
             blocked = [Rewrite(None, [f.id], []) for f in fs]
             items = rewrite.compose(blocked, fs, MAX_SUMMARY, add_musts=True,
-                                    check_draft=lambda s: check_sentence(s, ev, MAX_WORDS))
+                                    check_draft=_draft_check(fs, ev))
             passed, dropped = [it.sentence for it in items], 0
             user_flags = [it.user for it in items]
             item_fields = [it.fields for it in items]
@@ -194,12 +194,18 @@ def _gemini_summary(req, ev, kb_items, titles, generate, budget: gemini.Budget, 
         obs.note_degraded(obs.MODEL_ERROR)  # the model answered, but no rewrite passed the checks
     best = best if best is not None else []
     items = rewrite.compose(best, fs, MAX_SUMMARY, add_musts=True,
-                            check_draft=lambda s: check_sentence(s, ev, MAX_WORDS))
+                            check_draft=_draft_check(fs, ev))
     if not items:
         raise last_error or ReportError(502, "validation_failed", "No summary sentence passed validation.")
     debug.composed = [{"text": it.sentence.text, "fact_ids": it.fact_ids, "kind": it.kind} for it in items]
     debug.rewrite = rewrite.stats(items, best)
     return items, sum(r.sentence is None for r in best)
+
+
+def _draft_check(fs, ev):
+    """check_sentence for a fact's draft, with the year the user typed allowed for that fact (validator.with_user_year)."""
+    by_text = {f.draft(): f for f in fs}
+    return lambda s: check_sentence(s, with_user_year(ev, [by_text[s.text]] if s.text in by_text else []), MAX_WORDS)
 
 
 def debug_dict(d: Debug) -> dict[str, Any]:

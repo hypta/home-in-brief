@@ -37,7 +37,7 @@ os.environ.setdefault("KB_SOURCE", "local")
 
 from b_common.report_schemas import Report, ReportRequest, Sentence  # noqa: E402
 
-from app import assemble, kb, validator as V  # noqa: E402
+from app import assemble, kb, prompt, validator as V  # noqa: E402
 from app.service import Debug, ReportError, build_report, debug_dict  # noqa: E402
 
 FIXTURES = SERVICE / "fixtures" / "inputs"
@@ -86,7 +86,7 @@ CHECKS = {
         ("S", PREFIX + r".*monolithic", None),
         ("S", r"same decade|consistent|falls (with)?in|match", None),
         ("S", r"debts?.*(none|zero|no )|no (other |existing )?debts", None), ("S", r"unit title", None),
-        ("not", r"\b1998\b"), ("not", r"\bdiffer"), ("not", r"\b65\b"), ("not", r"\b2\.27\b"),
+        ("year", r"1998"), ("not", r"\bdiffer"), ("not", r"\b65\b"), ("not", r"\b2\.27\b"),
         ("N", "kb_leaky_build_era"), ("N", "kb_monolithic_cladding"),
     ],
     "edge1": [
@@ -110,7 +110,7 @@ CHECKS = {
     ],
     "edge4": [
         ("S", r"leasehold", ["linz_titles"]), ("S", PREFIX + r".*1975", None), ("S", PREFIX + r".*monolithic", None),
-        ("not", r"\b1999\b"), ("not", r"\b80\b"),
+        ("year", r"1999"), ("not", r"\b80\b"),
         ("N", "kb_monolithic_cladding"),
     ],
 }
@@ -134,7 +134,9 @@ def _cites(s: dict, ids) -> bool:
     return all(i in s["source_ids"] for i in ids)
 
 
-def rubric(case: str, rep: dict, kb_items: dict) -> list[dict]:
+def rubric(case: str, rep: dict, kb_items: dict, year_source: str = "user") -> list[dict]:
+    """year_source: where the chat-supplied year built came from ("user" or "web_search"). A ("year", n) check wants
+    the year the user typed, shown next to "you gave" with the prefix; a year a web search found must not appear."""
     out = []
     summary = rep.get("summary", [])
     steps = rep.get("next_steps", [])
@@ -147,6 +149,13 @@ def rubric(case: str, rep: dict, kb_items: dict) -> list[dict]:
         elif kind == "not":
             ok = not any(re.search(chk[1], s["text"], re.I) for s in summary)
             label = f"must not: {chk[1]}"
+        elif kind == "year":
+            if year_source == "web_search":
+                ok = not any(re.search(rf"\b{chk[1]}\b", s["text"]) for s in summary)
+                label = f"must not: {chk[1]} (year found by a web search)"
+            else:
+                ok = any(re.search(PREFIX + rf".*you gave, (?:the )?{chk[1]}\b", s["text"], re.I) for s in summary)
+                label = f"must: you gave, {chk[1]} (year the user typed)"
         elif kind == "N":
             ok = any(chk[1] in st["source_ids"] for st in steps)
             label = f"next includes: {chk[1]}"
@@ -163,8 +172,9 @@ def hard_checks(req: ReportRequest, rep: dict, kb_items: dict, ev) -> list[str]:
     fixed = set(assemble.NO_LOAN_SENTENCES.values()) | {assemble.MOCK_SENTENCE}
     summary = rep.get("summary", [])
     model_sentences = [s for s in summary if s["text"] not in fixed]
+    ev_years = V.with_user_year(ev, prompt.fact_list(req, ev, kb_items))  # the year the user typed, in its own fact only
     for s in model_sentences:
-        fails = V.check_sentence(Sentence(**s), ev, V.MAX_WORDS if rep.get("model") != "mock" else None)
+        fails = V.check_sentence(Sentence(**s), ev_years, V.MAX_WORDS if rep.get("model") != "mock" else None)
         if fails:
             bad.append(f"summary sentence fails {fails}: {s['text'][:80]}")
         if V.relies_on_user_input(Sentence(**s), ev) and not s["text"].startswith(V.PREFIX):
@@ -248,7 +258,8 @@ def main() -> int:
                 row["passed"] = sum(s["text"] not in fixed for s in rep["summary"])
                 row["dropped"] = rep["dropped"]
                 row["hard_violations"] = hard_checks(req, rep, data.items, ev)
-                row["rubric"] = rubric(case if case in CHECKS else case.split("_")[0], rep, data.items)
+                row["rubric"] = rubric(case if case in CHECKS else case.split("_")[0], rep, data.items,
+                                            prompt.chat_sources(req).get("year_built", "user"))
             else:
                 row["error"] = rep.get("error", {}).get("code")
             if dbg:

@@ -95,8 +95,13 @@ require page text for every code in those tables).
    `kb_monolithic_cladding` in `kb_items_from_user_input`) ranks right after the title, so it is a must-mention
    with the prefix whenever it is among the five highest-ranked topics (a second hazard topic and a second lending
    topic rank above the title and can push both out); with the council year unknown, a 1998 + monolithic input
-   becomes one sentence naming both ("the year you gave and the monolithic cladding are both discussed in
-   Settled.govt.nz's guidance on leaky buildings; public data could not confirm them"). The non-residential use
+   becomes one sentence naming both ("the year you gave, 1998, and the monolithic cladding are both discussed in
+   Settled.govt.nz's guidance on leaky buildings; public data could not confirm them"). The summary repeats only
+   a year the user typed (`chat_supplied_source` absent or `user`): it is the fact's `user_year` slot, written
+   right after "you gave," (a decade as "the 1990s"), so Gemini never sees the number, a rewrite must keep "you
+   gave" and the placeholder in place, and `validator.with_user_year` allows that slot's value for that fact
+   only (any other number is still refused). A year found by a web search is never written in the summary
+   ("the year found online could not be checked against council records"). The non-residential use
    sentence it pushes out is merged into the title sentence (without the title's KB clause when needed to stay
    within 24 words, one under the limit), so the summary stays at 5 sentences. `next_steps` keeps those triggered
    items within the 6 shown (`assemble.py`).

@@ -53,8 +53,10 @@ def test_user_monolithic_1998_is_a_must_with_prefix_and_land_use_still_in_the_su
     # the non-residential use the user fact pushed out is merged into the title sentence (case1 must-mentions)
     title = next(f for f in musts if f.topic == "title")
     assert "RESERVE LAND" in title.draft() and "Freehold" in title.draft() and "ac_valuation" in title.source_ids
+    assert "the year you gave, 1998," in text  # the user's own year, labelled
     for f in musts:
-        assert V.check_sentence(Sentence(text=prompt.draft_text(f), source_ids=f.source_ids), ev) == [], f.text
+        assert V.check_sentence(Sentence(text=prompt.draft_text(f), source_ids=f.source_ids),
+                                V.with_user_year(ev, [f])) == [], f.text
 
 
 def test_user_year_alone_in_the_leaky_era_is_a_must_and_names_the_guidance():
@@ -62,7 +64,38 @@ def test_user_year_alone_in_the_leaky_era_is_a_must_and_names_the_guidance():
     fs = prompt.fact_list(req, ev, data.items)
     user = [f for f in fs if f.user and f.must]
     assert len(user) == 1 and "kb_leaky_build_era" in user[0].source_ids
-    assert "leaky buildings" in user[0].draft() and "1998" not in user[0].draft()
+    assert "leaky buildings" in user[0].draft() and "The year you gave, 1998, falls" in user[0].draft()
+    assert "1998" not in user[0].text  # the stored text has only the placeholder
+
+
+def test_web_search_year_is_not_shown_in_the_leaky_facts():
+    b = council_off({"year_built": 1998, "cladding": "monolithic"}, LEAKY)
+    b["user_inputs"]["chat_supplied_source"] = {"year_built": "web_search"}
+    req, data, ev = setup(b)
+    fs = prompt.fact_list(req, ev, data.items)
+    user = [f for f in fs if f.user and f.must]
+    assert user and not any("1998" in f.draft() or "user_year" in f.slots for f in fs)
+    assert "found online" in user[0].draft()
+
+
+def test_a_rewrite_that_swaps_the_year_or_drops_you_gave_is_blocked():
+    req, data, ev = setup(council_off({"year_built": 1998}, ["kb_leaky_build_era"]))
+    fs = prompt.fact_list(req, ev, data.items)
+    f = next(f for f in fs if f.user and f.must)
+
+    def check(text):
+        return V.check_rewrite({"text": text, "fact_ids": [f.id]}, fs, ev).fails
+    ok = ("The year you gave, {{%s.user_year}}, falls in a period covered by Settled.govt.nz's guidance on leaky "
+          "buildings; council records could not confirm it." % f.id)
+    assert check(ok) == []
+    assert V.BARE_NUMBER in check(ok.replace("{{%s.user_year}}" % f.id, "1999"))          # another year
+    assert V.BARE_NUMBER in check(ok.replace("{{%s.user_year}}" % f.id, "1998"))          # the number written bare
+    assert V.MISSING_QUALIFIER in check(ok.replace("you gave", "found"))                  # label dropped
+    assert V.SLOT_CONTEXT in check(ok.replace("The year you gave, {{", "The year you gave is {{"))
+    # the year is allowed for this slot only: the same number in another sentence is still refused
+    other = V.check_sentence(Sentence(text="The council valuation is 1998.", source_ids=["ac_valuation"]),
+                             V.with_user_year(ev, [f]))
+    assert "number_not_in_cited_sources" in other
 
 
 def test_user_facts_that_trigger_nothing_stay_optional():
