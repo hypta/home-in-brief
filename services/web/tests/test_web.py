@@ -1,4 +1,6 @@
 """The relay is tested against real upstream responses recorded in tests/fixtures (see its README)."""
+import base64
+import hashlib
 import json
 import os
 import re
@@ -267,3 +269,47 @@ def test_a_council_property_category_typed_as_the_year_built_is_sent_on_as_its_d
     """LINZ Rating Valuations Rules 2008, Table 21. 191 (before 1914), 192 (1914-1929) and XXX are valid but not a decade."""
     client.post("/api/rules", json={"user_inputs": {"chat_supplied": {"year_built": typed, "cladding": None}}})
     assert sent.call_args.kwargs["json"]["user_inputs"]["chat_supplied"] == {"year_built": sent_on, "cladding": None}
+
+
+SECURITY = ("Content-Security-Policy", "Strict-Transport-Security", "X-Content-Type-Options", "X-Frame-Options", "Referrer-Policy")
+
+
+def _has_security_headers(r):
+    assert all(r.headers.get(h) for h in SECURITY), r.headers
+    assert r.headers["X-Content-Type-Options"] == "nosniff" and r.headers["X-Frame-Options"] == "DENY"
+    csp = r.headers["Content-Security-Policy"]
+    assert "frame-ancestors 'none'" in csp and "object-src 'none'" in csp and "'unsafe-eval'" not in csp
+
+
+@pytest.mark.parametrize("path", ["/", "/app.js", "/styles.css", "/fonts/figtree-latin.woff2", "/config.json", "/nope.txt"])
+def test_pages_and_static_files_carry_the_security_headers(path):
+    _has_security_headers(client.get(path))
+
+
+def test_relayed_api_answers_and_their_errors_carry_the_security_headers(sent):
+    _has_security_headers(client.get("/api/addresses", params={"q": "44 lorne"}))
+    _has_security_headers(client.get("/api/nothing-here"))
+    sent.side_effect = requests.ConnectionError()
+    _has_security_headers(client.get("/api/addresses"))
+
+
+def test_refused_requests_carry_the_security_headers(monkeypatch):
+    monkeypatch.setitem(main.LIMITS, False, (0, 1000.0))
+    main._buckets.clear()
+    r = client.get("/api/addresses")
+    assert r.status_code == 429
+    _has_security_headers(r)
+    r = client.post("/api/rules", content=b"{}", headers={"content-length": str(main.MAX_BODY + 1)})
+    assert r.status_code == 413
+    _has_security_headers(r)
+    main._buckets.clear()
+
+
+def test_csp_allows_exactly_the_inline_script_in_the_page():
+    html = (STATIC / "index.html").read_text()
+    inline = [m for m in re.findall(r"<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>", html, re.S)]
+    assert len(inline) == 1, "the CSP is written for one inline script"
+    digest = "sha256-" + base64.b64encode(hashlib.sha256(inline[0].encode()).digest()).decode()
+    assert digest == main.THEME_SCRIPT_HASH, f"update THEME_SCRIPT_HASH in app/main.py to {digest}"
+    assert f"'{digest}'" in client.get("/").headers["Content-Security-Policy"]
+    assert "onclick=" not in html and not re.search(r"<script[^>]*\bsrc=\"http://", html)

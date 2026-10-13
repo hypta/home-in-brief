@@ -53,6 +53,31 @@ _contexts: dict[str, tuple[float, bytes]] = {}
 # A council property category such as RD199B: characters 3-5 are the build decade (LINZ Rating Valuations Rules
 # 2008, Table 21). 191 (before 1914), 192 (1914-1929) and XXX (mixed ages) are valid but are not a decade.
 _CATEGORY = re.compile(r"\s*(?:R[ACDFHNR]|LI)([0-9]{3}|XXX)[ABC]?\s*", re.I)
+# Headers on every response. The CSP lists exactly what the page loads: Leaflet and its images from unpkg (with SRI in
+# index.html), map tiles from OpenStreetMap and LINZ Basemaps, data: images from styles.css, and /api and /config.json.
+# The one inline script (theme, index.html) is allowed by hash; tests/test_web.py checks the hash against the file.
+# style-src keeps 'unsafe-inline': the page builds style="" attributes in HTML strings (swatches, bars) and Leaflet's
+# stylesheet/markup needs them; scripts are the part that matters and stay locked down.
+THEME_SCRIPT_HASH = "sha256-O68xoYfQAgdJL991RybBlHG3/pnAP8WDjxtktW0OeKU="
+SECURITY_HEADERS = {
+    "Content-Security-Policy": "; ".join((
+        "default-src 'none'",
+        f"script-src 'self' '{THEME_SCRIPT_HASH}' https://unpkg.com",
+        "style-src 'self' 'unsafe-inline' https://unpkg.com",
+        "img-src 'self' data: https://unpkg.com https://tile.openstreetmap.org https://basemaps.linz.govt.nz",
+        "font-src 'self'",
+        "connect-src 'self'",
+        "manifest-src 'none'",
+        "frame-ancestors 'none'",
+        "base-uri 'self'",
+        "object-src 'none'",
+        "form-action 'self'",
+    )),
+    "Strict-Transport-Security": "max-age=31536000",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+}
 log = logging.getLogger("web")
 mimetypes.add_type("font/woff2", ".woff2")  # the image's Python (3.12) does not know it and serves application/octet-stream
 
@@ -87,6 +112,12 @@ def _wait(visitor: str, costly: bool) -> float:
 
 @app.middleware("http")
 async def edge(request: Request, call_next):
+    response = await _edge(request, call_next)
+    response.headers.update(SECURITY_HEADERS)
+    return response
+
+
+async def _edge(request: Request, call_next):
     if request.method == "POST" and int(request.headers.get("content-length") or MAX_BODY + 1) > MAX_BODY:
         return _error(413, "too_large", "Request body is missing its length or is too large.")
     if request.url.path.startswith("/api/"):

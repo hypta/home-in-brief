@@ -59,6 +59,16 @@ Then open http://localhost:8082. `PROPERTY_API_URL`, `RULES_API_URL` and `REPORT
 and 8090. Without report-api the records, map and figures still work; the summary and the answers say they are
 unavailable.
 
+## Security headers
+
+Every response (pages, static files, `/api/*`, 413 and 429 errors) carries a Content-Security-Policy, HSTS, `nosniff`,
+`X-Frame-Options: DENY` and a `Referrer-Policy` (`SECURITY_HEADERS` in `app/main.py`). The CSP names every origin the
+page loads: unpkg.com (Leaflet script and stylesheet, with SRI, and its images), the OpenStreetMap and LINZ Basemaps
+tile servers, and `data:` images from `styles.css`. The inline theme script in `index.html` is allowed by its sha256
+hash, so **if you edit that script, update `THEME_SCRIPT_HASH`** (a test fails until you do). `style-src` keeps
+`'unsafe-inline'` because the page writes `style=""` attributes into HTML strings. A new external origin (another tile
+server, a CDN) must be added to the CSP or the browser will block it.
+
 ## Tests
 
 ```bash
