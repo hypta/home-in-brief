@@ -116,9 +116,9 @@
     "licence": "CC BY-NC 4.0",
     "next_step_en": "Ask your insurer and the Natural Hazards Commission which parts of the land are covered.",
     "verified_by": "Ting Wang",
-    "verified_at": "2026-10-04T09:30:47Z",
-    "verified_content_hash": "e05d3f6193048b35a95ba80269a627ab793084ec63c96679f23d88ed32c04edd",
-    "status": "needs_review",
+    "verified_at": "2026-10-13T06:48:30Z",
+    "verified_content_hash": "30b857a9681c8c3007fd481c4ddbf3f60d8febd159428059980ccc7296a4846e",
+    "status": "verified",
     "last_check": null
   }
 ]

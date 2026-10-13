@@ -284,9 +284,11 @@ Steps:
    This holds when the answer call returns. When the answer call failed (a 5xx, a timeout, 429, no key) and
    nothing else answers, the reply is the fixed "not enough data" sentence (Chinese written by code, other languages
    English with `language` "en") with `generation_degraded`, not the must-mention drafts. When no model call answers
-   because every call was refused or had no time, the reply is the program's own, whatever was asked, including a question classify could not sort: the
-   program sentence of a field the question names, when there is one (step 9), else the summary's must-mention drafts
-   (at most 3). `generation_degraded` marks a refusal; after a failure `X-Report-Degraded-Reason: model_error` tells too.
+   because every call was refused or had no time, the reply is the program's own, including for a question classify
+   could not sort: the program sentence of a field the question names, when there is one (step 9), else the drafts of
+   the facts about the topics the question names (`topic_fact_ids`, at most 3), else the fixed sentence "A full answer
+   could not be produced right now; the original sources linked below may help." with the fallback links. Never facts
+   about something else. `generation_degraded` marks a refusal; after a failure `X-Report-Degraded-Reason: model_error` tells too.
    The same search is made, before an error or a lead sentence with nothing after it, when the facts give no
    sentence that can be shown: every rewrite and draft blocked, or none that could be put into the asker's language.
    A question about the loan or the First Home Loan (and nothing else the facts cover) with no loan fact in the list
@@ -484,7 +486,8 @@ deadline is 10s"), at most `GEMINI_TIMEOUT_S` and 1 s less than what is left, so
 request's deadline.
 At most 2 search calls per request (`gemini.MAX_SEARCHES`). The rules re-run gets at most 5 s, the KB read at most
 5 s. Without time for a call the answer is code's: the summary's must-mention drafts, the follow-up's program
-sentences (or must-mention drafts), English instead of a translation, the fixed refusal instead of a search.
+sentences (or the drafts of the facts the question is about, else a fixed sentence), English instead of a
+translation, the fixed refusal instead of a search.
 
 Mock (`REPORT_MOCK=true`, no Gemini call, for front-end work without a key): code classifies the question.
 Out-of-scope keywords (school, zone, commute, crime, neighbour, traffic, 學區, 通勤, 治安, ...; not when the
@@ -559,7 +562,7 @@ Model text is held tighter because it goes through `check_rewrite`, where values
 | `REPORT_MOCK` | false | `true`: no Gemini call (below) |
 | `GEMINI_TIMEOUT_S` | 20 | Limit for one Gemini call |
 | `REQUEST_DEADLINE_S` | 25 | Total budget; a Gemini call only with at least 11 s left, sent with at least 10 s; one retry (invalid JSON, 0 passing sentences, model error) only if the remaining time covers another attempt; no time for a call: drafts |
-| `PROTECTION_BACKEND` (`firestore` on Cloud Run, `memory` elsewhere; `off` turns the allowance off), `GEMINI_DAILY_CALLS` (100), `SEARCH_DAILY_CALLS` (30), `GEMINI_EVENT_CALLS` (3000), `GENERATION_SLOTS` (2), `GEMINI_MAX_OUTPUT_TOKENS` (2048), `GEMINI_INPUT_MAX_BYTES` (32000), `REPORT_DEGRADED` (false), `PROTECTION_TIMEOUT_S` (3, the same as `.github/deploy/targets.json`), `REPORT_CACHE_SIZE` (100), `REPORT_CACHE_TTL_S` (600) | | See "Abuse and cost protection" |
+| `PROTECTION_BACKEND` (`firestore` on Cloud Run, `memory` elsewhere; `off` turns the allowance off), `GEMINI_DAILY_CALLS` (100), `SEARCH_DAILY_CALLS` (30), `GEMINI_EVENT_CALLS` (3000), `GENERATION_SLOTS` (2), `GEMINI_MAX_OUTPUT_TOKENS` (2048), `GEMINI_INPUT_MAX_BYTES` (36000), `REPORT_DEGRADED` (false), `PROTECTION_TIMEOUT_S` (3, the same as `.github/deploy/targets.json`), `REPORT_CACHE_SIZE` (100), `REPORT_CACHE_TTL_S` (600) | | See "Abuse and cost protection" |
 
 ## Abuse and cost protection (`app/protection.py`)
 

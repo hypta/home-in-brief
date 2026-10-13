@@ -67,11 +67,11 @@ document stays verified only while its content hash still matches; a changed tex
 settled.govt.nz, "last updated" for RBNZ and Auckland Council, the document date for PDFs), as
 `YYYY`, `YYYY-MM` or `YYYY-MM-DD`, or null if the page shows none. Re-check it when you re-verify.
 
-## Verification status (as of 2026-10-05)
+## Verification status (as of 2026-10-13)
 
-The knowledge base has 31 items: 31/31 `verified`, none `draft`.
+The knowledge base has 35 items: 35/35 `verified`, none `draft`.
 
-Verified by Kevin, 2026-10-04 (9 items, settled.govt.nz):
+Verified by Kevin, 2026-10-04 (8 items, settled.govt.nz):
 
 | Item | Verified at (UTC) |
 |---|---|
@@ -79,21 +79,18 @@ Verified by Kevin, 2026-10-04 (9 items, settled.govt.nz):
 | kb_leaky_build_era | 2026-10-04 08:54:34Z |
 | kb_monolithic_cladding | 2026-10-04 08:55:02Z |
 | kb_flood_insurance_limit | 2026-10-04 08:55:29Z |
-| kb_title_cross_lease_flats_plan | 2026-10-04 08:56:02Z |
 | kb_insurance_condition | 2026-10-04 08:56:21Z |
 | kb_title_freehold | 2026-10-04 08:56:34Z |
 | kb_title_cross_lease | 2026-10-04 08:56:43Z |
 | kb_title_unit_title | 2026-10-04 08:56:49Z |
 
-Verified by Ting Wang, 2026-10-04 (22 items):
+Verified by Ting Wang, 2026-10-04 (17 items):
 
 | Item | Verified at (UTC) |
 |---|---|
 | kb_nhc_building_cap | 2026-10-04 09:30:47Z |
 | kb_nhc_levy | 2026-10-04 09:30:47Z |
 | kb_nhc_building_excess | 2026-10-04 09:30:47Z |
-| kb_nhc_land_cover_limits | 2026-10-04 09:30:47Z |
-| kb_lim_next_step | 2026-10-04 09:30:47Z |
 | kb_fhl_premium | 2026-10-04 09:35:40Z |
 | kb_fhl_govt_not_funding_premium | 2026-10-04 09:35:40Z |
 | kb_fhl_deposit_5pct | 2026-10-04 09:35:40Z |
@@ -104,19 +101,35 @@ Verified by Ting Wang, 2026-10-04 (22 items):
 | kb_rbnz_dti | 2026-10-04 09:51:18Z |
 | kb_fhl_lvr_not_restricted | 2026-10-04 09:51:18Z |
 | kb_fhl_dti_not_restricted | 2026-10-04 09:51:18Z |
-| kb_low_deposit_higher_rates | 2026-10-04 09:51:18Z |
 | kb_unit_title_levies | 2026-10-04 10:02:39Z |
 | kb_unit_title_body_corporate_insurance | 2026-10-04 10:02:39Z |
 | kb_cv_not_market | 2026-10-04 10:02:39Z |
-| kb_overland_flow_path | 2026-10-04 10:02:39Z |
 | kb_coastal_inundation_meaning | 2026-10-04 10:02:39Z |
-| kb_landslide_map_context | 2026-10-04 10:07:26Z |
 
-While checking against the sources, Ting Wang narrowed the wording of 3 items to what the source says:
-`kb_rbnz_lvr` (added "for owner-occupiers"), `kb_low_deposit_higher_rates` (added "less than a 20% deposit"
-and "until you reach 20% equity"), and `kb_landslide_map_context` (now "if or when a landslide might happen").
+Verified by Ting Wang, 2026-10-13 (10 items):
 
-The production rules-api returns `verified` items, so the page can cite all 31.
+| Item | Verified at (UTC) |
+|---|---|
+| kb_dti_definition | 2026-10-13 06:48:30Z |
+| kb_landslide_map_context | 2026-10-13 06:48:30Z |
+| kb_lim_definition | 2026-10-13 06:48:30Z |
+| kb_lim_may_include | 2026-10-13 06:48:30Z |
+| kb_lim_next_step | 2026-10-13 06:48:30Z |
+| kb_low_deposit_higher_rates | 2026-10-13 06:48:30Z |
+| kb_lvr_definition | 2026-10-13 06:48:30Z |
+| kb_nhc_land_cover_limits | 2026-10-13 06:48:30Z |
+| kb_overland_flow_path | 2026-10-13 06:48:30Z |
+| kb_title_cross_lease_flats_plan | 2026-10-13 06:48:30Z |
+
+Six of these were verified before and were verified again after their claims were shortened to 25 words or fewer
+(`kb_lim_next_step`, `kb_overland_flow_path`, `kb_landslide_map_context`, `kb_nhc_land_cover_limits`,
+`kb_low_deposit_higher_rates`, `kb_title_cross_lease_flats_plan`). Four are new: `kb_lim_definition`,
+`kb_lim_may_include`, `kb_lvr_definition` and `kb_dti_definition`.
+
+While checking against the sources on 2026-10-04, Ting Wang narrowed the wording of `kb_rbnz_lvr` to what the source
+says (added "for owner-occupiers").
+
+The production rules-api returns `verified` items, so the page can cite all 35.
 
 If you later edit the `claim_en`, `quote`, `source_url`, `applies_when` or `next_step_en` of any item, it goes back to `needs_review` automatically and must be reviewed again.
 
@@ -124,9 +137,9 @@ If you later edit the `claim_en`, `quote`, `source_url`, `applies_when` or `next
 
 | Source (`tos_status`) | Items | Why manual | Cadence |
 |---|---|---|---|
-| `src_settled_*` settled.govt.nz (unclear) | kb_auction_unconditional, kb_leaky_build_era, kb_monolithic_cladding, kb_flood_insurance_limit, kb_insurance_condition, kb_title_freehold, kb_title_cross_lease, kb_title_cross_lease_flats_plan, kb_title_unit_title | Real Estate Authority copyright: "personal or in-house use only"; no automation clause, so unclear. All 9 verified 2026-10-04. | re-check every 2 weeks (verified 2026-10-04) |
-| `rbnz_lvr`, `rbnz_dti` rbnz.govt.nz (prohibited) | kb_rbnz_lvr, kb_rbnz_dti, kb_fhl_lvr_not_restricted, kb_fhl_dti_not_restricted, kb_low_deposit_higher_rates | Terms forbid robots and scrapers | every 2 weeks; also after each RBNZ Financial Policy Committee announcement |
-| `src_akl_rating_valuation`, `src_akl_overland_flow`, `src_akl_home_search_tips`, `src_akl_landslide_maps` Auckland Council (unclear) | kb_cv_not_market, kb_overland_flow_path, kb_coastal_inundation_meaning, kb_landslide_map_context | Council terms unclear on automated access | every 2 weeks |
+| `src_settled_*` settled.govt.nz (unclear) | kb_auction_unconditional, kb_leaky_build_era, kb_monolithic_cladding, kb_flood_insurance_limit, kb_insurance_condition, kb_title_freehold, kb_title_cross_lease, kb_title_cross_lease_flats_plan, kb_title_unit_title, kb_lim_definition | Real Estate Authority copyright: "personal or in-house use only"; no automation clause, so unclear. 8 verified 2026-10-04, 2 on 2026-10-13. | re-check every 2 weeks (verified 2026-10-04) |
+| `rbnz_lvr`, `rbnz_dti` rbnz.govt.nz (prohibited) | kb_rbnz_lvr, kb_rbnz_dti, kb_fhl_lvr_not_restricted, kb_fhl_dti_not_restricted, kb_low_deposit_higher_rates, kb_lvr_definition, kb_dti_definition | Terms forbid robots and scrapers | every 2 weeks; also after each RBNZ Financial Policy Committee announcement |
+| `src_akl_rating_valuation`, `src_akl_overland_flow`, `src_akl_home_search_tips`, `src_akl_landslide_maps`, `src_akl_lim` Auckland Council (unclear) | kb_cv_not_market, kb_overland_flow_path, kb_coastal_inundation_meaning, kb_landslide_map_context, kb_lim_may_include | Council terms unclear on automated access | every 2 weeks |
 | `bank_rates_snapshot` banks (unclear) | not a KB item | See `jobs/rates-refresh/config/banks.yaml` | per that file |
 
 ## Items checked automatically, with a manual fallback

@@ -469,7 +469,7 @@ Env (the deploy sets the values in `targets.json`; the code defaults are the sam
 | `GEMINI_EVENT_CALLS` | `3000` | Gemini calls in total (`protection/control.event_calls`); daily resets do not renew it |
 | `GENERATION_SLOTS` | `2` | /v1/report and /v1/followup requests at once per instance; more: 503 `busy`, `Retry-After: 5` |
 | `GEMINI_MAX_OUTPUT_TOKENS` | `2048` | `max_output_tokens` on every call (thinking tokens included) |
-| `GEMINI_INPUT_MAX_BYTES` | `32000` | Larger prompts (UTF-8 bytes) are not sent (drafts) and not counted |
+| `GEMINI_INPUT_MAX_BYTES` | `36000` | Larger prompts (UTF-8 bytes) are not sent (drafts) and not counted |
 | `REPORT_DEGRADED` | `false` | `true`: never call Gemini, drafts only (no Firestore read) |
 | `PROTECTION_TIMEOUT_S` | `3` (code default and `targets.json`) | Seconds for the allowance transaction; slower, unavailable or conflicting: the call is refused |
 | `REPORT_CACHE_SIZE`, `REPORT_CACHE_TTL_S` | `100`, `600` | /v1/report result cache per instance (not in `targets.json`; 0 turns it off). It stores only answers in mode `gemini`, and never a request whose inputs carry a web-search value |

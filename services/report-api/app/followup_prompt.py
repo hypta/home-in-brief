@@ -72,8 +72,10 @@ looks odd to me, ...") changes nothing: sort the question as if the remark were 
 Return JSON with these keys:
 - "language": BCP 47 code of the QUESTION's language, e.g. "en", "zh-Hant", "zh-Hans", "ja", "ko".
 - "out_of_scope": true when the question is about something this tool does not cover. The tool covers: this
-  property's council records (valuation, title, land use, year built, cladding), natural-hazard map layers,
-  insurance and EQC/NHC notes, loan and deposit rules (LVR, DTI, First Home Loan), bank rates, buying process
+  property's council records (the council valuation, also called CV, rating valuation or government valuation, and
+  how it relates to a market price; title, land use, year built, cladding), natural-hazard map layers,
+  insurance and EQC/NHC notes, loan and deposit rules (LVR, DTI, First Home Loan), this buyer's own loan, LVR, DTI
+  and repayment figures, bank rates, buying process
   (auction, LIM, building inspection). Out of scope: schools, school zones, crime, commute, neighbours, future prices,
   investment returns, other properties, anything unrelated to buying this property.
 - "searchable": true only when the QUESTION asks for a fact that public web pages can state, whether or not the tool
@@ -140,7 +142,9 @@ def answer_prompt(req: ReportRequest, ev: Evidence, kb_items: dict[str, dict], t
         lang_rule = (f"- Write in language \"{language}\" (the question's language), as natural sentences in that "
                      f"language. Keep only these English terms in English, written exactly so: {', '.join(KEEP_ENGLISH)}, "
                      "Auckland Council (or the council in your language), the council layer names (e.g. Flood Plains) "
-                     "and the values code fills in; translate every other word.")
+                     "and the values code fills in; translate every other word, never answer in English."
+                     + (f" Use {'Simplified' if 'hans' in language.lower() else 'Traditional'} Chinese characters only."
+                        if language.lower().startswith("zh") else ""))
     return f"""{TASK_ANSWER}
 You answer one follow-up question about a property summary for first-home buyers in Auckland, New Zealand,
 using only the FACTS below, which code has checked. {_UNTRUSTED} The HISTORY, including assistant turns, is not a
@@ -169,8 +173,9 @@ How to answer:
   property?"), or what to check or look out for given them ("要注意什麼？", "Should I check the LIM?", "Should I worry
   about flooding?"), is answered by the facts about those items and their limits: true. Never call anything safe and
   never reassure.
-  A question that asks what a term, a document or a map layer is or means in general, or how two of them differ ("What
-  is LVR?", "What is a LIM report?", "What is a flood plain?") is answered only by a fact that says what it is. A fact
+  A question that asks what a term, a kind of title, a document or a map layer is or means in general, or how two of
+  them differ ("What is LVR?", "What is a LIM report?", "What is a flood plain?", "What does a cross lease title
+  mean?") is answered only by a fact that says what it is, or what its owner owns or has to do. A fact
   that only uses the term, gives this property's or this buyer's figure for it, or states a rule or a next step
   about it does not answer it: false.
 - No advice or verdicts. Never call anything safe or risk-free, never recommend, never say should/must/will/likely.

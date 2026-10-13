@@ -196,7 +196,7 @@ def test_disabled_control_flag():
 
 def test_env_defaults(monkeypatch):
     assert protection.Limits.from_env() == protection.Limits(daily=100, search=30, event=3000)
-    assert protection.max_output_tokens() == 2048 and protection.env_int("GEMINI_INPUT_MAX_BYTES") == 32000
+    assert protection.max_output_tokens() == 2048 and protection.env_int("GEMINI_INPUT_MAX_BYTES") == 36000
     assert protection.env_int("GENERATION_SLOTS") == 2
     monkeypatch.delenv("PROTECTION_BACKEND")
     monkeypatch.delenv("K_SERVICE", raising=False)

@@ -194,9 +194,9 @@
     "licence": "Copyright Reserve Bank of New Zealand; may be reproduced without permission if RBNZ is acknowledged as source and owner (not Creative Commons)",
     "next_step_en": "Ask each lender what interest rate and fees apply at your deposit level.",
     "verified_by": "Ting Wang",
-    "verified_at": "2026-10-04T09:51:18Z",
-    "verified_content_hash": "291e761f427dd84ee3bbf4e779951a8482b290aaf67d07864a31638640291c86",
-    "status": "needs_review",
+    "verified_at": "2026-10-13T06:48:30Z",
+    "verified_content_hash": "d5e0ae4f6d6cbc2cfeb2459faca1c1bdb13634a950fb6ba24f76b3a9581568c0",
+    "status": "verified",
     "last_check": null
   },
   {
@@ -216,6 +216,46 @@
     "verified_by": "Ting Wang",
     "verified_at": "2026-10-04T09:35:40Z",
     "verified_content_hash": "20e1045166a206241c0a30d9f6deecfbb9857ef943cedb6c6c99ebff5dbbfcd8",
+    "status": "verified",
+    "last_check": null
+  },
+  {
+    "id": "kb_lvr_definition",
+    "topic": "lending",
+    "applies_when": {
+      "always": true
+    },
+    "claim_en": "The Reserve Bank explainer says LVR (loan-to-value ratio) measures how much you are borrowing compared to the value of the house.",
+    "quote": "it measures how much you’re borrowing compared to the value of the house",
+    "source_id": "rbnz_lvr",
+    "source_url": "https://www.rbnz.govt.nz/education/explainers/loan-to-value-restrictions-explained",
+    "source_title": "Understanding loan-to-value restrictions - Reserve Bank of New Zealand",
+    "source_type": "official",
+    "licence": "Copyright Reserve Bank of New Zealand; may be reproduced without permission if RBNZ is acknowledged as source and owner (not Creative Commons)",
+    "next_step_en": "Ask your lender what loan-to-value ratio it would accept for this purchase.",
+    "verified_by": "Ting Wang",
+    "verified_at": "2026-10-13T06:48:30Z",
+    "verified_content_hash": "0649b6ff04c81db280678da8956eb4b93b9fcd8fe4810b9ab3713aad269c2e5b",
+    "status": "verified",
+    "last_check": null
+  },
+  {
+    "id": "kb_dti_definition",
+    "topic": "lending",
+    "applies_when": {
+      "always": true
+    },
+    "claim_en": "The Reserve Bank explainer says a bank looks at your total debt and income to calculate your DTI (debt-to-income) ratio.",
+    "quote": "total debt and income to calculate their DTI ratio",
+    "source_id": "rbnz_dti",
+    "source_url": "https://www.rbnz.govt.nz/education/explainers/dti",
+    "source_title": "Understanding debt-to-income (DTI) restrictions - Reserve Bank of New Zealand",
+    "source_type": "official",
+    "licence": "Copyright Reserve Bank of New Zealand; may be reproduced without permission if RBNZ is acknowledged as source and owner (not Creative Commons)",
+    "next_step_en": "Ask your lender how it calculates your debt-to-income ratio.",
+    "verified_by": "Ting Wang",
+    "verified_at": "2026-10-13T06:48:30Z",
+    "verified_content_hash": "550b059266c440a04435d3bf9ff52d8abd91710fdcb1bff41b03e53991f6e4ac",
     "status": "verified",
     "last_check": null
   }

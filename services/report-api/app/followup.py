@@ -453,7 +453,8 @@ def tidy(text: str, language: str = "") -> str:
 # request) the values and labels code fills in and the property's own text values (latin_terms).
 _LATIN_TERMS = {*fp.KEEP_ENGLISH, "Auckland Council", "Auckland", "Reserve Bank", "RBNZ", "Kainga Ora",
                 "Natural Hazards Commission", "EQC", "CV", "body corporate", "high-LVR", "high-DTI", "loan-to-value",
-                "debt-to-income", "LIM reports", "LIM report", "Land Information Memorandum",
+                "debt-to-income", "loan-to-value ratio", "debt-to-income ratio", "LIM reports", "LIM report",
+                "Land Information Memorandum",
                 *facts_prompt.LAYER_NAMES.values(), *facts_prompt.SHORT_NAMES.values(),
                 *TITLE_WORDS, *(c.label for c in cladding_table.CLADDINGS), *cladding_table.VALUES}
 _LATIN_WORD = re.compile(r"[A-Za-zĀ-ſ][A-Za-zĀ-ſ'’-]+")
@@ -488,9 +489,21 @@ def cjk_units(text: str) -> int:
         len(re.findall(r"[A-Za-z0-9$][A-Za-z0-9$.,%'’-]*", text))
 
 
+# Words of an English sentence that no other Latin-script language an asker is likely to use has ("at", "is", "to" and
+# "of" alone are words of Tagalog, Dutch or Samoan too, or sit inside English names): stricter than web_language's list,
+# because a sentence wrongly taken for English is thrown away.
+_ENGLISH_ONLY = re.compile(r"\b(?:the|and|that|are|this|with|for|not|does|which|has|have|its|by|from|you|your|can|could|"
+                           r"of|shows?|says|states|been|were|their|they)\b", re.I)
+
+
+def looks_english(text: str) -> bool:
+    """Three different English function words: an English sentence, not English names inside another language."""
+    return len({w.lower() for w in _ENGLISH_ONLY.findall(text)}) >= 3
+
+
 def script_matches(text: str, language: str) -> bool:
     """The sentence is written in the script of `language` (zh: Han and no kana/Hangul; ja: kana; ko: Hangul;
-    any other language: no CJK script). A Latin-script language other than English is not told apart from English."""
+    any other language: no CJK script, and for a language other than English not an English sentence)."""
     low = language.lower()
     if low.startswith("zh"):
         return bool(_HAN_RE.search(text)) and not (_KANA_RE.search(text) or _HANGUL_RE.search(text))
@@ -498,7 +511,7 @@ def script_matches(text: str, language: str) -> bool:
         return bool(_KANA_RE.search(text))
     if low.startswith("ko"):
         return bool(_HANGUL_RE.search(text))
-    return not _CJK_RE.search(text)
+    return not _CJK_RE.search(text) and (low.startswith("en") or not looks_english(text))
 
 
 def hedged_source(s: Sentence, ev: Evidence, extra_en: str = "") -> bool:
@@ -1112,6 +1125,12 @@ _FIELD_Q = {
 }
 
 
+# the buyer's own figures, which only the page states (prompt.LOAN_FIGURES_TEXT); not a property field
+_LOAN_FIGURES_Q = re.compile(r"\bmy (?:dti|loan|repayments?|mortgage)\b|how much (?:would|will|do|can|could|am|are) "
+                             r"(?:i|we) (?:pay|repay|borrow|borrowing|need to pay|have to pay)|repayments?|per month|"
+                             r"each month|a month|monthly|fortnight|loan amount", re.I)
+
+
 @dataclass
 class Part:
     """One answer sentence before the language step. `native`: already in the answer language (a checked
@@ -1137,7 +1156,7 @@ def program_sentences(fs: list, named: list[str], question: str, ev: Evidence,
     ids = [i for i in named if i in by_id]
     for f in by_id.values():
         field = f.topic.removeprefix("program:")
-        rx = _FIELD_Q.get(field)
+        rx = _LOAN_FIGURES_Q if field == facts_prompt.LOAN_FIGURES else _FIELD_Q.get(field)
         asked = (rx and rx.search(question)) or (f.topic == facts_prompt.PERSONAL_LVR and personal_lvr_question(question))
         if asked and f.id not in ids:
             ids.append(f.id)
@@ -1155,8 +1174,12 @@ def program_sentences(fs: list, named: list[str], question: str, ev: Evidence,
             z = Sentence(text=tidy(facts_prompt.PERSONAL_LVR_ZH[_variant(language)].format(v=v), language),
                          source_ids=list(f.source_ids))
             if not check_answer(z, ev, language, base):
-                out.append(Part(z, native=True, user=False, base=base))
+                out.append(Part(Sentence(text=z.text, source_ids=[]), native=True, user=False, base=base))
                 continue
+        if f.topic == facts_prompt.PERSONAL_LVR:
+            # the figure is the program's own, worked out from what the buyer entered: checked under its source above,
+            # shown without one, so the page does not mark it as checked against a page that does not state it
+            s = Sentence(text=s.text, source_ids=[])
         out.append(Part(s, native=False, user=f.user, base=base, keep=text_values([f]), fields=frozenset(f.fields)))
     return out
 
@@ -1968,6 +1991,10 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
                         debug["unanswered_topics"] = topical
                         best, named, last = [Rewrite(None, topical, [])], [], None
                         break
+                if not out.answered and not fixed and not used and _LOAN_FIGURES_Q.search(question) and any(
+                        f.topic == "program:" + facts_prompt.LOAN_FIGURES for f in fs):
+                    best, named, last = [], [], None  # the page states these figures: the program sentence says where
+                    break
                 if not out.answered and not fixed and not used:
                     # no fact answers it (a definition, a topic the facts do not hold): never facts about something else
                     if after_search:
@@ -1975,7 +2002,8 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
                     got = searched(False, "unanswered")
                     if got:
                         return got
-                    sure = insufficient_answer(eff, None)
+                    # a loan question keeps the sentence that says which details are missing
+                    sure = insufficient_answer(eff, kind if kind and missing_loan_inputs(eff) else None)
                     if sure:
                         debug["insufficient"] = "unanswered"
                         debug["route"] = "insufficient:" + str("unanswered")
@@ -2025,13 +2053,36 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
             debug["program"] = [p.sentence.text for p in prog]
             passed.extend(prog)
             limit -= len(prog)
-            # no model answer (out of time, or every call failed) and no fixed sentence: the must-mention facts'
-            # drafts
-            musts = best is None and not prog and not fixed
+            if limit and is_english(language) and personal_lvr_question(question) and any(
+                    f.topic == facts_prompt.PERSONAL_LVR for f in fs) and any(
+                    (flag or {}).get("id") == "lvr_over_80" for flag in eff.rules_output.get("flags") or []):
+                # beside the buyer's own LVR, what the Reserve Bank says about a loan that high: that sentence is the
+                # one a source states. English only: the buyer's own LVR is answered without a translation call.
+                high = next((f for f in fs if f.topic == "lending" and "high-LVR" in f.text), None)
+                if high and not any(high.id in r.fact_ids for r in best or []):
+                    best = [*(best or []), Rewrite(None, [high.id], [])]
+            if best is None and not prog and not fixed:
+                # no model answer (allowance used up or out of time) and no program sentence about what was asked: the
+                # drafts of the facts about the topics the question names, else the fixed sentence and the links. Never
+                # facts about something else.
+                topical = topic_fact_ids(question, fs, limit=max(1, limit))
+                if topical:
+                    best = [Rewrite(None, topical, [])]
+                elif after_search:
+                    raise last or ReportError(503, "model_unavailable", "The language model did not answer.")
+                else:
+                    lang = fallback_language(language)
+                    debug["fallback"] = {"language": lang, "left_out": 0}
+                    debug["route"] = "fallback:no_model"
+                    return FollowupResponse(language=lang, answer=[Sentence(text=FALLBACK_NONE[lang], source_ids=[])],
+                                            out_of_scope=False, user_supplied=supplied,
+                                            user_supplied_source=_sources_out(supplied, sources),
+                                            links=links or fallback_links(question, link_ids), dropped=0,
+                                            warnings=warnings)
             # A draft is the program's own sentence or a verified claim as written: the sentence limit, which keeps the
             # model's rewrites short, does not hold it back (six claims are longer than MAX_WORDS, and a question about
             # one of them had no answer when its rewrite was blocked).
-            items = rewrite.compose(best or [], fs, limit, add_musts=musts, sort=False,
+            items = rewrite.compose(best or [], fs, limit, add_musts=False, sort=False,
                                     check_draft=lambda s: [f for f in check_answer(s, ev, "en") if f != TOO_LONG]
                                     ) if limit else []
             dropped = sum(r.sentence is None for r in best or [])

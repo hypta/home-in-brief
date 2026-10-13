@@ -124,7 +124,7 @@ report-api README).
   is a manual snapshot from each bank's public rates page (`RATES_UPDATE.md`), with a `captured_at` per bank. The page
   shows the snapshot date. `jobs/rates-refresh`, which would fetch a bank's rates page and extract the rates with
   Gemini, is kept in the repo but is not in use: it fetches only banks marked `allowed`, and there are none.
-- **Knowledge base: 31 of 31 items are `verified`.** Each item holds a word-for-word quote from an official source,
+- **Knowledge base: 35 of 35 items are `verified`.** Each item holds a word-for-word quote from an official source,
   checked by a person against the source (`kb/MANUAL_CHECK.md`). `kb-refresh` never edits item text and downgrades an
   item whose quote disappears. Quotes are shown with source name, URL and licence text.
 - The CV is an Auckland Council rating valuation, not a market price.

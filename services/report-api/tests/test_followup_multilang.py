@@ -351,3 +351,12 @@ def test_japanese_first_translation_timeout_is_the_same_decision(monkeypatch, no
     out = ask(monkeypatch, council_off({"year_built": 1998, "cladding": "monolithic"}, LEAKY),
               "この家は何年に建てられましたか？", timing_out)
     assert out["language"] == "en" and out["answer"][0]["text"] == followup.FALLBACK_LEAD["en"]
+
+
+def test_an_english_sentence_is_not_an_answer_in_another_latin_script_language():
+    english = "Auckland Council maps show Flood Plains over 51.2% of this parcel, Flood Prone Areas over 50.8%."
+    tagalog = "Ayon sa Reserve Bank of New Zealand, ang LVR ay ang sukat ng utang kumpara sa halaga ng ari-arian."
+    assert followup.script_matches(english, "en")
+    assert not followup.script_matches(english, "tl")  # was shown as Tagalog, and as Hindi, before
+    assert not followup.script_matches(english, "hi")
+    assert followup.script_matches(tagalog, "tl")  # English names inside another language are not English

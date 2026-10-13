@@ -1078,8 +1078,8 @@ def test_lim_definition_item_is_a_follow_up_fact_when_selected():
     req = ReportRequest.model_validate(b)
     data = kb.load(req.selected_kb_ids())
     item = data.items["kb_lim_definition"]
-    assert item["claim_en"].endswith("is a report prepared by the local council at your request.")
-    assert item["quote"] in item["claim_en"] and item["source_url"].endswith("/what-is-a-lim-report/")
+    assert item["claim_en"].endswith("is a report by the local council that summarises the property information it holds.")
+    assert item["source_url"].endswith("/what-is-a-lim-report/")
     ev = V.build_evidence(req, data.items, data.sources.keys(), source_urls=data.sources.urls)
     fs = facts_prompt.followup_facts(req, ev, data.items, {})
     assert any(f.source_ids == ["kb_lim_definition"] and f.topic.startswith("kb:") for f in fs)

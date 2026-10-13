@@ -289,8 +289,10 @@ def test_my_lvr_is_the_computed_ratio_with_its_source_and_is_never_searched(monk
     out, fake = run(monkeypatch, "What is my LVR?", cls(), answers=[answer])
     assert fake.tasks == ["classify", "answer"] and fake.searches == 0
     # the model only names the fact: the sentence shown is the program's own (prompt.PERSONAL_LVR_TEXT)
-    assert [s["text"] for s in out["answer"]] == [LVR_SENTENCE]
-    assert out["answer"][0]["source_ids"] == ["rbnz_lvr"] and out["warnings"] == []
+    # shown without a source (the figure is worked out from what the buyer entered), then what the Reserve Bank says
+    # about a loan that high, with its sources
+    assert [s["text"] for s in out["answer"]] == [LVR_SENTENCE, "Your loan is high-LVR lending (borrowing over 80% of the price), which the Reserve Bank lets banks offer only in limited amounts."]
+    assert out["answer"][0]["source_ids"] == [] and out["answer"][1]["source_ids"] and out["warnings"] == []
     # in Chinese, the same ratio in the sentence code writes
     zh = {"answered": True, "answer": [{"text": f"你的 LVR 是{{{{{f.id}.lvr_pct}}}}。", "fact_ids": [f.id]}], "links": []}
     out, fake = run(monkeypatch, "我的 LVR 是多少？", cls("zh-Hant"), answers=[zh])

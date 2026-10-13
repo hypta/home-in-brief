@@ -464,6 +464,13 @@ def test_english_question_after_the_allowance_is_unchanged(monkeypatch):
     assert out["answer"][0]["text"] not in (followup.FALLBACK_LEAD["en"], followup.FALLBACK_NONE["en"])
 
 
+def test_a_question_the_program_cannot_place_gets_the_fixed_sentence_after_the_allowance(monkeypatch):
+    FakeGenai(followup_brain(cls())).install(monkeypatch)
+    monkeypatch.setenv("GEMINI_DAILY_CALLS", "0")
+    out = post_followup("Which schools are nearby?").json()  # was answered with the flood, title and valuation facts
+    assert [s["text"] for s in out["answer"]] == [followup.FALLBACK_NONE["en"]] and out["links"]
+
+
 def test_fixed_chinese_sentences_pass_the_chinese_checks():
     from app.validator import Evidence
     for lang in ("zh-Hant", "zh-Hans"):

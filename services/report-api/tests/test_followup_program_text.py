@@ -172,12 +172,17 @@ def test_definition_question_is_one_complete_request_for_a_meaning():
 def test_my_lvr_in_another_language_is_the_english_program_sentence(monkeypatch, question, language, hostile):
     out, fake = run_hostile_translation(monkeypatch, question, cls(language), hostile, answers=[UNANSWERED])
     assert "translate" not in fake.tasks and fake.searches == 0
-    assert texts(out) == [LVR_SENTENCE] and out["language"] == "en" and "DTI" not in shown(out)
+    assert texts(out) == [LVR_SENTENCE, HIGH_LVR] and out["language"] == "en" and "DTI" not in shown(out)
+
+
+# what the Reserve Bank says about a loan that high follows the buyer's own figure: the sentence a source states
+HIGH_LVR = "Your loan is high-LVR lending (borrowing over 80% of the price), which the Reserve Bank lets banks offer only in limited amounts."
 
 
 def test_my_lvr_in_english_and_chinese_is_unchanged(monkeypatch):
     out, _ = run(monkeypatch, "What is my LVR?", cls(), answers=[UNANSWERED])
-    assert texts(out) == [LVR_SENTENCE]
+    assert texts(out) == [LVR_SENTENCE, HIGH_LVR]
+    assert [bool(s["source_ids"]) for s in out["answer"]] == [False, True]  # the figure is the program's own: no source
     out, _ = run(monkeypatch, "What is my LVR?", cls(), case="case5", answers=[UNANSWERED])
     assert texts(out) == [LVR_SENTENCE.replace("90%", "65%")]
     out, _ = run(monkeypatch, "我的 LVR 是多少？", cls("zh-Hant"), answers=[UNANSWERED])

@@ -228,8 +228,8 @@ def _primary_hazards(req: ReportRequest, sel: list[str]) -> list[_Topic]:
         out.append(t.set(say + ".", cite))
     elif len(primary) == 4 and all(h.status == "none" for h in primary):
         out.append(_Topic(O_PRIMARY, P_HAZARD, "hazard").set(
-            "The council's flood plain, flood prone area, overland flow path and coastal inundation "
-            "layers do not show any of these for this parcel.", [h.source_id for h in primary],
+            "Council maps do not show any flood plain, flood prone area, overland flow path or coastal "
+            "inundation on this parcel.", [h.source_id for h in primary],
             keep=["do not show any"]))
     gaps = [h for h in primary if h.status in MISSING]
     if gaps:
@@ -628,6 +628,11 @@ NO_SOURCE_TEXT = {
 }
 
 
+LOAN_FIGURES = "loan_figures"
+LOAN_FIGURES_TEXT = ("The loan amount, DTI and repayment figures for your details are calculated by the program and "
+                     "shown in the Money section of this page.")
+
+
 def _claim_fact(t: _Topic, kb_id: str, claim: str) -> str:
     n = 0
 
@@ -678,7 +683,11 @@ def followup_facts(req: ReportRequest, ev: Evidence, kb_items: dict[str, dict],
             t = _Topic(90, P_EXTRA, "kb:" + str(kb_items[i].get("topic") or ""), user=i in ev.user_kb)
             if i in ev.user_kb and _TOPIC_FIELD.get(kb_items[i].get("topic")):
                 t.fields.add(_TOPIC_FIELD[kb_items[i]["topic"]])
-            extra.append(t.set(_claim_fact(t, i, claim), [i]))
+            # a short bracketed form is how a claim explains a name ("LVR (loan-to-value ratio)"): an answer keeps it
+            # as written, with the abbreviation before it
+            pairs = [m.groups() for m in re.finditer(r"(?:\b([A-Z]{2,6}) )?\(([^(),\d]{2,40})\)", claim)]
+            extra.append(t.set(_claim_fact(t, i, claim), [i],
+                               keep=[f"{a} ({b})" if a else b for a, b in pairs if len(b.split()) <= 4]))
     for name, f in req.property_fields().items():
         if not f.source_id:
             continue
@@ -796,6 +805,10 @@ def _program_topics(req: ReportRequest, ev: Evidence, kb_items: dict[str, dict],
             out.append(t.set(say, user_kb["cladding"]))
         elif not f.source_id and name in NO_SOURCE_TEXT and name not in used:  # a value just given: user_said
             out.append(t.set(NO_SOURCE_TEXT[name], []))
+    if not ev.no_loan and to_decimal(req.rules_output.get("loan_amount")):
+        # the validator keeps calculated figures out of every sentence (COMPUTED_VALUE; the buyer's own LVR has its
+        # own program sentence): a question about the others is told where the page shows them
+        out.append(_Topic(96, P_EXTRA, "program:" + LOAN_FIGURES).set(LOAN_FIGURES_TEXT, []))
     return out
 
 

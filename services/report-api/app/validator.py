@@ -528,6 +528,7 @@ def check_rewrite(s: Any, facts: Any, ev: Evidence, max_words: Optional[int] = M
 
     fmap = facts if isinstance(facts, dict) else {f.id: f for f in facts}
     text = strip_prefix((getattr(s, "text", None) if not isinstance(s, dict) else s.get("text")) or "").strip()
+    text = re.sub(r"\bA (?=Auckland\b)", "An ", text)  # the model's article before the publisher it has to name
     named = list(dict.fromkeys((getattr(s, "fact_ids", None) if not isinstance(s, dict) else s.get("fact_ids")) or []))
     ids = [i for i in named if i in fmap]
     fails: list[str] = []

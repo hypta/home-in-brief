@@ -320,4 +320,5 @@ def test_a_purchase_question_with_only_a_price_or_no_topic_is_still_refused(monk
 def test_my_lvr_is_given_even_when_the_answer_step_says_nothing_answers_it(monkeypatch):
     out, fake = run(monkeypatch, "What is my LVR?", cls(), answers=[UNANSWERED])
     assert fake.searches == 0 and texts(out) == [
-        "Your LVR, the loan as a share of the price, is 90%, calculated from the price and deposit you entered."]
+        "Your LVR, the loan as a share of the price, is 90%, calculated from the price and deposit you entered.",
+        "Your loan is high-LVR lending (borrowing over 80% of the price), which the Reserve Bank lets banks offer only in limited amounts."]

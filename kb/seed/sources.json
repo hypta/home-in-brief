@@ -219,5 +219,18 @@
     "tos_url": "https://www.settled.govt.nz/terms-of-use-and-privacy/",
     "tos_checked_at": "2026-10-13",
     "published_or_updated": "2019-04-04"
+  },
+  {
+    "id": "src_akl_lim",
+    "title": "About property files and Land Information Memorandum (LIM) reports",
+    "url": "https://www.aucklandcouncil.govt.nz/en/buying-property/order-property-report/about-property-files-and-lim-reports.html",
+    "licence": "Copyright Auckland Council; no open licence found",
+    "accessed_at": "2026-10-13",
+    "source_type": "official",
+    "attribution": "Source: Auckland Council (aucklandcouncil.govt.nz), copyright Auckland Council.",
+    "tos_status": "unclear",
+    "tos_url": "https://www.aucklandcouncil.govt.nz/en/terms-and-conditions.html",
+    "tos_checked_at": "2026-10-03",
+    "published_or_updated": null
   }
 ]

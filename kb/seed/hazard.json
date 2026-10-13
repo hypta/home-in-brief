@@ -34,9 +34,9 @@
     "licence": "CC BY-NC 4.0",
     "next_step_en": "Ask your lawyer to obtain and review the LIM report and other property documents from the council.",
     "verified_by": "Ting Wang",
-    "verified_at": "2026-10-04T09:30:47Z",
-    "verified_content_hash": "92d80f11c12834087926e9018a3580eb9eff2243d6cea56922dfda60ceee42ef",
-    "status": "needs_review",
+    "verified_at": "2026-10-13T06:48:30Z",
+    "verified_content_hash": "fb593752f655c9c51f4aae653ff15c35bfa22f7b1a83876deeffa7fbbaf73b52",
+    "status": "verified",
     "last_check": null
   },
   {
@@ -45,18 +45,18 @@
     "applies_when": {
       "always": true
     },
-    "claim_en": "Settled.govt.nz says a LIM (Land Information Memorandum) is a report prepared by the local council at your request.",
-    "quote": "a report prepared by the local council at your request",
+    "claim_en": "Settled.govt.nz says a LIM (Land Information Memorandum) is a report by the local council that summarises the property information it holds.",
+    "quote": "a summary of the current property information held by the different departments at council",
     "source_id": "src_settled_lim",
     "source_url": "https://www.settled.govt.nz/blog/what-is-a-lim-report/",
     "source_title": "What is a LIM Report? - settled.govt.nz",
     "source_type": "official",
     "licence": "Copyright Real Estate Authority (not Creative Commons); may be reproduced free of charge for personal or in-house use only",
     "next_step_en": "Ask your lawyer to obtain and review the LIM report and other property documents from the council.",
-    "verified_by": null,
-    "verified_at": null,
-    "verified_content_hash": null,
-    "status": "draft",
+    "verified_by": "Ting Wang",
+    "verified_at": "2026-10-13T06:48:30Z",
+    "verified_content_hash": "aa766a72e4aa9f465b0bf43874b53dd7cc3f68d08c4f0854f665875492c990b6",
+    "status": "verified",
     "last_check": null
   },
   {
@@ -76,9 +76,9 @@
     "licence": "Copyright Auckland Council; no open licence found",
     "next_step_en": "Ask the council or a drainage engineer whether the mapped overland flow path crosses this property and what the mapping means for it.",
     "verified_by": "Ting Wang",
-    "verified_at": "2026-10-04T10:02:39Z",
-    "verified_content_hash": "f71582a17a30e852582ced0bf60bb880b9f5ee807fd10660d55f8aa887ef5e02",
-    "status": "needs_review",
+    "verified_at": "2026-10-13T06:48:30Z",
+    "verified_content_hash": "482fd8ecea3bad6990fff6093e2fc9e9bb63754847b5d3dd6507d8c3d09173d8",
+    "status": "verified",
     "last_check": null
   },
   {
@@ -112,7 +112,7 @@
         "landslide_large_scale"
       ]
     },
-    "claim_en": "Auckland Council says its landslide susceptibility ratings are not a measure of risk on individual properties and do not predict if a landslide will happen.",
+    "claim_en": "Auckland Council says its landslide susceptibility ratings are not a measure of risk on individual properties and do not predict if a landslide might happen.",
     "quote": "The susceptibility ratings are not a measure of landslide risk on individual properties.",
     "source_id": "src_akl_landslide_maps",
     "source_url": "https://ourauckland.aucklandcouncil.govt.nz/news/2026/08/understanding-auckland-s-regional-landslide-susceptibility-maps/",
@@ -121,9 +121,29 @@
     "licence": "Copyright Auckland Council; no open licence found",
     "next_step_en": "Check the council property file for geotechnical reports, or ask a geotechnical engineer for site-specific advice.",
     "verified_by": "Ting Wang",
-    "verified_at": "2026-10-04T10:07:26Z",
-    "verified_content_hash": "073248888dfed0a9863e4d66311c166cfa91c1437602caa38037e72dfe547d95",
-    "status": "needs_review",
+    "verified_at": "2026-10-13T06:48:30Z",
+    "verified_content_hash": "eecd98535152880cd24b41ee4cc32704952cd6979ac4032eead548754b51e5b2",
+    "status": "verified",
+    "last_check": null
+  },
+  {
+    "id": "kb_lim_may_include",
+    "topic": "hazard",
+    "applies_when": {
+      "always": true
+    },
+    "claim_en": "Auckland Council says a LIM report may include information on natural hazards such as erosion, subsidence or slippage, and flooding of any type.",
+    "quote": "information on natural hazards such as erosion, subsidence or slippage, flooding of any type",
+    "source_id": "src_akl_lim",
+    "source_url": "https://www.aucklandcouncil.govt.nz/en/buying-property/order-property-report/about-property-files-and-lim-reports.html",
+    "source_title": "About property files and Land Information Memorandum (LIM) reports",
+    "source_type": "official",
+    "licence": "Copyright Auckland Council; no open licence found",
+    "next_step_en": "Ask your lawyer to obtain and review the LIM report and other property documents from the council.",
+    "verified_by": "Ting Wang",
+    "verified_at": "2026-10-13T06:48:30Z",
+    "verified_content_hash": "bdc94334032528d4ebde88f3042692ae656dab7293bd1d1bb59e895a7e7e7de1",
+    "status": "verified",
     "last_check": null
   }
 ]
