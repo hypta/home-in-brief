@@ -4,3 +4,26 @@ __pycache__/
 out/
 .pytest_cache/
 .env
+
+# Environment files and credentials (only the empty template is tracked)
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*credentials*.json
+*service-account*.json
+gha-creds-*.json
+
+# Tools and OS files
+.claude/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+node_modules/
+*.tfstate
+*.tfstate.*
+.DS_Store
+.idea/
+.vscode/
