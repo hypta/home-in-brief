@@ -11,8 +11,8 @@ from zoneinfo import ZoneInfo
 from b_common.report_schemas import Report, ReportRequest, Sentence
 
 from . import assemble, gemini, kb, mock, obs, prompt, protection, rewrite
-from .validator import (MAX_WORDS, PREFIX, WEB_PREFIX, Rewrite, build_evidence, check_rewrite, check_sentence, relies_on_user_input, with_user_year,
-                        validate, with_prefix)
+from .validator import (MAX_WORDS, PREFIX, WEB_PREFIX, Rewrite, build_evidence, check_rewrite, check_sentence,
+                        relies_on_user_input, validate, with_prefix, with_user_year)
 
 log = logging.getLogger("report-api")
 NZ = ZoneInfo("Pacific/Auckland")
@@ -204,8 +204,7 @@ def _gemini_summary(req, ev, kb_items, titles, generate, budget: gemini.Budget, 
 
 def _draft_check(fs, ev):
     """check_sentence for a fact's draft, with the year the user typed allowed for that fact (validator.with_user_year)."""
-    by_text = {f.draft(): f for f in fs}
-    return lambda s: check_sentence(s, with_user_year(ev, [by_text[s.text]] if s.text in by_text else []), MAX_WORDS)
+    return lambda s: check_sentence(s, with_user_year(ev, fs, s.text), MAX_WORDS)
 
 
 def debug_dict(d: Debug) -> dict[str, Any]:

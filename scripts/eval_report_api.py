@@ -172,9 +172,9 @@ def hard_checks(req: ReportRequest, rep: dict, kb_items: dict, ev) -> list[str]:
     fixed = set(assemble.NO_LOAN_SENTENCES.values()) | {assemble.MOCK_SENTENCE}
     summary = rep.get("summary", [])
     model_sentences = [s for s in summary if s["text"] not in fixed]
-    ev_years = V.with_user_year(ev, prompt.fact_list(req, ev, kb_items))  # the year the user typed, in its own fact only
+    year_facts = prompt.fact_list(req, ev, kb_items)
     for s in model_sentences:
-        fails = V.check_sentence(Sentence(**s), ev_years, V.MAX_WORDS if rep.get("model") != "mock" else None)
+        fails = V.check_sentence(Sentence(**s), V.with_user_year(ev, year_facts, s["text"]), V.MAX_WORDS if rep.get("model") != "mock" else None)
         if fails:
             bad.append(f"summary sentence fails {fails}: {s['text'][:80]}")
         if V.relies_on_user_input(Sentence(**s), ev) and not s["text"].startswith(V.PREFIX):

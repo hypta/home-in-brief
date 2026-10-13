@@ -48,7 +48,7 @@ def test_must_facts_are_the_summary_drafts_and_at_most_five(case):
     assert 1 <= len(musts) <= prompt.MAX_TOPICS
     for f in musts:
         assert V.check_sentence(Sentence(text=prompt.draft_text(f), source_ids=f.source_ids),
-                                V.with_user_year(ev, [f])) == []
+                                V.with_user_year(ev, [f], prompt.draft_text(f))) == []
 
 
 def test_lending_and_user_input_meaning_facts_have_no_computed_values():

@@ -77,10 +77,10 @@ def test_user_year_relation():
 def test_every_draft_passes_the_validator_as_written(case):
     """Gemini copies the drafts, so each draft must already be a valid sentence (with room to spare)."""
     req, data, ev = evidence(case)
-    ev = V.with_user_year(ev, prompt.fact_list(req, ev, data.items))  # the year the user typed, in its own fact
+    fs = prompt.fact_list(req, ev, data.items)
     for t in prompt.topics(req, ev, data.items):
         s = Sentence(text=t["say"], source_ids=t["cite"])
-        assert V.check_sentence(s, ev) == [], t
+        assert V.check_sentence(s, V.with_user_year(ev, fs, t["say"])) == [], t  # the year only in its own sentence
         assert prompt.words(t["say"]) <= V.MAX_WORDS - 1, t
 
 
@@ -185,3 +185,17 @@ def test_title_stays_a_must_mention_with_unchecked_flood_layer_and_no_debts_ente
         assert by_topic["title"].must, case
         assert sum(f.must for f in fs) == prompt.MAX_TOPICS
         assert not by_topic["lending_debts"].must  # the lower-priority note became an optional extra
+
+
+@pytest.mark.parametrize("case", ["case5", "edge4"])
+def test_eval_hard_checks_allow_the_year_only_in_the_code_written_sentence(case):
+    ev_mod = _eval_module()
+    req, data, ev = evidence(case)
+    good = [{"text": prompt.draft_text(f), "source_ids": f.source_ids} for f in prompt.fact_list(req, ev, data.items)]
+    year = next(s for s in good if "you gave," in s["text"])
+    rep = {"summary": [year], "next_steps": [], "model": "mock"}
+    assert not [b for b in ev_mod.hard_checks(req, rep, data.items, ev) if "fails" in b]
+    for fake in ("The council year is 1998.", "Based on what you told us, the council-verified year you gave, 1998, is right.",
+                 "The year you gave, 1998, is shown in the council record."):
+        rep = {"summary": [year, {"text": fake, "source_ids": year["source_ids"]}], "next_steps": [], "model": "mock"}
+        assert [b for b in ev_mod.hard_checks(req, rep, data.items, ev) if "fails" in b and fake[:20] in b], fake

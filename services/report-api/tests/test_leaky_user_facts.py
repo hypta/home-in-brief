@@ -56,7 +56,7 @@ def test_user_monolithic_1998_is_a_must_with_prefix_and_land_use_still_in_the_su
     assert "the year you gave, 1998," in text  # the user's own year, labelled
     for f in musts:
         assert V.check_sentence(Sentence(text=prompt.draft_text(f), source_ids=f.source_ids),
-                                V.with_user_year(ev, [f])) == [], f.text
+                                V.with_user_year(ev, [f], prompt.draft_text(f))) == [], f.text
 
 
 def test_user_year_alone_in_the_leaky_era_is_a_must_and_names_the_guidance():
@@ -93,9 +93,9 @@ def test_a_rewrite_that_swaps_the_year_or_drops_you_gave_is_blocked():
     assert V.MISSING_QUALIFIER in check(ok.replace("you gave", "found"))                  # label dropped
     assert V.SLOT_CONTEXT in check(ok.replace("The year you gave, {{", "The year you gave is {{"))
     # the year is allowed for this slot only: the same number in another sentence is still refused
-    other = V.check_sentence(Sentence(text="The council valuation is 1998.", source_ids=["ac_valuation"]),
-                             V.with_user_year(ev, [f]))
-    assert "number_not_in_cited_sources" in other
+    for text, sid in (("The council valuation is 1998.", "ac_valuation"), ("The council year is 1998.", "ac_property_page")):
+        other = V.check_sentence(Sentence(text=text, source_ids=[sid]), V.with_user_year(ev, [f], text))
+        assert "number_not_in_cited_sources" in other, text
 
 
 def test_user_facts_that_trigger_nothing_stay_optional():
@@ -224,3 +224,27 @@ def test_comma_as_cause_is_blocked_but_as_you_entered_is_not():
                                    "debts were entered so the DTI assumes none.", "fact_ids": [lending.id]}, fs, ev)
     assert V.ADDED_CAUSE in bad.fails
     assert V._CAUSE_RE.findall("the cap for multiple buyers, as you entered") == []
+
+
+@pytest.mark.parametrize("promote", ["The council-verified year you gave, {{F%s.user_year}}, falls in a period covered by "
+                                     "Settled.govt.nz's guidance on leaky buildings; council records could not confirm it.",
+                                     "The verified year you gave, {{F%s.user_year}}, falls in a period covered by "
+                                     "Settled.govt.nz's guidance on leaky buildings; council records could not confirm it.",
+                                     "The year you gave, {{F%s.user_year}}, confirmed by the council, falls in a period covered "
+                                     "by Settled.govt.nz's guidance on leaky buildings; council records could not confirm it."])
+def test_user_year_sentence_is_code_owned_no_promotion_to_verified(promote, monkeypatch):
+    """A fake Gemini that adds a verifying word around the year: the summary shows the code's own sentence."""
+    from app import gemini
+    b = council_off({"year_built": 1998}, ["kb_leaky_build_era"])
+    req, data, ev = setup(b)
+    fs = prompt.fact_list(req, ev, data.items)
+    f = next(f for f in fs if f.user and f.must)
+    answer = [{"text": promote % f.id[1:], "fact_ids": [f.id]}]
+    monkeypatch.setattr(gemini, "gemini_generate", lambda p, timeout_s: json.dumps({"summary": answer}))
+    rep = client.post("/v1/report", json=b).json()
+    texts = [s["text"] for s in rep["summary"]]
+    assert any("the year you gave, 1998, falls in a period" in t for t in texts), texts
+    assert not any(w in t.lower() for t in texts for w in ("verified", "confirmed by"))
+    # the checker itself refuses the promoted wording
+    r = V.check_rewrite({"text": promote % f.id[1:], "fact_ids": [f.id]}, fs, ev)
+    assert r.sentence is None and V.USER_YEAR_REWRITTEN in r.fails

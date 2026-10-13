@@ -595,6 +595,8 @@ def facts_for_prompt(fs: list[Fact]) -> list[dict]:
         if f.slots:
             row["placeholders"] = {"{{" + f.id + "." + s.name + "}}": {"is": s.what, "words": len(s.render().split())}
                                    for s in f.slots.values()}
+        if any(sl.name == "user_year" for sl in f.slots.values()):
+            row["copy_exactly"] = "the sentence is written by code; use fact_ids for it alone and copy its text word for word"
         keep = list(dict.fromkeys(qualifiers_in(f.text) + f.keep)) + terms_in(f.text) + publishers_in(f.text)
         if keep:
             row["keep"] = keep

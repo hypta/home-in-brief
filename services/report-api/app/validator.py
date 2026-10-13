@@ -395,14 +395,28 @@ def relies_on_user_input(s: Sentence, ev: Evidence) -> bool:
     return bool(_USER_FACT_RE.search(body) and _USER_TOPIC_RE.search(body))
 
 
-def with_user_year(ev: Evidence, facts: Any) -> Evidence:
-    """ev with the year the user typed allowed for these summary facts: the value of each fact's `user_year` slot
-    (a year or a decade), under that fact's source ids only. Any other number is still checked as before."""
+def _same_sentence(a: str, b: str) -> bool:
+    norm = lambda t: re.sub(r"\s+", " ", strip_prefix(t)).strip().lower()  # noqa: E731
+    return norm(a) == norm(b)
+
+
+def user_year_facts(facts: Any) -> list:
+    """Summary facts that state the year the user typed (they have a `user_year` slot)."""
+    return [f for f in facts if any(sl.name == "user_year" and sl.kind in ("year", "decade")
+                                    for sl in f.slots.values())]
+
+
+def with_user_year(ev: Evidence, facts: Any, text: str) -> Evidence:
+    """ev with the year the user typed allowed for exactly one sentence: `text` must be the code-written draft of one of
+    `facts` (the prefix and the case of the first letter aside); the allowance is the value of its `user_year` slot
+    under that fact's source ids. Any other sentence, even one citing the same source, gets ev unchanged."""
     from dataclasses import replace
     allowed = None
-    for f in facts:
+    for f in user_year_facts(facts):
+        if not _same_sentence(text, f.draft()):
+            continue
         for sl in f.slots.values():
-            d = to_decimal(sl.value) if sl.name == "user_year" and sl.kind in ("year", "decade") else None
+            d = to_decimal(sl.value) if sl.name == "user_year" else None
             if d is not None:
                 allowed = allowed or {k: list(v) for k, v in ev.allowed.items()}
                 for sid in f.source_ids:
@@ -433,6 +447,7 @@ NEGATION_CHANGED = "negation_changed"
 MISSING_ATTRIBUTION = "missing_attribution"
 MIXED_USER_FACTS = "mixed_user_facts"
 ADDED_ATTRIBUTION = "added_attribution"
+USER_YEAR_REWRITTEN = "user_year_rewritten"
 ADDED_CAUSE = "added_cause"
 
 # Semantic guard (simple): a phrase of this list in a fact's text must also be in the rewrite. CJK rewrites
@@ -554,6 +569,10 @@ def check_rewrite(s: Any, facts: Any, ev: Evidence, max_words: Optional[int] = M
     if len(ids) < len(named):
         fails.append(UNKNOWN_FACT_ID)
     cited = [fmap[i] for i in ids]
+    # (summary only; follow-up answers have their own final check) the sentence with the user's own year is written by code: a rewrite may only repeat it (no added wording such
+    # as "council-verified", no merge with another fact)
+    if final is None and user_year_facts(cited) and not (len(cited) == 1 and _same_sentence(text, cited[0].text)):
+        fails.append(USER_YEAR_REWRITTEN)
     cjk = bool(_CJK_RE.search(text))
 
     marks = list(PLACEHOLDER_RE.finditer(text))
@@ -657,6 +676,6 @@ def check_rewrite(s: Any, facts: Any, ev: Evidence, max_words: Optional[int] = M
     filled = fill(text, {f.id: f for f in cited})
     sids = list(dict.fromkeys(i for f in cited for i in f.source_ids))
     sentence = Sentence(text=filled, source_ids=sids)
-    fails += final(sentence) if final else check_sentence(sentence, with_user_year(ev, cited), max_words)
+    fails += final(sentence) if final else check_sentence(sentence, with_user_year(ev, cited, filled), max_words)
     fails = list(dict.fromkeys(fails))
     return Rewrite(None if fails else sentence, ids, fails, filled)
