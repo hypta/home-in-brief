@@ -138,6 +138,7 @@ def test_question_about_a_missing_year_searches_extracts_and_reruns_rules(monkey
     assert out["answer"][0]["text"] == ("Based on a web search (not checked by this service), the year built found "
                                         "online is 1987, a period Settled.govt.nz's guidance on leaky buildings "
                                         "covers; council records could not confirm it.")
+    assert out["answer"][0]["web"] is True  # the page does not mark it as checked
     assert "A web search just found the year built" in gen.calls["answer"][0]
     # the fixed "no licensed source for sale prices" sentence is not shown next to the search answer
     assert not any("sale" in s["text"] for s in out["answer"])
@@ -212,6 +213,25 @@ def test_button_year_built(monkeypatch, search, rules):
     assert out["user_supplied"] == {"year_built": 1972} and out["user_supplied_source"] == {"year_built": "web_search"}
     assert out["web"]["fields"] == ["year_built"] and rules[0]["chat_supplied"] == {"year_built": 1972}
     assert "TASK: web search" in search.prompts[0] and "the year (or decade) this building was built" in search.prompts[0]
+
+
+def test_button_year_that_selects_no_note_is_not_said_again(monkeypatch, search):
+    # 2019 selects no build-era note: the search answer is the whole reply, with no model call
+    monkeypatch.setattr(followup, "call_rules", lambda pc, ui, t: copy.deepcopy(body("case1")["rules_output"]))
+    monkeypatch.setattr(followup, "gemini_json", lambda *a, **k: pytest.fail("no model call"))
+    search.reply = web("Property Value states that the building was built in 2019.")
+    out = post("case1", search_field="year_built").json()
+    assert out["answer"] == [] and out["web"]["extracted"] == {"year_built": 2019}
+    assert out["user_supplied"] == {"year_built": 2019} and out["user_supplied_source"] == {"year_built": "web_search"}
+
+
+def test_button_year_that_selects_a_note_keeps_its_sentence(monkeypatch, search, rules):
+    search.reply = web("OneRoof gives the year built as 1995.")
+    year = next(f for f in web_facts(1995) if f.topic == "program:year_built")
+    monkeypatch.setattr(followup, "gemini_json",
+                        fake(None, [{"answer": [{"text": "It is that year.", "fact_ids": [year.id]}], "links": []}]))
+    out = post("case1", search_field="year_built").json()
+    assert any("leaky buildings" in s["text"] for s in out["answer"])
 
 
 def test_button_never_replaces_a_value_the_user_gave(monkeypatch, search):

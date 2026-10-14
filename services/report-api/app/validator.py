@@ -428,7 +428,7 @@ def with_prefix(s: Sentence, prefix: str = PREFIX) -> Sentence:
     body = strip_prefix(s.text).strip()
     if len(body) > 1 and not body[1].isupper():  # keep acronyms such as "LINZ"
         body = body[:1].lower() + body[1:]
-    return Sentence(text=prefix + body, source_ids=s.source_ids)
+    return Sentence(text=prefix + body, source_ids=s.source_ids, web=prefix == WEB_PREFIX)
 
 
 # ---- rewrite checks (fact list + placeholders) ----------------------------------------------------

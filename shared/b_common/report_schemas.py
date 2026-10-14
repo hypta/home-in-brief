@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_serializer
 
 REPORT_SCHEMA_VERSION = "0.1"
 
@@ -144,6 +144,14 @@ class ReportRequest(BaseModel):
 class Sentence(BaseModel):
     text: str
     source_ids: list[str] = Field(default_factory=list)
+    web: bool = False  # it states a value a web search found (the web prefix): checked as worded, the value is not
+
+    @model_serializer(mode="wrap")
+    def _web_only_when_true(self, handler):
+        out = handler(self)
+        if not self.web:
+            out.pop("web", None)
+        return out
 
 
 class NextStep(BaseModel):

@@ -83,7 +83,7 @@ MISSING = ("not_found", "unavailable")
 # user_supplied_source). "web_search": extracted by code from a Google Search answer;
 # facts then say "found online" instead of "you gave", and the prefix names the web search.
 USER, WEB_SEARCH = "user", "web_search"
-_TOPIC_FIELD = {"build_era": "year_built", "cladding": "cladding"}
+TOPIC_FIELD = {"build_era": "year_built", "cladding": "cladding"}
 
 
 def chat_sources(req: ReportRequest) -> dict[str, str]:
@@ -101,7 +101,7 @@ def from_web(source_ids: list[str], req: ReportRequest, ev: Evidence, kb_items: 
     src = chat_sources(req)
     if WEB_SEARCH not in src.values():
         return False
-    keys = set(fields) | ({_TOPIC_FIELD.get((kb_items.get(i) or {}).get("topic")) for i in source_ids
+    keys = set(fields) | ({TOPIC_FIELD.get((kb_items.get(i) or {}).get("topic")) for i in source_ids
                            if i in ev.user_kb} - {None})
     keys = keys or {k for k in src if k in ("year_built", "cladding")}
     return any(src.get(k) == WEB_SEARCH for k in keys)
@@ -702,8 +702,8 @@ def followup_facts(req: ReportRequest, ev: Evidence, kb_items: dict[str, dict],
         claim = (kb_items.get(i) or {}).get("claim_en")
         if i in kb_items and claim and i in ev.selected_kb:
             t = _Topic(90, P_EXTRA, "kb:" + str(kb_items[i].get("topic") or ""), user=i in ev.user_kb)
-            if i in ev.user_kb and _TOPIC_FIELD.get(kb_items[i].get("topic")):
-                t.fields.add(_TOPIC_FIELD[kb_items[i]["topic"]])
+            if i in ev.user_kb and TOPIC_FIELD.get(kb_items[i].get("topic")):
+                t.fields.add(TOPIC_FIELD[kb_items[i]["topic"]])
             # a short bracketed form is how a claim explains a name ("LVR (loan-to-value ratio)"): an answer keeps it
             # as written, with the abbreviation before it
             pairs = [m.groups() for m in re.finditer(r"(?:\b([A-Z]{2,6}) )?\(([^(),\d]{2,40})\)", claim)]

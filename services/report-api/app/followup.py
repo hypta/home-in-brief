@@ -566,13 +566,13 @@ _ANY_PREFIX = re.compile(r"^\s*(?:依你提供的資訊|依你提供的资讯|�
                          r"\s*[，,、]?\s*")
 
 
-def add_prefix(s: Sentence, prefix: str = PREFIX_EN) -> Sentence:
+def add_prefix(s: Sentence, prefix: str = PREFIX_EN, web: bool = False) -> Sentence:
     """Code-added prefix. English: lower-case the first letter unless it starts a name ("Settled.govt.nz",
     "LINZ"). A prefix the model wrote itself is removed first."""
     body = _ANY_PREFIX.sub("", strip_prefix(s.text)).strip()
     if prefix in (PREFIX_EN, WEB_PREFIX_EN) and body and not _PROPER_START.match(body):
         body = body[:1].lower() + body[1:]
-    return Sentence(text=prefix + body, source_ids=s.source_ids)
+    return Sentence(text=prefix + body, source_ids=s.source_ids, web=web)
 
 
 # ---- user value vs. property value: both are shown ------------------------------------------------
@@ -1311,10 +1311,10 @@ def fixed_answer(parts: list[Part], language: str, ev: Evidence, debug: dict,
                 s = Sentence(text=zh or "", source_ids=p.sentence.source_ids)
                 if not zh or check_answer(s, ev, out_lang, p.base):
                     continue
-            out.append(add_prefix(s, prefix[web_part(p)]) if p.user else s)
+            out.append(add_prefix(s, prefix[web_part(p)], web_part(p)) if p.user else s)
     else:
         english_prefix = {False: PREFIX_EN, True: WEB_PREFIX_EN}
-        out = [add_prefix(p.sentence, english_prefix[web_part(p)]) if p.user else p.sentence
+        out = [add_prefix(p.sentence, english_prefix[web_part(p)], web_part(p)) if p.user else p.sentence
                for p in parts if not p.native]
     lead = (FALLBACK_LEAD if out else FALLBACK_NONE)[out_lang]
     debug["fallback"] = {"language": out_lang, "left_out": len(parts) - len(out)}
@@ -1339,7 +1339,7 @@ def finish(parts: list[Part], language: str, ev: Evidence,
     language is in debug["fallback"]."""
     english_prefix = {False: PREFIX_EN, True: WEB_PREFIX_EN}
     if is_english(language):
-        return [add_prefix(p.sentence, english_prefix[web_part(p)]) if p.user else p.sentence for p in parts]
+        return [add_prefix(p.sentence, english_prefix[web_part(p)], web_part(p)) if p.user else p.sentence for p in parts]
     english = [p for p in parts if not p.native]
     kinds = [] if is_zh(language) else sorted({web_part(p) for p in parts if p.user})
     texts = [strip_prefix(p.sentence.text) for p in english] + [english_prefix[k].strip().rstrip(",") for k in kinds]
@@ -1395,7 +1395,7 @@ def finish(parts: list[Part], language: str, ev: Evidence,
             s = Sentence(text=tidy(s.text, language), source_ids=s.source_ids)
         if p.user:
             k = web_part(p)
-            s = add_prefix(s, prefix[k]) if (in_language and prefix.get(k)) else add_prefix(s, english_prefix[k])
+            s = add_prefix(s, prefix[k], k) if (in_language and prefix.get(k)) else add_prefix(s, english_prefix[k], k)
         out.append(s)
     return out
 
@@ -1861,6 +1861,11 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
         ev = build_evidence(eff, data.items, data.sources.keys(), source_urls=data.sources.urls)
         titles = {s.id: s.title or "" for s in eff.sources()} | data.sources
         ev.latin_terms = latin_terms(eff, [])
+        # The button's search answer already states what it found; a value found online that selects no note would
+        # only be said again under it (and look checked): the search answer then stands alone.
+        noted = {facts_prompt.TOPIC_FIELD.get((data.items.get(i) or {}).get("topic")) for i in ev.user_kb}
+        if after_search and button and used and all(sources.get(k) == WEB_SEARCH and k not in noted for k in used):
+            raise ReportError(502, "validation_failed", "The value found online selects no note.")
         # A value found online is stated like a value entered earlier: by its program fact ("The year built found
         # online is 1987; ..."), not by the user_said fact of a value stated in this very question.
         said = {k: v for k, v in used.items() if sources.get(k) != WEB_SEARCH}
@@ -2278,7 +2283,7 @@ def as_written(parts: list[Part], language: str, ev: Evidence,
         if p.user:
             k = web_part(p)
             s = add_prefix(s, (WEB_PREFIXES if k else PREFIXES)[out_lang] if native and out_lang != "en"
-                           else (WEB_PREFIX_EN if k else PREFIX_EN))
+                           else (WEB_PREFIX_EN if k else PREFIX_EN), k)
         out.append(s)
     return out, out_lang
 

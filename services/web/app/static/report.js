@@ -177,7 +177,8 @@ function facts({ctx, inputs}) {
   const told = inputs?.chat_supplied || {};  // the year built and cladding the report was calculated with
   // a value the records have goes to `to`; one they lack is listed with the reason, and where to look is said once for all of them.
   // `search`: the field report-api can search the web for, offered while the records and the details have no value for it
-  const add = (to, name, f, text, search) => (text ? to : lacking).push(row(name, `${text || missing(f)} ${cite(f.source_id)}${
+  const using = field => told[field] ? ` Using ${esc(field === "cladding" ? words(told[field]) : told[field])}, ${how(inputs, field)}.` : "";
+  const add = (to, name, f, text, search) => (text ? to : lacking).push(row(name, `${text || missing(f) + using(search)} ${cite(f.source_id)}${
     !text && search && f.status !== "found" && !told[search] ? `<button type="button" class="search" data-search="${search}">Search the web</button>` : ""}`));
   const look = `<p class="muted">Look for these on the listing${listings && `, on ${listings}`}${council ? `, or in the ${link(council.url, "council property search")}` : ""}.${
     (!p.year_built.decade_range && !told.year_built) || (p.cladding.status !== "found" && !told.cladding) ? ` A year built or a cladding you find can be added ${IN_DETAILS}.` : ""}</p>`;
@@ -248,6 +249,11 @@ function loan(state) {
   return out.join("") + warnings(state, "loan") + notes(state, "loan", "Lending notes");
 }
 
+// A year built the records lack, given or found online, that selects no build-era note: said, so that adding it is not
+// taken for having done nothing.
+const eraless = ({ctx, rules, kb, inputs}) => { const y = inputs?.chat_supplied?.year_built;
+  return rules && kb && !ctx.property.year_built.decade_range && YEAR.test(y) && !kb.some(k => k.topic === "build_era") ? y : null; };
+const ERALESS = y => `No build-era note applies to the year built, ${y}.`;
 function buildNotes(state) {
   const {rules: r} = state;
   if (!r) return state.rulesError ? `<p class="problem">The notes are unavailable until the repayment figures can be calculated.</p>` : `<p class="muted">Loading…</p>`;
@@ -255,6 +261,7 @@ function buildNotes(state) {
   return (r.kb_includes_draft ? `<p class="problem">Development mode: draft notes are shown. They have not yet been checked against their sources.</p>` : "")
     + (state.kb ? "" : `<p class="problem">The background notes could not be loaded.</p>`)
     + warnings(state, "notes")
+    + (eraless(state) ? `<p class="muted">${esc(ERALESS(eraless(state)))}</p>` : "")
     + (notes(state, "notes", "Notes for this property") || (!state.kb || r.kb_empty_reason === "kb_unavailable" ? ""
        : `<p class="muted">${EMPTY[r.kb_empty_reason] || "No build-era or title notes apply to this property."}</p>`));
 }
@@ -266,9 +273,10 @@ function cardsOf(s, items) {
   return s.source_ids.filter(id => !quoted.has(id)).map(id => items[id] ? kbCard(items[id]) : card(id));
 }
 // A sentence that passed the check against its sources is highlighted. A fixed sentence from the program cites none.
+// One that states a value a web search found (`web`) is not: its wording was checked, the value was not.
 function checked(s, items, after) {
-  const cards = cardsOf(s, items), n = cards.length;
-  return `<p class="s">${n ? `<span class="hl">${esc(s.text)}</span>` : esc(s.text)}</p>${control(cards, `Checked against ${count(n, "source")}`, after)}`;
+  const cards = cardsOf(s, items), n = cards.length, hl = n && !s.web;
+  return `<p class="s">${hl ? `<span class="hl">${esc(s.text)}</span>` : esc(s.text)}</p>${control(cards, s.web ? `Cites ${count(n, "source")}` : `Checked against ${count(n, "source")}`, after)}`;
 }
 // The section that holds the records behind a sentence, named by its first source: a note's topic, a hazard layer, a property record, or else the lending sources.
 const SECTION = {hazards: "the mapped hazards", facts: "this home's records", loan: "the repayment figures", notes: "the build era and title notes"};
@@ -458,7 +466,8 @@ function readout({rules: r, inputs: i}) {
 }
 
 // One line under each section title, from values the section shows with their sources.
-function digests({ctx, rules: r, rulesError, inputs}) {
+function digests(state) {
+  const {ctx, rules: r, rulesError, inputs} = state;
   const p = ctx.property, flood = ctx.hazards.filter(h => h.priority === "primary"), mapped = floodMapped(ctx).map(h => layerName(h.layer));
   const missed = ctx.hazards.filter(unchecked).length, tail = missed ? ` ${count(missed, "layer")} could not be checked.` : "";
   const scenario = id => r?.scenarios.find(s => s.id === id), bankLoan = scenario("bank_standard"), fhl = scenario("first_home_loan"), own = scenario("user_rate");
@@ -473,7 +482,8 @@ function digests({ctx, rules: r, rulesError, inputs}) {
       : [bankLoan && `${span(bankLoan.monthly_range, money)} a month at bank rates.`, fhl && `${span(fhl.monthly_range, money)} a month with a First Home Loan.`,
         own && `${money(own.monthly)} a month at your rate.`].filter(Boolean).join(" ") || "No repayments are shown yet.",
     notes: [title, decade ? `Built ${decade[0] ? `${decade[0]}-${decade[1]}` : `before ${decade[1] + 1}`}.`
-      : told ? `Built ${told}, ${how(inputs, "year_built")}.` : "The year built is not known. Add it in your details to see the notes for its era."].filter(Boolean).join(" "),
+      : told ? `Built ${told}, ${how(inputs, "year_built")}.${eraless(state) ? " " + ERALESS(told) : ""}`
+      : "The year built is not known. Add it in your details to see whether a build-era note applies."].filter(Boolean).join(" "),
   };
 }
 
@@ -485,7 +495,8 @@ export function render(state) {
   try { for (const [id, text] of Object.entries(digests(state))) $("d-" + id).textContent = text; } catch (e) { console.error(e); }
   $("matched").textContent = ctx.address.matched || "Address not found";
   $("meta").textContent = ctx.address.status !== "found" ? gone(ctx.address)
-    : `Checked against ${ctx.parcel.spatial_method === "parcel" ? "the parcel boundary" : "the address point only, because no parcel was matched"}, ${ctx.generated_at.slice(0, 16).replace("T", " ")} New Zealand time.`;
+    // when the records were read, in New Zealand time wherever the page is opened; how the hazard layers were checked is said in their section
+    : `Records read ${new Date(ctx.generated_at).toLocaleString("en-NZ", {timeZone: "Pacific/Auckland", day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit"})} (New Zealand time).`;
   draw("hazards", hazards, state); draw("facts", facts, state); draw("loan", loan, state); draw("notes", buildNotes, state);
   draw("links", () => ctx.links.map(l => `<li>${linkItem(l)}</li>`).join(""));
   drawSummary(state); renderThread(state);
