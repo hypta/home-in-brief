@@ -490,6 +490,41 @@ Operations:
   `disabled` as a warning (the allowance may be used up for the day), any other reason as a failure (section 6,
   step 4).
 
+## 8e. Council page relay (property-api, optional)
+
+Auckland Council answers 406 to Cloud Run (Australia), so without this the four fields read from the council
+property page are `unavailable`. `relay/council-relay/` runs on a Raspberry Pi in New Zealand behind Tailscale Funnel
+(its README has the Pi steps) and property-api fetches the page through it. Do the Pi steps first, then:
+
+```bash
+# 1. The same token as the Pi's .env (RELAY_TOKEN), read from there, never typed or printed
+gcloud secrets create COUNCIL_RELAY_TOKEN --replication-policy=automatic
+ssh <pi> "grep '^RELAY_TOKEN=' <path>/relay/council-relay/.env | cut -d= -f2- | tr -d '\n'" \
+  | gcloud secrets versions add COUNCIL_RELAY_TOKEN --data-file=-
+# 2. Let the runtime service account read it
+gcloud secrets add-iam-policy-binding COUNCIL_RELAY_TOKEN \
+  --member=serviceAccount:$RUNTIME_SA --role=roles/secretmanager.secretAccessor
+```
+
+3. Only after the secret exists, change the property-api entry in `.github/deploy/targets.json` (adding the secret
+   earlier makes the deploy fail):
+
+```json
+"env": {"COUNCIL_RELAY_URL": "https://<device>.<tailnet>.ts.net"},
+"secrets": {"LINZ_API_KEY": "LINZ_API_KEY:latest", "COUNCIL_RELAY_TOKEN": "COUNCIL_RELAY_TOKEN:latest"},
+```
+
+4. Deploy (push to `main`, or the manual deploy in section 7), then check with a property that has a council page:
+
+```bash
+curl -s -H "Authorization: Bearer $TOKEN" "$PROPERTY_API_URL/v1/property-context?address_id=1132249" \
+  | jq '.property | {floor_area_m2, property_category}'    # status "found" with a value, not "unavailable"
+```
+
+If both stay `unavailable`: `docker compose logs` on the Pi shows whether requests arrive (401 token mismatch, 429,
+502 council). `COUNCIL_PAGE=off` still switches the page off entirely, relay or not. The relay settings are optional;
+with them unset property-api behaves as before.
+
 ## 9. Cloud Run jobs
 
 Deployed (created or updated) by the workflow, never executed by it:

@@ -215,7 +215,8 @@ section 11).
 
 - **The council property page does not always answer.** The build decade, floor area, building site coverage and
   local board come from it; when it gives no answer they are `unavailable`, the page says so, and the user can enter
-  the year built and cladding. Cladding and last sale have no free licensed source and are always `unavailable` from
+  the year built and cladding. The page is fetched through a relay on a Raspberry Pi in New Zealand (the council
+  refuses cloud hosts outside New Zealand; `relay/council-relay/`); when the relay is down, user input is the fallback. Cladding and last sale have no free licensed source and are always `unavailable` from
   property-api.
 - Answers from Google Search in follow-ups, and a year built or cladding filled in from one, are not checked against
   any record; the page marks them.

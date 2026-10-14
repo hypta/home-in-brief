@@ -37,3 +37,20 @@ def request(method: str, url: str, params: Optional[dict] = None, *, as_json: bo
     if as_json and isinstance(body, dict) and "error" in body:  # ArcGIS reports errors with HTTP 200
         raise RuntimeError(f"upstream error: {body['error']}")
     return body
+
+
+RELAY_TIMEOUT = 6  # seconds; web gives the whole request 30
+
+
+def relay_page(base_url: str, key: str, token: str) -> str:
+    """The council property page for a rates key, fetched through the New Zealand relay (relay/council-relay).
+
+    Raises on a timeout, on any status but 200 (the relay answers 429 when it is busy, 502 when the council fails)
+    and on a redirect. The token only travels in the header, so it is never in an exception message."""
+    r = requests.get(base_url.rstrip("/") + "/v1/property-page", params={"key": key},
+                     headers={"X-Relay-Token": token, "Accept": "text/html"}, timeout=RELAY_TIMEOUT,
+                     allow_redirects=False)
+    r.raise_for_status()
+    if r.status_code != 200:
+        raise RuntimeError(f"relay answered {r.status_code}")
+    return _SCRIPT.sub("", r.text)

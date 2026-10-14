@@ -51,7 +51,7 @@ council property pages), kept only to replay the tests.
 | Landslide susceptibility, liquefaction, tsunami evacuation zone | Auckland Council open data (CC BY 4.0) | Same; reported as secondary layers |
 | Coastal erosion (ASCIE 2130, RCP8.5+) | Auckland Council GeoMaps server (GeoMaps terms: personal and business use; no substantial copying without consent) | Same; secondary layer |
 | Capital value, land value, value of improvements, annual rates, rateability, improvement description, land use, land area, legal description, record of title, valuation number (the capital value comes with its valuation date, the annual rates with their rating year) | Auckland Council GeoMaps "Rate Assessment" layer (GeoMaps terms: personal and business use; no substantial copying without consent) | One ArcGIS query per request (the rating year comes from the layer description, cached for the life of the process). If the query fails, the rates key comes from the open-data property service `AC_Property_Query` (see Known limits) |
-| Build decade, floor area, building site coverage, local board | Auckland Council property page | One page fetch per request, parsed. Not fetched when `COUNCIL_PAGE=off` |
+| Build decade, floor area, building site coverage, local board | Auckland Council property page | One page fetch per request, parsed. Not fetched when `COUNCIL_PAGE=off`. With `COUNCIL_RELAY_URL` and `COUNCIL_RELAY_TOKEN` both set, fetched through the New Zealand relay (`relay/council-relay/`, 6 second timeout); any relay failure leaves the fields `unavailable` |
 
 Credit lines to display are returned in `sources[].attribution`.
 

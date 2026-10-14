@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import html
 import json
+import os
 import re
 from datetime import datetime
 from functools import lru_cache
@@ -273,7 +274,11 @@ _LABELS = {"Record of title", "Legal description", "Property details", "Capital 
 
 def property_page(key: str) -> dict:
     """Parse the council property page (undocumented HTML); most fields are the GeoMaps-down fallback."""
-    page = http.request("GET", RATES_PAGE.format(key=key), as_json=False)
+    relay_url, relay_token = os.environ.get("COUNCIL_RELAY_URL", ""), os.environ.get("COUNCIL_RELAY_TOKEN", "")
+    if relay_url and relay_token:  # the council answers 406 to cloud hosts: go through the relay in New Zealand
+        page = http.relay_page(relay_url, key, relay_token)
+    else:
+        page = http.request("GET", RATES_PAGE.format(key=key), as_json=False)
     text = html.unescape(re.sub(r"<[^>]+>", "\n", page))
     lines = [ln.strip() for ln in text.split("\n") if ln.strip()]
 
