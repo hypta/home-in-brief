@@ -167,8 +167,8 @@ def test_page_failure_keeps_valuation(monkeypatch):
     monkeypatch.setattr(council, "property_page", Mock(side_effect=TimeoutError("simulated")))
     p = build(FLOODED).property
     assert p.cv.value == 340000 and p.land_use.value == "Recreational - vacant"
-    assert (p.year_built.status, p.local_board.status, p.local_board.reason) == (
-        "unavailable", "unavailable", "source_unavailable")
+    assert (p.year_built.status, p.year_built.reason) == ("unavailable", "source_unavailable")
+    assert (p.local_board.value, p.local_board.source_id) == ("Puketapapa", "ac_property")  # from GeoMaps
 
 
 def test_council_page_is_not_fetched_when_switched_off(monkeypatch):
@@ -181,6 +181,22 @@ def test_council_page_is_not_fetched_when_switched_off(monkeypatch):
     assert p.cv.value == 340000
     assert (p.year_built.status, p.year_built.reason) == ("unavailable", "source_unavailable")
     assert accessed["ac_property_page"] is None and accessed["ac_valuation"] == ctx.generated_at[:10]
+    # the local board does not need the page, which cloud hosts cannot read
+    assert (p.local_board.value, p.local_board.source_id) == ("Puketapapa", "ac_property")
+    assert accessed["ac_property"] == ctx.generated_at[:10]
+    assert next(s for s in ctx.sources if s.id == "ac_property").url.endswith(
+        "query?where=ACRATEACCOUNTKEY%3D%2712344049554%27&outFields=ACRATEACCOUNTKEY%2CBOARDNAME&returnGeometry=false&f=pjson")
+
+
+def test_local_board_falls_back_to_the_council_page(monkeypatch):
+    monkeypatch.setattr(council, "local_board", Mock(side_effect=TimeoutError("simulated")))
+    p = build(FLOODED).property
+    assert (p.local_board.value, p.local_board.source_id) == ("Puketapapa", "ac_property_page")
+
+
+def test_rate_account_key_is_never_put_into_a_where_clause_unchecked():
+    with pytest.raises(ValueError):
+        council.local_board("1' OR '1'='1")
 
 
 def test_geomaps_source_links_open_in_a_browser():

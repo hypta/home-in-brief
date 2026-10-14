@@ -114,7 +114,8 @@ def _field_text(field: str, reason: Optional[str], status: str) -> str:
 
 COUNCIL_REFUSED = "council_site_refuses_this_server"
 SOURCE_UNAVAILABLE = "source_unavailable"
-# Fields read from the council property page (property-api context.py: year_built and _PAGE_FACTS).
+# Fields read from the council property page (property-api context.py: year_built and _PAGE_FACTS), and the local
+# board, which property-api now reads from GeoMaps with the page as fallback: unreadable is worded the same.
 PAGE_FIELDS = ("year_built", "floor_area_m2", "building_site_coverage_m2", "local_board")
 PAGE_UNREADABLE_TEXT = "council property records could not be retrieved."
 

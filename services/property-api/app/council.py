@@ -23,6 +23,7 @@ GEOMAPS_VIEWER = "https://geomapspublic.aucklandcouncil.govt.nz/viewer/index.htm
 RATES_SEARCH = "https://www.aucklandcouncil.govt.nz/en/property-rates-valuations/find-property-rates-valuation.html"
 RATES_PAGE = "https://www.aucklandcouncil.govt.nz/en/property-rates-valuations/find-property-rates-valuation/{key}.html"
 RATE_ASSESSMENT = GEOMAPS + "/Landbase/MapServer/37"  # one row per rating unit
+PROPERTY = GEOMAPS + "/Landbase/MapServer/36"  # council properties, with their local board
 _ASSESSMENT_FIELDS = ("FORMATTEDADDRESS,CT,LEGAL,RATEACCOUNTKEY,VALUATIONREF,CV,LV,IV,VALUATIONDATE,RATEABILITY,"
                       "IMPROVEMENT,LANDUSEDESCRIPTION,TOTALRATESINCLCIP,AREALABEL")
 
@@ -225,6 +226,24 @@ def rate_account_key(lat: float, lng: float, number: str, road: str) -> Optional
     want = _norm(f"{number} {road}") + " "  # here the address is one line: "1A Example Road Suburb Auckland 1000"
     row = _only([r for r in rows if (_norm(r.get("FORMATTEDADDRESS") or "") + " ").startswith(want)], rows)
     return row["ACRATEACCOUNTKEY"] if row else None
+
+
+def _by_key(key: str) -> dict:
+    if not key.isdigit():  # the key goes into a where clause
+        raise ValueError("rate account key is not a number")
+    return {"where": f"ACRATEACCOUNTKEY='{key}'", "outFields": "ACRATEACCOUNTKEY,BOARDNAME", "returnGeometry": "false"}
+
+
+def local_board(key: str) -> Optional[str]:
+    """The local board of the rating unit; the council property page has it too, but not for cloud hosts."""
+    rows = [f["attributes"] for f in http.request("GET", PROPERTY + "/query", {**_by_key(key), "f": "json"})["features"]]
+    boards = {r.get("BOARDNAME") for r in rows} - {None}
+    return boards.pop() if len(boards) == 1 else None
+
+
+def property_url(key: str) -> str:
+    """local_board's query as a link a browser opens (pjson, as for the rate assessment)."""
+    return f"{PROPERTY}/query?{urlencode({**_by_key(key), 'f': 'pjson'})}"
 
 
 def _money(s: str) -> Optional[float]:

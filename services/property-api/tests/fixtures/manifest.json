@@ -495,6 +495,18 @@
   },
   "url": "https://services1.arcgis.com/n4yPwebTjJCmXB6W/arcgis/rest/services/Liquefaction_Vulnerability_Basic_Assessment/FeatureServer/0/query"
  },
+ "b726a46ada91": {
+  "captured_at": "2026-10-14",
+  "file": "b726a46ada91.json",
+  "method": "GET",
+  "params": {
+   "f": "json",
+   "outFields": "ACRATEACCOUNTKEY,BOARDNAME",
+   "returnGeometry": "false",
+   "where": "ACRATEACCOUNTKEY='12344049554'"
+  },
+  "url": "https://mapspublic.aucklandcouncil.govt.nz/arcgis/rest/services/Landbase/MapServer/36/query"
+ },
  "b7773524732c": {
   "captured_at": "2026-10-10",
   "file": "b7773524732c.json",
@@ -688,6 +700,18 @@
    "units": "esriSRUnit_Meter"
   },
   "url": "https://services1.arcgis.com/n4yPwebTjJCmXB6W/arcgis/rest/services/Overland_Flow_Paths/FeatureServer/0/query"
+ },
+ "dd5d071cf833": {
+  "captured_at": "2026-10-14",
+  "file": "dd5d071cf833.json",
+  "method": "GET",
+  "params": {
+   "f": "json",
+   "outFields": "ACRATEACCOUNTKEY,BOARDNAME",
+   "returnGeometry": "false",
+   "where": "ACRATEACCOUNTKEY='12345450368'"
+  },
+  "url": "https://mapspublic.aucklandcouncil.govt.nz/arcgis/rest/services/Landbase/MapServer/36/query"
  },
  "de0e4769cc1c": {
   "captured_at": "2026-10-04",

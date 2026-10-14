@@ -46,6 +46,9 @@ _SOURCES = [
      council.RATE_ASSESSMENT + "?f=pjson",
      GEOMAPS_TERMS,
      "Source: Auckland Council (copyright). Council valuations do not represent current market value."),
+    # with a rate account key, the query for it
+    ("ac_property", "Property (local board) - Auckland Council GeoMaps (raw data)", council.PROPERTY + "?f=pjson",
+     GEOMAPS_TERMS, "Source: Auckland Council (copyright)."),
     ("ac_property_page", "Find your property rates or valuation - Auckland Council", council.RATES_SEARCH,
      "Website terms: reproduction for informational purposes with acknowledgement",
      "Source: Auckland Council (subject to copyright)."),
@@ -56,8 +59,8 @@ MAP_PAD_DEG = 0.003  # about 270-330 m around the parcel
 # Valuation facts come from the GeoMaps rate assessment; page facts exist only on the council property page.
 _LAYER_FACTS = ("land_value", "improvements_value", "rateability", "improvement_description", "land_use",
                 "land_area_m2", "legal_description", "record_of_title", "valuation_number")
-_PAGE_FACTS = ("floor_area_m2", "building_site_coverage_m2", "local_board")
-_FACTS = (*_LAYER_FACTS, *_PAGE_FACTS)
+_PAGE_FACTS = ("floor_area_m2", "building_site_coverage_m2")
+_FACTS = (*_LAYER_FACTS, *_PAGE_FACTS, "local_board")
 
 
 def _first_result(site: str, number: str, road: str, suburb: Optional[str]) -> str:
@@ -102,15 +105,27 @@ def _title_type(types: Optional[list], err: Optional[str]) -> dict:
 
 
 def _council(lat: float, lng: float, number: str, road: str):
-    """(rate assessment, its error, rates key, property page, page error)."""
+    """(rate assessment, its error, rates key, property page, page error, local board fact)."""
     ra, ra_err = _try(council.rate_assessment, lat, lng, number, road)
     key = ra.get("key") if ra else None
     if ra_err:  # GeoMaps down: get the key from open data
         key, _ = _try(council.rate_account_key, lat, lng, number, road)
+    board, board_err = _try(council.local_board, key) if key else (None, ra_err)
     if os.environ.get("COUNCIL_PAGE", "").lower() == "off":  # the council site answers 406 to cloud hosts
-        return ra, ra_err, key, None, _cause("council_site_refuses_this_server")
-    page, page_err = _try(council.property_page, key) if key else (None, None)
-    return ra, ra_err, key, page, page_err
+        page, page_err = None, _cause("council_site_refuses_this_server")
+    else:
+        page, page_err = _try(council.property_page, key) if key else (None, None)
+    return ra, ra_err, key, page, page_err, _local_board(key, board, board_err, page)
+
+
+def _local_board(key: Optional[str], board: Optional[str], err: Optional[str], page: Optional[dict]) -> dict:
+    """From GeoMaps; the council page stands in when GeoMaps has none."""
+    if board:
+        return {"value": board, "status": "found", "reason": None, "source_id": "ac_property"}
+    if page and page.get("local_board"):
+        return {"value": page["local_board"], "status": "found", "reason": None, "source_id": "ac_property_page"}
+    why = "not_in_property_layer" if key else "no_unique_council_property_match"
+    return {"value": None, **_miss(err, why), "source_id": "ac_property"}
 
 
 def _council_fields(ra: Optional[dict], ra_err: Optional[str], key: Optional[str],
@@ -206,11 +221,13 @@ def build(address_id: int, typed: Optional[str] = None) -> dict:
         if parcel else {"spatial_method": "point", **_miss(perr, "no_parcel_at_address_point")}
     ctx["hazards"] = [h.result() for h in hz]
 
-    ra, ra_err, key, page, page_err = cc.result()
+    ra, ra_err, key, page, page_err, board = cc.result()
     next(s for s in sources if s["id"] == "ac_valuation")["url"] = council.rate_assessment_url(lat, lng)
     answered(linz_parcels=not perr, linz_titles=not tt.result()[1], ac_valuation=not ra_err, ac_property_page=page,
+             ac_property=board["source_id"] == "ac_property" and board["status"] != "unavailable",
              **{h["source_id"]: True for h in ctx["hazards"] if h["status"] != "unavailable"})
     if key:
+        next(s for s in sources if s["id"] == "ac_property")["url"] = council.property_url(key)
         links["council_valuation"].update(url=council.RATES_PAGE.format(key=key), prefilled=True, kind="direct")
         links["council_geomaps"].update(url=f"{council.GEOMAPS_VIEWER}?task=select&entity=rateacckey&values={key}",
                                         prefilled=True, kind="direct")
@@ -218,7 +235,7 @@ def build(address_id: int, typed: Optional[str] = None) -> dict:
         links[link_id].update(url=_first_result(site, number, road, addr.get("suburb_locality_ascii")),
                               prefilled=True, kind="first_result")
     ctx["property"] = {
-        **_council_fields(ra, ra_err, key, page, page_err),
+        **_council_fields(ra, ra_err, key, page, page_err), "local_board": board,
         "title_type": _title_type(*tt.result()),
         "last_sale": {"status": "unavailable", "reason": "no_licensed_source"},
         "cladding": {"value": None, "status": "unavailable", "reason": "no_free_source"},
