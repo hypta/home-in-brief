@@ -39,9 +39,11 @@ _SOURCES = [
      _ITEM + "89f292e28e194457bf04262647bc1905", "CC BY 4.0", AC_CREDIT),
     ("ac_tsunami", "Tsunami Evacuation Zone - Auckland Council", _ITEM + "3fb25ea90d24498b98571f8e84328987",
      "CC BY 4.0", AC_CREDIT),
-    ("ac_coastal_erosion", "Coastal Erosion - ASCIE 2130 (RCP8.5+) - Auckland Council GeoMaps",
-     council.GEOMAPS + "/UnitaryPlan/PNPSUDCoastalErosionPolygon/MapServer/0", GEOMAPS_TERMS, AC_CREDIT),
-    ("ac_valuation", "Rate Assessment (valuation and rates) - Auckland Council GeoMaps", council.RATE_ASSESSMENT,
+    ("ac_coastal_erosion", "Coastal Erosion - ASCIE 2130 (RCP8.5+) - Auckland Council GeoMaps (raw data)",
+     council.GEOMAPS + "/UnitaryPlan/PNPSUDCoastalErosionPolygon/MapServer/0?f=pjson", GEOMAPS_TERMS, AC_CREDIT),
+    # GeoMaps answers 403 to its HTML pages: links ask for pjson. With an address, this one becomes the query for it.
+    ("ac_valuation", "Rate Assessment (valuation and rates) - Auckland Council GeoMaps (raw data)",
+     council.RATE_ASSESSMENT + "?f=pjson",
      GEOMAPS_TERMS,
      "Source: Auckland Council (copyright). Council valuations do not represent current market value."),
     ("ac_property_page", "Find your property rates or valuation - Auckland Council", council.RATES_SEARCH,
@@ -205,6 +207,7 @@ def build(address_id: int, typed: Optional[str] = None) -> dict:
     ctx["hazards"] = [h.result() for h in hz]
 
     ra, ra_err, key, page, page_err = cc.result()
+    next(s for s in sources if s["id"] == "ac_valuation")["url"] = council.rate_assessment_url(lat, lng)
     answered(linz_parcels=not perr, linz_titles=not tt.result()[1], ac_valuation=not ra_err, ac_property_page=page,
              **{h["source_id"]: True for h in ctx["hazards"] if h["status"] != "unavailable"})
     if key:

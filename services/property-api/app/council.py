@@ -7,6 +7,7 @@ import re
 from datetime import datetime
 from functools import lru_cache
 from typing import Optional
+from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
 from shapely import make_valid
@@ -22,6 +23,8 @@ GEOMAPS_VIEWER = "https://geomapspublic.aucklandcouncil.govt.nz/viewer/index.htm
 RATES_SEARCH = "https://www.aucklandcouncil.govt.nz/en/property-rates-valuations/find-property-rates-valuation.html"
 RATES_PAGE = "https://www.aucklandcouncil.govt.nz/en/property-rates-valuations/find-property-rates-valuation/{key}.html"
 RATE_ASSESSMENT = GEOMAPS + "/Landbase/MapServer/37"  # one row per rating unit
+_ASSESSMENT_FIELDS = ("FORMATTEDADDRESS,CT,LEGAL,RATEACCOUNTKEY,VALUATIONREF,CV,LV,IV,VALUATIONDATE,RATEABILITY,"
+                      "IMPROVEMENT,LANDUSEDESCRIPTION,TOTALRATESINCLCIP,AREALABEL")
 
 # class_field: reported in "classes"; rank_field: orders them (highest wins);
 # region_wide: always intersects, only the class matters.
@@ -154,11 +157,20 @@ def _norm(s: str) -> str:
     return re.sub(r"[^a-z0-9/]+", " ", s.lower()).strip()
 
 
+def _point_query(lat: float, lng: float, out_fields: str) -> dict:
+    return {"geometry": f"{lng},{lat}", "geometryType": "esriGeometryPoint", "inSR": 4167,
+            "spatialRel": "esriSpatialRelIntersects", "returnGeometry": "false", "outFields": out_fields}
+
+
 def _rows_at(url: str, lat: float, lng: float, out_fields: str) -> list[dict]:
     return [f["attributes"] for f in http.request("GET", url + "/query", {
-        "geometry": f"{lng},{lat}", "geometryType": "esriGeometryPoint", "inSR": 4167,
-        "spatialRel": "esriSpatialRelIntersects", "returnGeometry": "false", "f": "json",
-        "outFields": out_fields})["features"]]
+        **_point_query(lat, lng, out_fields), "f": "json"})["features"]]
+
+
+def rate_assessment_url(lat: float, lng: float) -> str:
+    """The query rate_assessment makes, as a link a browser opens. GeoMaps answers 403 to its HTML pages; pjson is
+    served, so the reader sees the rows the facts were read from."""
+    return f"{RATE_ASSESSMENT}/query?{urlencode({**_point_query(lat, lng, _ASSESSMENT_FIELDS), 'f': 'pjson'})}"
 
 
 def _only(*groups: list) -> Optional[dict]:
@@ -189,9 +201,7 @@ def area_m2(label: Optional[str]) -> Optional[float]:
 
 def rate_assessment(lat: float, lng: float, number: str, road: str) -> Optional[dict]:
     """Valuation and rates for the address, or None when no single rating unit matches it."""
-    row = pick_assessment(_rows_at(RATE_ASSESSMENT, lat, lng, (
-        "FORMATTEDADDRESS,CT,LEGAL,RATEACCOUNTKEY,VALUATIONREF,CV,LV,IV,VALUATIONDATE,RATEABILITY,"
-        "IMPROVEMENT,LANDUSEDESCRIPTION,TOTALRATESINCLCIP,AREALABEL")), number, road)
+    row = pick_assessment(_rows_at(RATE_ASSESSMENT, lat, lng, _ASSESSMENT_FIELDS), number, road)
     if not row:
         return None
     non_rateable = (row.get("RATEABILITY") or "").lower().startswith("non")

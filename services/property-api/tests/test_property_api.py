@@ -183,6 +183,15 @@ def test_council_page_is_not_fetched_when_switched_off(monkeypatch):
     assert accessed["ac_property_page"] is None and accessed["ac_valuation"] == ctx.generated_at[:10]
 
 
+def test_geomaps_source_links_open_in_a_browser():
+    # GeoMaps answers 403 to its HTML pages; the valuation link is this address's own query, as pjson
+    ctx = build(FLOODED)
+    urls = {s.id: s.url for s in ctx.sources}
+    assert urls["ac_valuation"].startswith(council.RATE_ASSESSMENT + "/query?") and urls["ac_valuation"].endswith("f=pjson")
+    assert f"geometry={ctx.address.lng}%2C{ctx.address.lat}" in urls["ac_valuation"]
+    assert urls["ac_coastal_erosion"].endswith("?f=pjson")
+
+
 def test_the_cause_of_a_failure_is_only_in_the_response_when_a_developer_asks(monkeypatch):
     monkeypatch.setenv("REASON_DETAIL", "on")
     monkeypatch.setenv("COUNCIL_PAGE", "off")
