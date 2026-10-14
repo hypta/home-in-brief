@@ -16,6 +16,7 @@
 <body>
 <header class="top">
 <h1><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="5" y="17.5" width="22" height="9" rx="3.5" fill="#ffe45c"/><path d="M4.5 14.8 16 5l11.5 9.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>Home in Brief</h1>
+<button type="button" id="clear-all" class="clear-all" hidden>Clear all</button>
 <button type="button" id="theme" class="theme" aria-label="Switch between the light and the dark theme">
 <svg class="moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 1 1 9.5 4a9 9 0 0 0 10.5 10.5z"/></svg>
 <svg class="sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/></svg>
@@ -37,7 +38,7 @@
 <div id="details" tabindex="-1">
 <form id="loan-form" class="fields" aria-labelledby="h-loan-form">
 <h2 id="h-loan-form">Your loan details (optional) <button type="button" class="hint" popovertarget="loan-hint" aria-label="About your loan details">?</button></h2>
-<p id="loan-hint" class="tip" popover>Add them once to see repayments. They are kept in this browser tab until you close it, and used for every address you check.</p>
+<p id="loan-hint" class="tip" popover>Add them once to see repayments. They are kept in this browser tab until you close it or choose Clear all, and used for every address you check.</p>
 <div class="field">
 <label for="deposit">Deposit ($) <button type="button" class="hint" popovertarget="deposit-hint" aria-label="About the deposit">?</button></label>
 <input id="deposit" type="number" inputmode="decimal" step="any" placeholder="e.g. 60000" min="0" aria-describedby="deposit-hint">

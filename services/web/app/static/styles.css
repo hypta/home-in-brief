@@ -54,6 +54,8 @@ details[open] > summary::after { transform:rotate(-135deg); margin-bottom:-3px }
 .top h1 svg { width:38px; height:38px; color:var(--pen) }
 .top rect { fill:var(--logo) }  /* a deeper yellow on a light page, where the highlighter's own is too pale to read as a shape */
 /* switches between the light and the dark theme: it shows the one it switches to, a moon on a light page and a sun on a dark one */
+/* the page-wide reset sits with the other page-wide control, away from "Change", which is about the details only */
+.clear-all { margin:0; padding:0 8px; color:var(--pen); background:none; text-decoration:underline; text-underline-offset:.18em }
 .theme { flex:none; display:grid; place-content:center; width:44px; margin:0; padding:0; color:var(--ink); background:none }
 .theme svg { width:24px; height:24px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round }
 .theme .moon { display:var(--moon) }

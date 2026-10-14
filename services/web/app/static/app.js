@@ -84,7 +84,7 @@ async function calculate() {
 
 // The sheet with the chosen address and the first step, while its records are read.
 function wait(a, failed) {
-  $("report").hidden = $("readout-row").hidden = false; $("report").classList.add("waiting");
+  $("report").hidden = $("readout-row").hidden = $("clear-all").hidden = false; $("report").classList.add("waiting");
   $("change").disabled = !failed;  // nothing to change while the records are on their way; after a failure the form's button asks again
   renderWait(a.full_address, failed, {deposit: num("deposit"), household_income: num("income"), existing_debts: num("debts")});
   if (!failed) show("matched");
@@ -241,6 +241,13 @@ $("loan-form").addEventListener("submit", e => {
   else { $("status").textContent = "Choose an address from the list first."; $("q").focus(); }
 });
 $("change").addEventListener("click", () => details($("details").hidden));
+// "Clear all": what this tab kept (the address, the loan details, what a search found) is cleared and the page opens empty
+$("clear-all").addEventListener("click", () => {
+  try { sessionStorage.clear(); } catch {}
+  for (const form of document.forms) form.reset();
+  $("q").value = "";
+  location.replace("/");
+});
 // The theme follows the system until the visitor picks the other one; picking the system's own goes back to following it.
 $("theme").addEventListener("click", () => {
   const root = document.documentElement, system = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
