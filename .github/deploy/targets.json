@@ -25,8 +25,8 @@
       "dockerfile": "services/property-api/Dockerfile",
       "paths": ["services/property-api/", "shared/"],
       "public": false,
-      "env": {},
-      "secrets": {"LINZ_API_KEY": "LINZ_API_KEY:latest"},
+      "env": {"COUNCIL_RELAY_URL": "https://pi5.tail843aea.ts.net"},
+      "secrets": {"LINZ_API_KEY": "LINZ_API_KEY:latest", "COUNCIL_RELAY_TOKEN": "COUNCIL_RELAY_TOKEN:latest"},
       "flags": ["--max-instances=2", "--concurrency=8"]
     },
     {
