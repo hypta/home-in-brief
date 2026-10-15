@@ -41,41 +41,41 @@
 <p id="loan-hint" class="tip" popover>Add them once to see repayments. They are kept in this browser tab until you close it or choose Clear all, and used for every address you check.</p>
 <div class="field">
 <label for="deposit">Deposit ($) <button type="button" class="hint" popovertarget="deposit-hint" aria-label="About the deposit">?</button></label>
-<input id="deposit" type="number" inputmode="decimal" step="any" placeholder="e.g. 60000" min="0" aria-describedby="deposit-hint">
+<input id="deposit" type="number" inputmode="decimal" step="any" placeholder="e.g. 100000" min="0" max="10000000000" aria-describedby="deposit-hint">
 <p id="deposit-hint" class="tip" popover>The money you already have for this purchase. With it this page shows the loan amount and repayments.</p>
 </div>
 <div class="field">
 <label for="income">Household income ($) <button type="button" class="hint" popovertarget="income-hint" aria-label="About household income">?</button></label>
-<input id="income" type="number" inputmode="decimal" step="any" placeholder="Before tax, per year" min="1" aria-describedby="income-hint">
+<input id="income" type="number" inputmode="decimal" step="any" placeholder="Before tax, per year" min="1" max="10000000000" aria-describedby="income-hint">
 <p id="income-hint" class="tip" popover>Before tax, per year, for everyone who will be on the loan. Used for the debt-to-income ratio and the First Home Loan income cap.</p>
 </div>
 <div class="field">
 <label for="debts">Existing debts ($) <button type="button" class="hint" popovertarget="debts-hint" aria-label="About existing debts">?</button></label>
-<input id="debts" type="number" inputmode="decimal" step="any" placeholder="Cards at their limit" min="0" aria-describedby="debts-hint">
-<p id="debts-hint" class="tip" popover>Count credit cards at their limit, and include student loans and car loans.</p>
+<input id="debts" type="number" inputmode="decimal" step="any" placeholder="e.g. 5000" min="0" max="10000000000" aria-describedby="debts-hint">
+<p id="debts-hint" class="tip" popover>Count credit cards at their limit, and include student loans and car loans. Leave it blank or enter 0 if you have none.</p>
 </div>
 <div class="field">
 <label for="household">Household <button type="button" class="hint" popovertarget="household-hint" aria-label="About the household">?</button></label>
 <select id="household" aria-describedby="household-hint">
 <option value="">Not stated</option>
-<option value="single">One applicant, no dependants</option>
-<option value="single_with_dependants">One applicant with dependants</option>
-<option value="multiple">Two or more applicants</option>
+<option value="single">One, no dependants</option>
+<option value="single_with_dependants">One, with dependants</option>
+<option value="multiple">Two or more</option>
 </select>
-<p id="household-hint" class="tip" popover>Only used for the First Home Loan income cap.</p>
+<p id="household-hint" class="tip" popover>How many people will be on the loan, and whether one applicant has dependants. Only used for the First Home Loan income cap.</p>
 </div>
 <div class="field">
 <label for="rate">Interest rate (%) <button type="button" class="hint" popovertarget="rate-hint" aria-label="About the interest rate">?</button></label>
-<input id="rate" type="number" inputmode="decimal" step="any" placeholder="Blank: bank rates" min="0" max="30" aria-describedby="rate-hint">
-<p id="rate-hint" class="tip" popover>Leave blank to use each bank's published 1-year rate.</p>
+<input id="rate" type="number" inputmode="decimal" step="any" placeholder="e.g. 6" min="0" max="30" aria-describedby="rate-hint">
+<p id="rate-hint" class="tip" popover>Leave blank to use each bank's published 1-year rate. Enter a rate you have been offered to see the repayment at that rate.</p>
 </div>
 </form>
 <div class="fields">
 <h2 id="h-home-form">About this home (optional)</h2>
 <div class="field">
 <label for="price">Price ($) <button type="button" class="hint" popovertarget="price-hint" aria-label="About the price">?</button></label>
-<input id="price" type="number" inputmode="decimal" step="any" placeholder="Council valuation" form="loan-form" min="1" aria-describedby="price-hint">
-<p id="price-hint" class="tip" popover>Filled in with the council valuation (CV) when you choose an address. You can change it.</p>
+<input id="price" type="number" inputmode="decimal" step="any" placeholder="e.g. 900000" form="loan-form" min="1" max="10000000000" aria-describedby="price-hint">
+<p id="price-hint" class="tip" popover>Filled in with the council valuation (CV) when you choose an address. The CV is not a market value: change it to the asking price or your offer.</p>
 </div>
 <div class="field">
 <label for="year-built">Year built <button type="button" class="hint" popovertarget="year-built-hint" aria-label="About the year built">?</button></label>
@@ -145,18 +145,11 @@
 <details class="sec" id="sec-loan">
 <summary><span class="num">3</span><h3>Money</h3><span class="digest" id="d-loan"></span></summary>
 <div class="body">
-<p><a href="#details" id="edit-details" target="_self">Change the price or your loan details</a></p>
 <div id="loan" aria-live="polite"></div>
 </div>
 </details>
-<details class="sec" id="sec-notes">
-<summary><span class="num">4</span><h3>Build era and title</h3><span class="digest" id="d-notes"></span></summary>
-<div class="body">
-<div id="notes"></div>
-</div>
-</details>
 <details class="sec" id="sec-originals">
-<summary><span class="num">5</span><h3>Originals and sources</h3><span class="digest" id="d-originals"></span></summary>
+<summary><span class="num">4</span><h3>Originals and sources</h3><span class="digest" id="d-originals"></span></summary>
 <div class="body">
 <h4>Check the originals</h4>
 <ul id="links"></ul>
@@ -181,7 +174,7 @@
 <label for="question" class="sr">Ask about this home, in any language</label>
 <p id="ask-note" class="hand" aria-hidden="true">your own language is fine <svg viewBox="0 0 34 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4c10-2 20 3 25 15"/><path d="M20 15l8 5 3-9"/></svg></p>
 <button type="button" id="handle" aria-expanded="false" aria-controls="thread" aria-label="Show the answers"><span aria-hidden="true">&#9650;</span> <span id="handle-count">0</span></button>
-<input id="question" class="box" type="text" maxlength="1000" required placeholder="Ask about this home" autocomplete="off">
+<input id="question" class="box" type="text" maxlength="1000" required placeholder="Ask in any language" autocomplete="off">
 <button type="submit" id="ask">Ask</button>
 </form>
 </aside>

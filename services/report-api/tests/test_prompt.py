@@ -138,7 +138,7 @@ def test_known_wording_fixes():
     assert "borrowing over 80% of the price" in tops["case1"]
     assert "debt over 6 times income" in tops["case4"]
     assert "year built could not be checked" in tops["case4"]
-    assert "no existing debts were entered, so the DTI assumes none" in tops["case5"]
+    assert "no existing debts" not in tops["case5"]  # the page says it on the DTI line
     assert "zero" not in tops["case5"]
 
 
@@ -184,7 +184,7 @@ def test_title_stays_a_must_mention_with_unchecked_flood_layer_and_no_debts_ente
         assert {"hazard", "hazard_unknown", "lending", "first_home_loan"} <= set(by_topic), case
         assert by_topic["title"].must, case
         assert sum(f.must for f in fs) == prompt.MAX_TOPICS
-        assert not by_topic["lending_debts"].must  # the lower-priority note became an optional extra
+        assert "lending_debts" not in by_topic  # the page says it on the DTI line
 
 
 @pytest.mark.parametrize("case", ["case5", "edge4"])

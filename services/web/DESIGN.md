@@ -56,7 +56,7 @@ classes are the council's own names and grading, not a rating by this tool.
 - **Source control.** Every other sourced line ends with "Source" or "N sources", and the control stays where it is
   when it is opened. A card is the source's name as
   the link and nothing else. The words quoted from it, the date of a hazard layer's data, its credit line, licence and
-  dates are in the full list of section 5; the footer credits LINZ and Auckland Council on every page.
+  dates are in the full list of the last section; the footer credits LINZ and Auckland Council on every page.
 - **Theme switch.** A plain line icon of the theme it switches to: a moon on a light page, a sun on a dark one.
 - **Next steps.** One tick list on the sheet, folded behind a line that says how many there are and how many are
   ticked. A note repeats its next step only when the list does not have it.
@@ -68,8 +68,19 @@ classes are the council's own names and grading, not a rating by this tool.
   same for every home, long rule lists and the rest of the council record are folded; a note about this property is not.
 - **Could not be found.** One dashed box that names what the records lack in one line, with the reasons behind it.
   A layer that could not be checked keeps its caveat sentence in view.
-- **Section.** A drawn number, the title, one line of digest from API values, a chevron. Closed by default; the
-  hazards section is open when a flood layer is mapped on the parcel.
+- **Key figures.** Under the summary sentences, a short list the program writes from the records and the calculation:
+  the council valuation (not a market value) and the monthly repayments. Plain text, never highlighted, each with its
+  sources.
+- **Section.** A drawn number, the title, one line of digest from API values (shown while the section is closed), a chevron. Closed by default; the
+  hazards section is open when a flood layer is mapped on the parcel. Four sections: hazards, this home, money, sources.
+  A note about the build era, the cladding or the title sits under the record it explains in "This home"; a note that
+  says what a term means (CV, LVR, DTI) sits under the row that uses it. Money leads with at most two repayments (the
+  visitor's own rate, or else the banks' published rates, and the First Home Loan); the details of each are folded.
+- **Hazards order.** One line counts how the layers fell; then could not be checked, mapped, region-wide classes; the
+  layers not shown are named on one line with their caveat and one source control.
+- **Arrival.** After a lookup the sheet shows the steps alone; the sections, the map and the questions come in one piece
+  when the summary is written or has failed (at most 20 s). A page restored in the tab, Update and a search that fills
+  the form do not hide the page again.
 - **Questions.** One panel: a bar at the bottom of a narrow screen that opens upward, a column beside the results
   from 1000 px. Until something has been asked it offers three questions to start with, and a fourth about this home's
   title type when the records give it; choosing one asks it. The box says "Ask about this home"; over it, in our hand until the first question is asked, "your own language is fine" and an arrow.

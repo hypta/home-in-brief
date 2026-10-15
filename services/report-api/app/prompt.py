@@ -151,8 +151,8 @@ MERGED_MAX_WORDS = MAX_WORDS - 1  # a merged draft leaves one word of slack
 # Display order is fixed (O_* below). Priority decides which topics are must-mentions within the 5-sentence cap: the
 # core topics first (hazards that intersect, lending meaning, First Home Loan, title, non-residential
 # use, build era with a KB note or a user fact, not checked), then High landslide ratings, other hazard layers, a
-# bare council decade and an unflagged lending sentence. The note that no debts were entered ranks right after the
-# title, so a report with several hazard topics, a flagged loan and a First Home Loan still mentions the title.
+# bare council decade and an unflagged lending sentence. (O_DEBTS and P_DEBTS are no longer used: the page says on
+# its DTI line that no debts were entered.)
 # Facts outside the cap, and the user-input meaning facts, are optional extras for Gemini (must=False).
 # A user fact that triggered a leaky-building KB item (P_USER_LEAKY) ranks right after the title: it is a must-mention,
 # and a non-residential use sentence it pushes out is merged into the title sentence when that fits.
@@ -293,7 +293,8 @@ def _lending(req: ReportRequest, sel: list[str], ev: Evidence) -> list[_Topic]:
     out = []
     flags, warnings = set(req.flags()), set(req.warnings())
     lvr, dti = "lvr_over_80" in flags, "dti_over_6" in flags
-    debts = "existing_debts_assumed_zero" in warnings
+    # The page says on the DTI line that no debts were entered; the summary leaves it out, so its five sentences go to
+    # the hazards, the loan, the First Home Loan, the title and the build era.
     if lvr or dti:
         t = _Topic(O_LENDING, P_LENDING, "lending")
         lvr_def = facts.LVR_FLAGGED if "kb_rbnz_lvr" in sel else facts.LVR_PLAIN
@@ -309,15 +310,10 @@ def _lending(req: ReportRequest, sel: list[str], ev: Evidence) -> list[_Topic]:
                 ("loan-to-value" if lvr else "debt-to-income")
             say = f"Your loan is {term} lending ({define}), which the Reserve Bank lets banks offer only in limited amounts."
         out.append(t.set(_lvr_slot(t, say), cite, keep=["your loan"]))
-        if debts:
-            out.append(_Topic(O_DEBTS, P_DEBTS, "lending_debts").set(
-                "Because no existing debts were entered, the DTI shown assumes you have none.", ["rbnz_dti"],
-                keep=["entered"]))
     elif req.rules_output.get("lvr_pct") is not None:
-        say = f"Your loan is not Reserve Bank {facts.LVR_PLAIN} or {facts.DTI_PLAIN} lending"
-        say += "; " + facts.DEBTS_ASSUMED + "." if debts else "."
-        out.append(_Topic(O_LENDING, P_LENDING if debts else P_LENDING_PLAIN, "lending").set(
-            say, ["rbnz_lvr", "rbnz_dti"], keep=["your loan"] + (["entered"] if debts else [])))
+        out.append(_Topic(O_LENDING, P_LENDING_PLAIN, "lending").set(
+            f"Your loan is not Reserve Bank {facts.LVR_PLAIN} or {facts.DTI_PLAIN} lending.", ["rbnz_lvr", "rbnz_dti"],
+            keep=["your loan"]))
 
     ht = req.user_inputs.get("household_type")
     fhl = next((s for s in req.scenarios() if s.get("id") == "first_home_loan"), None)

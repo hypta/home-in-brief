@@ -4,7 +4,8 @@ export const $ = id => document.getElementById(id);
 export const byId = items => Object.fromEntries(items.map(i => [i.id, i]));
 export const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 // noreferrer: DuckDuckGo only jumps to the first result when the click does not name the page it came from
-export const link = (url, text) => `<a href="${/^https?:\/\//.test(url || "") ? esc(url) : "#"}" target="_blank" rel="noreferrer">${esc(text)}</a>`;
+// a PDF says so: some browsers save it instead of showing it
+export const link = (url, text) => `<a href="${/^https?:\/\//.test(url || "") ? esc(url) : "#"}" target="_blank" rel="noreferrer">${esc(text)}</a>${/\.pdf$/i.test(url || "") ? " (PDF)" : ""}`;
 const LAYERS = {flood_plain:"Flood plains", flood_prone_area:"Flood prone areas", overland_flow_path:"Overland flow paths",
   coastal_inundation:"Coastal inundation (1% AEP)", landslide_shallow:"Landslide susceptibility - shallow",
   landslide_large_scale:"Landslide susceptibility - large scale", liquefaction:"Liquefaction vulnerability",
@@ -78,23 +79,27 @@ const control = (cards, label, after = "") => !cards.length ? "" : `<details cla
 const cite = (refs, lines) => control([].concat(refs ?? []).map(ref => card(ref, lines)));
 const kbCite = k => control([kbCard(k)]);
 
-function notes({rules, kb, inputs}, block, heading) {
-  const mine = (kb || []).filter(k => (TOPIC_BLOCK[k.topic] || "notes") === block), told = new Set(rules?.kb_items_from_user_input);
-  const note = k => `<div class="note">${esc(k.claim_en)} ${kbCite(k)}
+const noteOf = ({rules, inputs}) => { const told = new Set(rules?.kb_items_from_user_input);
+  return k => `<div class="note">${esc(k.claim_en)} ${kbCite(k)}
       ${k.source_type === "secondary" ? `<span class="tag">secondary source</span>` : ""}
       ${k.status === "verified" ? "" : `<span class="tag draft">draft, not yet checked</span>`}
       ${told.has(k.id) ? `<div class="muted">Based on ${searched(inputs, FIELD_OF[k.topic]) ? "a web search, not checked" : "what you told us"}.</div>` : ""}
-      ${k.next_step_en ? `<div data-step="${esc(k.next_step_en)}"><b>Next step:</b> ${esc(k.next_step_en)}</div>` : ""}</div>`;
-  // A note about this property stays in view. Notes that are the same for every home, and the two long lists of lending rules, are folded with a count.
-  const FOLDS = {always: "Background for any Auckland home", fhl_eligible: "First Home Loan rules", lvr_over: "Low-deposit lending rules"};
-  const foldOf = k => Object.keys(FOLDS).find(rule => rule in (k.applies_when || {})), open = mine.filter(k => !foldOf(k));
+      ${k.next_step_en ? `<div data-step="${esc(k.next_step_en)}"><b>Next step:</b> ${esc(k.next_step_en)}</div>` : ""}</div>`; };
+// A note about this property stays in view. Notes that are the same for every home, and the two long lists of lending rules, are folded with a count.
+const FOLDS = {always: "Background for any Auckland home", fhl_eligible: "First Home Loan rules", lvr_over: "Low-deposit lending rules"};
+const foldOf = k => Object.keys(FOLDS).find(rule => rule in (k.applies_when || {}));
+// `placed`: topics whose notes another part of the block shows (under the record they explain)
+function notes(state, block, heading, placed = []) {
+  const mine = (state.kb || []).filter(k => (TOPIC_BLOCK[k.topic] || "notes") === block && !(placed.includes(k.topic) && !foldOf(k))
+    && !Object.values(DEFINES).includes(k.id));
+  const note = noteOf(state), open = mine.filter(k => !foldOf(k));
   return (open.length ? `<h4>${heading}</h4>${open.map(note).join("")}` : "")
     + Object.entries(FOLDS).map(([rule, title]) => { const inside = mine.filter(k => foldOf(k) === rule); return fold(`${title} (${count(inside.length, "note")})`, inside.map(note).join("")); }).join("");
 }
 
 // code: [block, text]. A code may carry a layer or bank id after a colon. CODES.md marks the hidden ones as not user-facing;
 // the last two are said once, where "This home" lists what the records lack.
-const HIDDEN = /^(kb_hash_mismatch|kb_verification_incomplete|hazard_status_missing|hazard_status_unknown|hazard_priority_unknown|year_built_unavailable|cladding_unavailable)$/;
+const HIDDEN = /^(kb_hash_mismatch|kb_verification_incomplete|hazard_status_missing|hazard_status_unknown|hazard_priority_unknown|year_built_unavailable|cladding_unavailable|existing_debts_assumed_zero)$/;
 const WARNINGS = {
   hazards_unavailable: ["hazards", "No flood layer could be checked. " + NO_RISK_CAVEAT],
   hazards_partial: ["hazards", layer => `${layerName(layer)} could not be checked. ${NO_RISK_CAVEAT}`],
@@ -122,10 +127,12 @@ const WARNINGS = {
   kb_unavailable: ["notes", "Background notes are unavailable right now."],
 };
 
-function warnings({rules}, block) {
+// The warnings about one bank sit with the table of banks; `banksOnly` picks them, false leaves them out.
+const BANK = /^(bank_skipped|lem_base_unverified)$/;
+function warnings({rules}, block, banksOnly) {
   return list((rules?.warnings || []).map(w => {
     const [code, arg] = w.split(":"), known = WARNINGS[code];
-    if (HIDDEN.test(code)) return null;
+    if (HIDDEN.test(code) || (banksOnly != null && BANK.test(code) !== banksOnly)) return null;
     if (!known) return DEV && block === "loan" ? esc("Note: " + words(w)) : null;
     return known[0] === block ? esc(typeof known[1] === "function" ? known[1](arg, rules) : known[1]) : null;
   }).filter(Boolean));
@@ -162,28 +169,40 @@ function hazards(state) {
     return layers.length ? `<h4>${title}</h4>${said ? `<p>${said}</p>` : ""}${layers.map(h => layerRow(h, detail(h))).join("")}` : "";
   };
   const none = (priority, name) => ctx.hazards.some(h => h.priority === priority) ? "" : `<p class="problem">No ${name} layer was checked. ${NO_RISK_CAVEAT}</p>`;
+  // One line says how the layers fell; the layers found come first. Those not shown are named on one line, their caveat with them.
+  const isMapped = h => h.status === "intersects" && !classed(h), shown = ctx.hazards.filter(h => h.status === "none"), gaps = ctx.hazards.filter(unchecked);
+  const tally = [[ctx.hazards.filter(isMapped).length, `mapped ${at}`], [ctx.hazards.filter(classed).length, "region-wide layers, where the class is the finding"],
+    [shown.length, `not shown ${at}`], [gaps.length, "could not be checked"]].filter(([n]) => n).map(([n, what]) => `${n} ${what}`).join("; ");
   return `${ctx.parcel.spatial_method === "parcel" || ctx.address.status !== "found" ? "" : `<p class="problem">No parcel was matched, so the layers were checked at the address point only and parcel coverage is not calculated.</p>`}
     ${none("primary", "flood")}${none("secondary", "other")}
+    ${ctx.hazards.length ? `<p class="tally">Of the ${count(ctx.hazards.length, "council layer")} checked: ${tally}.</p>` : ""}
     ${group("Could not be checked", `These layers could not be checked. ${NO_RISK_CAVEAT}`, unchecked, h => esc(REASONS[h.reason] || "") + dev(h.reason || h.status))}
-    ${group(`Mapped ${at}`, "", h => h.status === "intersects" && !classed(h), h => mapped(h, at))}
+    ${group(`Mapped ${at}`, "", isMapped, h => mapped(h, at))}
     ${group("Region-wide layers, where the class is the finding", "", classed, h => mapped(h, at))}
-    ${group(`Not shown ${at}`, `The council does not show these layers ${at}. ${NO_RISK_CAVEAT}`, h => h.status === "none", () => "")}
+    ${shown.length ? `<h4>Not shown ${at}</h4><div class="note">${shown.map(h => esc(layerName(h.layer))).join(", ")}. The council does not show these layers ${at}. ${NO_RISK_CAVEAT}
+      ${control(shown.map(h => card(h.source_id, [h.data_date && "Data date " + h.data_date])))}</div>` : ""}
     ${warnings(state, "hazards")}${notes(state, "hazards", "Notes on these hazards and insurance")}`;
 }
 
-function facts({ctx, inputs}) {
-  const p = ctx.property, council = ctx.links.find(l => l.id === "council_valuation"), main = [], rest = [], lacking = [];
+// The build-era, cladding and title notes sit under the record they explain.
+const UNDER = {"Title type": ["title_type"], "Decade built": ["build_era"], "Cladding": ["cladding"]};
+function facts(state) {
+  const {ctx, inputs} = state, p = ctx.property, council = ctx.links.find(l => l.id === "council_valuation"), main = [], rest = [], lacking = [];
   const listings = ctx.links.filter(l => l.id === "homes" || l.id === "oneroof").map(l => link(l.url, l.label)).join(" or ");
   const told = inputs?.chat_supplied || {};  // the year built and cladding the report was calculated with
+  const note = noteOf(state), era = eraless(state);
+  const under = name => (state.kb || []).filter(k => (UNDER[name] || []).includes(k.topic) && !foldOf(k)).map(note).join("")
+    + (name === "Decade built" && era ? `<p class="muted">${esc(ERALESS(era))}</p>` : "") + defined(state, name);
   // a value the records have goes to `to`; one they lack is listed with the reason, and where to look is said once for all of them.
   // `search`: the field report-api can search the web for, offered while the records and the details have no value for it
   const using = field => told[field] ? ` Using ${esc(field === "cladding" ? words(told[field]) : told[field])}, ${how(inputs, field)}.` : "";
   const add = (to, name, f, text, search) => (text ? to : lacking).push(row(name, `${text || missing(f) + using(search)} ${cite(f.source_id)}${
-    !text && search && f.status !== "found" && !told[search] ? `<button type="button" class="search" data-search="${search}">Search the web</button>` : ""}`));
+    !text && search && f.status !== "found" && !told[search] ? `<button type="button" class="search" data-search="${search}">Search the web</button>` : ""}${under(name)}`));
   const look = `<p class="muted">Look for these on the listing${listings && `, on ${listings}`}${council ? `, or in the ${link(council.url, "council property search")}` : ""}.${
     (!p.year_built.decade_range && !told.year_built) || (p.cladding.status !== "found" && !told.cladding) ? ` A year built or a cladding you find can be added ${IN_DETAILS}.` : ""}</p>`;
   const fact = (to, name, f, fmt = esc, search) => add(to, name, f, f.status === "found" ? fmt(f.value) : null, search);
-  add(main, "Capital value (CV)", p.cv, p.cv.status === "found" ? `${money(p.cv.value)} as at ${esc(p.cv.valuation_date)}. A council rating valuation, not a market value.` : null);
+  const cvNote = (state.kb || []).some(k => k.id === DEFINES["Capital value (CV)"]);  // the note under the row says it is not a market value
+  add(main, "Capital value (CV)", p.cv, p.cv.status === "found" ? `${money(p.cv.value)} as at ${esc(p.cv.valuation_date)}.${cvNote ? "" : " A council rating valuation, not a market value."}` : null);
   add(main, "Annual rates", p.annual_rates, ratesText(p.annual_rates));
   add(main, "Title type", p.title_type, p.title_type.value ? esc(p.title_type.value) : (p.title_type.linz_types || []).length ? `LINZ records: ${p.title_type.linz_types.map(esc).join(", ")}${dev(p.title_type.reason)}` : null);
   const r = p.year_built.decade_range;
@@ -193,8 +212,8 @@ function facts({ctx, inputs}) {
   fact(rest, "Rateability", p.rateability); fact(rest, "Improvements", p.improvement_description); fact(rest, "Land use", p.land_use);
   fact(rest, "Building site coverage", p.building_site_coverage_m2, m2); fact(rest, "Legal description", p.legal_description, code);
   fact(rest, "Record of title", p.record_of_title, code); fact(rest, "Valuation number", p.valuation_number, code); fact(rest, "Local board", p.local_board);
-  return (main.length ? `<h4>Main facts</h4>${main.join("")}` : "") + (lacking.length ? `<h4>Not in the records we checked</h4>${look}${lacking.join("")}` : "")
-    + fold(`More from the council record (${rest.length})`, rest.join(""));
+  return (main.length ? `<h4>Main facts</h4>${main.join("")}` : "") + homeNotes(state) + (lacking.length ? `<h4>Not in the records we checked</h4>${look}${lacking.join("")}` : "")
+    + fold(`More from the council record (${rest.length})`, rest.join("")) + notes(state, "notes", "Notes for this property", Object.values(UNDER).flat());
 }
 
 const FLAGS = {
@@ -210,43 +229,51 @@ const table = (head, rows) => `<div class="scroll"><table><tr>${head.map(h => `<
 // The monthly figure of each scenario, which leads the section: [amount, what it is]
 const MONTHLY = {bank_standard: s => [span(s.monthly_range, money), "a month at the banks' published 1-year rates"],
   first_home_loan: s => [span(s.monthly_range, money), "a month with a First Home Loan"],
-  user_rate: s => [money(s.monthly), `a month at ${pct(s.rate_pct)}, the rate in your details`]};
+  user_rate: s => [money(s.monthly), `a month at ${pct(s.rate_pct)}, the rate you entered`]};
+// The details of each repayment are folded, a row that names what is inside: the lead figures say the monthly amounts.
 const SCENARIOS = {
-  bank_standard: (s, r) => `<h4>Bank loan at published 1-year rates</h4>
+  bank_standard: (s, r) => fold(`Bank loan at published 1-year rates (${count(s.per_bank.length, "bank")})`, `
     <div class="note">Rates of ${span(s.rate_range_pct, pct)} across ${s.per_bank.length} banks${s.low_equity_margin_pct ? `, including a low-equity margin of ${span(s.low_equity_margin_pct, String)} percentage points where a bank charges one` : ""}. ${cite(s.source_ids)}</div>
-    ${row("Fortnightly repayment", span(s.fortnightly_range, money))}
+    ${row("Repayment every two weeks", span(s.fortnightly_range, money))}
     ${stressRow(r, `${money(s.stress_monthly)} per month at the highest of these rates (${money(s.stress_delta_monthly)} more).`)}
-    ${fold("Rate used for each bank", table(["Bank", "Rate", "Basis", "Collected"],
-      s.per_bank.map(b => [esc(bank(b.bank_id)), pct(b.rate_pct), esc(BASIS[b.basis] || b.basis), esc((b.captured_at || "not recorded").slice(0, 10))])))}`,
-  first_home_loan: (s, r) => `<h4>First Home Loan</h4>
-    ${s.eligibility === "conditional" ? `<div class="problem">${esc(s.eligibility_note)}</div>` : ""}
+    ${table(["Bank", "Rate", "Basis", "Collected"],
+      s.per_bank.map(b => [esc(bank(b.bank_id)), pct(b.rate_pct), esc(BASIS[b.basis] || b.basis), esc((b.captured_at || "not recorded").slice(0, 10))])) + warnings({rules: r}, "loan", true)}`),
+  first_home_loan: (s, r) => (s.eligibility === "conditional" ? `<div class="problem">${esc(s.eligibility_note)}</div>` : "")
+    + fold(`First Home Loan (${count(s.lenders.length, "lender")})`, `
     <div class="note">${esc(s.lmi_note)} ${cite(s.source_ids)}</div>
-    ${row("Fortnightly repayment", span(s.fortnightly_range, money))}
+    ${row("Repayment every two weeks", span(s.fortnightly_range, money))}
     ${stressRow(r, `${span(s.stress_monthly_range, money)} per month.`)}
-    ${row("Insurance premium at the full rate", money(s.lmi_amount) + (s.full_premium_assumed_for.length ? `. The full premium is assumed for ${s.full_premium_assumed_for.map(id => esc(bank(id))).join(", ")}.` : ""))}
-    ${fold("Figures for each lender", table(["Lender", "Rate", "Basis", "Premium passed on", "Monthly", "Fortnightly", `Monthly at +${r.stress_add_pp} points`],
-      s.lenders.map(l => [esc(l.name), or(l.rate_pct, pct), esc(BASIS[l.rate_basis] || l.rate_basis), or(l.lmi_passthrough_pct, pct), or(l.monthly, money), or(l.fortnightly, money), or(l.stress_monthly, money)])))}`,
-  user_rate: (s, r) => `<h4>At the interest rate in your details (${pct(s.rate_pct)})</h4>
-    ${row("Fortnightly repayment", money(s.fortnightly))}
-    ${stressRow(r, `${money(s.stress_monthly)} per month (${money(s.stress_delta_monthly)} more).`)}`,
+    ${row("Insurance premium at the full rate", money(s.lmi_amount) + (s.full_premium_assumed_for.length ? `. The full premium is assumed for ${s.full_premium_assumed_for.map(id => "the lender " + esc(bank(id))).join(", ")}.` : ""))}
+    ${table(["Lender", "Rate", "Basis", "Premium passed on", "Monthly", "Every two weeks", `Monthly at +${r.stress_add_pp} points`],
+      s.lenders.map(l => [esc(l.name), or(l.rate_pct, pct), esc(BASIS[l.rate_basis] || l.rate_basis), or(l.lmi_passthrough_pct, pct), or(l.monthly, money), or(l.fortnightly, money), or(l.stress_monthly, money)]))}`),
+  user_rate: (s, r) => fold(`At the rate you entered (${pct(s.rate_pct)})`, `
+    ${row("Repayment every two weeks", money(s.fortnightly))}
+    ${stressRow(r, `${money(s.stress_monthly)} per month (${money(s.stress_delta_monthly)} more).`)}`),
 };
+// Notes that say what a term on a row means sit under that row.
+const DEFINES = {"Capital value (CV)": "kb_cv_not_market", "Loan-to-value ratio (LVR)": "kb_lvr_definition", "Debt-to-income ratio (DTI)": "kb_dti_definition"};
+const defined = (state, name) => { const k = (state.kb || []).find(k => k.id === DEFINES[name]); return k ? noteOf(state)(k) : ""; };
 
 function loan(state) {
   const {ctx, rules: r, rulesError: err} = state;
   if (err) return `<div class="problem">The repayment figures could not be calculated: ${esc(err.message)}${list(err.fields.map(f => `${esc(words(f.field.replace("user_inputs.", "")))}: ${esc(f.message)}`))}</div>`;
   if (!r) return `<p class="muted">Calculating…</p>`;
   const price = r.price_used, rates = ctx.property.annual_rates, out = [];
-  out.push(`<div class="figs">${r.scenarios.filter(s => MONTHLY[s.id]).map(s => MONTHLY[s.id](s)).map(([amount, what]) => `<p class="fig"><b>${amount}</b>${what}</p>`).join("")}</div>`);
+  // The section leads with one repayment at the visitor's own rate, or else at the banks' rates, and the First Home Loan one beside it.
+  const lead = r.scenarios.filter(s => MONTHLY[s.id] && !(s.id === "bank_standard" && r.scenarios.some(x => x.id === "user_rate")));
+  out.push(`<div class="figs">${lead.map(s => MONTHLY[s.id](s)).map(([amount, what]) => `<p class="fig"><b>${amount}</b>${what}</p>`).join("")}</div>`,
+    `<p class="edit"><a href="#details" target="_self">Change the price or your loan details</a></p>`);
   out.push(row("Price used", price.basis === "cv" ? `${money(price.value)}, the council valuation (CV) as at ${esc(price.valuation_date)}. Not a market value.`
     : price.basis === "user" ? `${money(price.value)}, your own figure.` : "No price to calculate with."));
   if (r.loan_amount) out.push(row("Loan amount", `${money(r.loan_amount)} (the price less a deposit of ${money(r.deposit)})`));
-  if (r.loan_amount && r.lvr_pct != null) out.push(row("Loan-to-value ratio (LVR)", `${pct(r.lvr_pct)} of the price is borrowed`));
-  if (r.loan_amount && r.dti != null) out.push(row("Debt-to-income ratio (DTI)", `${r.dti} times income (existing debts plus this loan, divided by income)`));
+  if (r.loan_amount && r.lvr_pct != null) out.push(row("Loan-to-value ratio (LVR)", `${pct(r.lvr_pct)} of the price is borrowed${defined(state, "Loan-to-value ratio (LVR)")}`));
+  // the note that no debts were entered is said here, on the line it changes, and nowhere else
+  const noDebts = r.warnings.includes("existing_debts_assumed_zero") ? ` No existing debts were entered, so none are counted; enter them ${IN_DETAILS}, or 0 if you have none.` : "";
+  if (r.loan_amount && r.dti != null) out.push(row("Debt-to-income ratio (DTI)", `${r.dti} times income (existing debts plus this loan, divided by income).${esc(noDebts)}${defined(state, "Debt-to-income ratio (DTI)")}`));
   out.push(...r.flags.map(f => `<div class="note">${esc(FLAGS[f.id] ? FLAGS[f.id](r) : "Note: " + words(f.id))} ${cite(f.source_ids)}</div>`));
   out.push(...r.scenarios.map(s => SCENARIOS[s.id] ? SCENARIOS[s.id](s, r) : `<h4>${esc(words(s.id))}</h4>`));
   if (r.scenarios.length) out.push(`<div class="muted">Repayments are principal and interest over ${r.loan_term_years} years. They do not include council rates, insurance, utilities or maintenance. The higher-rate figures are an illustration, not any bank's test rate.${r.rates_snapshot_date ? ` Bank rates were collected by hand from each bank's website; the oldest is from ${esc(r.rates_snapshot_date)}. ${cite("bank_rates_snapshot")}` : ""}</div>`);
-  out.push(row("Council rates (not included above)", ratesText(rates) ? `${ratesText(rates)} ${cite(rates.source_id)}` : missing(rates)));
-  return out.join("") + warnings(state, "loan") + notes(state, "loan", "Lending notes");
+  return out.join("") + warnings(state, "loan", state.rules.scenarios.some(s => s.id === "bank_standard") ? false : undefined) + notes(state, "loan", "Lending notes");
 }
 
 // A year built the records lack, given or found online, that selects no build-era note: said, so that adding it is not
@@ -254,16 +281,13 @@ function loan(state) {
 const eraless = ({ctx, rules, kb, inputs}) => { const y = inputs?.chat_supplied?.year_built;
   return rules && kb && !ctx.property.year_built.decade_range && YEAR.test(y) && !kb.some(k => k.topic === "build_era") ? y : null; };
 const ERALESS = y => `No build-era note applies to the year built, ${y}.`;
-function buildNotes(state) {
+// What stands in for the build-era and title notes under the main facts when they cannot all be shown.
+function homeNotes(state) {
   const {rules: r} = state;
-  if (!r) return state.rulesError ? `<p class="problem">The notes are unavailable until the repayment figures can be calculated.</p>` : `<p class="muted">Loading…</p>`;
-  const EMPTY = {no_verified_items: "No checked background notes are available yet.", no_matching_items: "No background notes apply to this property."};
+  if (!r) return state.rulesError ? `<p class="problem">The notes on the build era and title are unavailable until the repayment figures can be calculated.</p>` : "";
   return (r.kb_includes_draft ? `<p class="problem">Development mode: draft notes are shown. They have not yet been checked against their sources.</p>` : "")
     + (state.kb ? "" : `<p class="problem">The background notes could not be loaded.</p>`)
-    + warnings(state, "notes")
-    + (eraless(state) ? `<p class="muted">${esc(ERALESS(eraless(state)))}</p>` : "")
-    + (notes(state, "notes", "Notes for this property") || (!state.kb || r.kb_empty_reason === "kb_unavailable" ? ""
-       : `<p class="muted">${EMPTY[r.kb_empty_reason] || "No build-era or title notes apply to this property."}</p>`));
+    + warnings(state, "notes");
 }
 
 // The sources a sentence from report-api cites: a source id is a PropertyContext source, a rules-api source or a
@@ -279,13 +303,12 @@ function checked(s, items, after) {
   return `<p class="s">${hl ? `<span class="hl">${esc(s.text)}</span>` : esc(s.text)}</p>${control(cards, s.web ? `Cites ${count(n, "source")}` : `Checked against ${count(n, "source")}`, after)}`;
 }
 // The section that holds the records behind a sentence, named by its first source: a note's topic, a hazard layer, a property record, or else the lending sources.
-const SECTION = {hazards: "the mapped hazards", facts: "this home's records", loan: "the repayment figures", notes: "the build era and title notes"};
+const SECTION = {hazards: "the mapped hazards", facts: "this home's records", loan: "the repayment figures"};
 function jump(s, items, ctx) {
   const id = s.source_ids[0], item = items[id];
-  const to = item ? TOPIC_BLOCK[item.topic] || "notes" : ctx.hazards.some(h => h.source_id === id) ? "hazards" : ctx.sources.some(x => x.id === id) ? "facts" : "loan";
+  const to = item ? TOPIC_BLOCK[item.topic] || "facts" : ctx.hazards.some(h => h.source_id === id) ? "hazards" : ctx.sources.some(x => x.id === id) ? "facts" : "loan";
   return `<a class="jump" href="#sec-${to}" target="_self">See ${SECTION[to]}</a>`;
 }
-const reworded = n => !n ? "" : `<p class="muted">${n === 1 ? "1 of these sentences is" : n + " of these sentences are"} in the program's own wording, because the model's version did not pass the check against the sources.</p>`;
 
 // How far the report has got: `at` is the step under way, or the one that failed. A step ends when the page sees its
 // request finish: the records, with the figures calculated from them a moment later, then report-api's one call, in which
@@ -301,6 +324,17 @@ const steps = (at, failed) => `<ol class="steps" aria-label="How far this page h
 // said as such, and nothing is asked again until the reader chooses to.
 const unavailable = (what, err) => err.code === "rate_limited" || err.code === "busy" ? "Too many requests at the moment. Wait a few seconds, then try again."
   : `The ${what} is unavailable right now. The rest of the page is not affected.`;
+// The council valuation and the monthly repayments, written by the program from the records and the calculation: plain
+// text, never highlighted, each with its sources.
+function keyFigures(ctx, r) {
+  const cv = ctx.property.cv, sc = id => r.scenarios.find(s => s.id === id), own = sc("user_rate"), bank = sc("bank_standard"), fhl = sc("first_home_loan");
+  const pay = [own ? [money(own.monthly), `a month at ${pct(own.rate_pct)}, the rate you entered`, own] : bank && [span(bank.monthly_range, money), "a month at the banks' published 1-year rates", bank],
+    fhl && [span(fhl.monthly_range, money), "a month with a First Home Loan", fhl]].filter(Boolean);
+  const lines = [cv.status === "found" && `<li>Council valuation ${money(cv.value)}, which is not a market value. ${cite(cv.source_id)}</li>`,
+    ...pay.map(([amount, what, s]) => `<li>${amount} ${what}. ${cite(s.source_ids)}</li>`)].filter(Boolean);
+  return lines.length ? `<ul class="keyfigs">${lines.join("")}</ul>` : "";
+}
+
 // report-api only returns sentences that passed its check against the sources they cite.
 function summary({ctx, rules, rulesError, kb, report: r, reportError: err, done, first}) {
   if (!rules) return rulesError ? steps(0, true) + `<p class="problem">The summary is unavailable until the repayment figures can be calculated.</p>`
@@ -310,13 +344,12 @@ function summary({ctx, rules, rulesError, kb, report: r, reportError: err, done,
     : `<p class="problem">${unavailable("summary", err)}</p><button type="button" id="retry-summary">Try again</button>`);
   if (!r) return steps(1);
   const items = byId(kb || []), drafts = r.model === "code-draft";  // report-api wrote every sentence itself: no model call could be made
-  return steps(2) + r.summary.map(s => checked(s, items, jump(s, items, ctx))).join("")
+  return steps(2) + r.summary.map(s => checked(s, items, jump(s, items, ctx))).join("") + keyFigures(ctx, rules)
     + (drafts ? `<p class="muted">The model was not used for this summary. These sentences are the program's own, written from the same facts.</p>` : "")
     + `<details class="how"${first ? " open" : ""}><summary>How this summary is made</summary><ol>
       <li>The program collects the facts from council and LINZ records, your loan figures and the notes that apply.</li>
       <li>Gemini, Google's AI model, rewrites them as three to five plain sentences. It never sees a figure: the program fills those in.</li>
       <li>Each sentence is checked against the sources it cites. One that fails is replaced by the program's own wording.</li></ol>
-      ${drafts ? "" : reworded(r.dropped)}
       <p class="muted">The check compares wording and figures. It cannot judge everything a sentence means, so open the sources of any sentence that matters to you.</p></details>`
     + (r.next_steps.length ? `<h3>Next steps</h3>${fold(`<span>${count(r.next_steps.length, "thing")} to ask or check<span id="ticked">${ticked(r.next_steps.filter(s => done.has(s.text)).length)}</span></span>`,
         `<ul class="todo">${r.next_steps.map(s => `<li><label><input type="checkbox"${done.has(s.text) ? " checked" : ""}><span>${esc(s.text)}</span></label>${control(cardsOf(s, items))}</li>`).join("")}</ul>`)}` : "")
@@ -455,8 +488,9 @@ export function typeAnswer() {
 
 // What the report on the page was calculated with, one line each, so the form can stay folded away.
 // A year or cladding is only said when the rules used it: not a council category code, and not a value the record overrode.
-const loanLine = i => `<b>Your loan</b> ${esc([[i.deposit, "deposit"], [i.household_income, "income"], [i.existing_debts, "debts"]]
-  .filter(([v]) => v != null).map(([v, word]) => `${money(v)} ${word}`).join(", ") || "no details yet")}`;
+const HOUSEHOLD = {single: "one applicant", single_with_dependants: "one applicant with dependants", multiple: "two or more applicants"};
+const loanLine = i => `<b>Your loan</b> ${esc([...[[i.deposit, "deposit"], [i.household_income, "income"], [i.existing_debts, "debts"]]
+  .filter(([v]) => v != null).map(([v, word]) => `${money(v)} ${word}`), HOUSEHOLD[i.household_type]].filter(Boolean).join(", ") || "no details yet")}`;
 function readout({rules: r, inputs: i}) {
   const price = r.price_used;
   const used = (field, ok = true) => ok && !r.warnings.includes(field + "_user_conflict") && i.chat_supplied[field], told = {year_built: used("year_built", YEAR.test(i.chat_supplied.year_built)), cladding: used("cladding")};
@@ -476,14 +510,11 @@ function digests(state) {
     hazards: mapped.length ? `Mapped ${where(ctx)}: ${mapped.join(", ")}.` + tail
       : flood.length && flood.every(h => h.status === "none") ? `No flood layer is mapped ${where(ctx)}. ${NO_RISK_CAVEAT}` + tail
       : `The flood layers could not all be checked. ${NO_RISK_CAVEAT}`,
-    facts: [p.cv.status === "found" && `Council valuation ${money(p.cv.value)} as at ${p.cv.valuation_date}.`, title,
-      p.land_area_m2.status === "found" && `Land area ${m2(p.land_area_m2.value)}.`].filter(Boolean).join(" ") || "Council and LINZ records for this address.",
+    facts: [p.cv.status === "found" && `Council valuation ${money(p.cv.value)}.`, title,
+      decade ? `Built ${decade[0] ? `${decade[0]}-${decade[1]}` : `before ${decade[1] + 1}`}.` : told ? `Built ${told}, ${how(inputs, "year_built")}.` : "Year built not known."].filter(Boolean).join(" "),
     loan: rulesError ? "The repayment figures could not be calculated." : !r ? "Calculating…"
       : [bankLoan && `${span(bankLoan.monthly_range, money)} a month at bank rates.`, fhl && `${span(fhl.monthly_range, money)} a month with a First Home Loan.`,
-        own && `${money(own.monthly)} a month at your rate.`].filter(Boolean).join(" ") || "No repayments are shown yet.",
-    notes: [title, decade ? `Built ${decade[0] ? `${decade[0]}-${decade[1]}` : `before ${decade[1] + 1}`}.`
-      : told ? `Built ${told}, ${how(inputs, "year_built")}.${eraless(state) ? " " + ERALESS(told) : ""}`
-      : "The year built is not known. Add it in your details to see whether a build-era note applies."].filter(Boolean).join(" "),
+        own && `${money(own.monthly)} a month at your rate.`].filter((x, i) => x && !(i === 0 && own)).join(" ") || "No repayments are shown yet.",
   };
 }
 
@@ -497,7 +528,7 @@ export function render(state) {
   $("meta").textContent = ctx.address.status !== "found" ? gone(ctx.address)
     // when the records were read, in New Zealand time wherever the page is opened; how the hazard layers were checked is said in their section
     : `Records read ${new Date(ctx.generated_at).toLocaleString("en-NZ", {timeZone: "Pacific/Auckland", day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit"})} (New Zealand time).`;
-  draw("hazards", hazards, state); draw("facts", facts, state); draw("loan", loan, state); draw("notes", buildNotes, state);
+  draw("hazards", hazards, state); draw("facts", facts, state); draw("loan", loan, state);
   draw("links", () => ctx.links.map(l => `<li>${linkItem(l)}</li>`).join(""));
   drawSummary(state); renderThread(state);
   });

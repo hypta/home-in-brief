@@ -46,7 +46,7 @@ async function summarise() {
   let update;
   try { update = {report: await answer}; }
   catch (e) { update = {reportError: e}; if (asked.answer === answer) asked = {}; }
-  if (mine === calcSeq) renderSummary(Object.assign(state, update));
+  if (mine === calcSeq) { renderSummary(Object.assign(state, update)); release(); }
 }
 
 async function calculate() {
@@ -79,21 +79,33 @@ async function calculate() {
   }
   if (mine !== calcSeq) return;
   render(Object.assign(state, update));
-  if (update.rules) summarise();
+  if (update.rules) summarise(); else release();
 }
 
 // The sheet with the chosen address and the first step, while its records are read.
 function wait(a, failed) {
   $("report").hidden = $("readout-row").hidden = $("clear-all").hidden = false; $("report").classList.add("waiting");
   $("change").disabled = !failed;  // nothing to change while the records are on their way; after a failure the form's button asks again
-  renderWait(a.full_address, failed, {deposit: num("deposit"), household_income: num("income"), existing_debts: num("debts")});
+  renderWait(a.full_address, failed, {deposit: num("deposit"), household_income: num("income"), existing_debts: num("debts"), household_type: $("household").value || null});
   if (!failed) show("matched");
 }
 
-// The report for the records in state goes on the page.
-function reveal() {
+// The rest of the page comes in one piece once the summary is written or has failed: until then the sheet shows how
+// far it has got. A slow summary does not hold the page back for longer than SUMMARY_WAIT_MS.
+const SUMMARY_WAIT_MS = 20000;
+let holding;
+function release() {
+  clearTimeout(holding);
+  if (!$("report").classList.contains("waiting")) return;
+  $("report").classList.remove("waiting"); $("status").textContent = "The results are below.";
+}
+
+// The report for the records in state goes on the page; a page restored from this tab shows at once.
+function reveal(restored) {
   const mine = lookupSeq, {ctx} = state;
-  $("status").textContent = "The results are below."; $("report").hidden = $("readout-row").hidden = false; $("report").classList.remove("waiting");
+  $("report").hidden = $("readout-row").hidden = false;
+  clearTimeout(holding);
+  if (restored) release(); else holding = setTimeout(release, SUMMARY_WAIT_MS);
   $("go").textContent = "Update"; $("change").disabled = false;
   // explanations are open, and our margin notes on show, for the first report in a tab only
   try { state.first = !sessionStorage.getItem("seen"); sessionStorage.setItem("seen", "1"); } catch {}
@@ -116,7 +128,7 @@ function choose(a) {
   else $("status").textContent = `Add your details below if you like, then choose ${$("go").textContent}.`;
 }
 
-async function lookup(a) {
+async function lookup(a, restored) {
   const mine = ++lookupSeq;
   ++calcSeq;  // drop a calculation for the address before this one
   details(false); wait(a);
@@ -133,7 +145,7 @@ async function lookup(a) {
       : `Filled in with the council valuation (CV) as at ${esc(cv.valuation_date)}, which is not a market value. `) + `Check a current estimate on ${site("homes")}, ${site("oneroof")} or the listing, then change this figure.`;
     $("year-built-hint").innerHTML = `Only used when the council records do not give a build decade. Check the listing, ${site("homes")} or ${site("oneroof")} for the decade, or copy the Property Category from the ${site("council_valuation")}. A year (1997), a decade (1990s) or the category code (for example RD199B) all work.`;
     $("cladding-hint").innerHTML = `Check the listing, ${site("homes")} or ${site("oneroof")} for it.`;
-    reveal();
+    reveal(restored);
   } catch (e) {
     if (mine !== lookupSeq) return;
     state.ctx = null; $("status").textContent = "Lookup failed: " + e.message;
@@ -256,17 +268,11 @@ $("theme").addEventListener("click", () => {
   try { next === system ? localStorage.removeItem("theme") : localStorage.setItem("theme", next); } catch {}
 });
 
-// Bank names, and the default interest rate: the middle of the banks' published 1-year standard rates.
+// Bank names. The interest rate is left blank: the banks' published rates are used until the visitor enters one of their own.
 api("rates/latest").then(snap => {
   state.banks = Object.fromEntries(snap.banks.map(b => [b.bank_id, b.name]));
   if (state.ctx) render(state);
-  const quoted = snap.banks.filter(b => b.standard?.["1y"] != null), rates = quoted.map(b => b.standard["1y"]).sort((a, b) => a - b);
-  if (!rates.length || $("rate").value) return;
-  const mid = rates.length >> 1, median = Math.round((rates.length % 2 ? rates[mid] : (rates[mid - 1] + rates[mid]) / 2) * 100) / 100;
-  const oldest = quoted.map(b => (b.captured_at || "").slice(0, 10)).filter(Boolean).sort()[0];
-  $("rate").value = median;
-  $("rate-hint").textContent = `Filled in with ${median}%, the middle of ${rates.length} banks' published 1-year standard rates (collected by hand${oldest ? "; the oldest is from " + oldest : ""}). Change it to a rate you have been offered.`;
-}).catch(() => {});  // without it the rate stays blank and banks show by id
+}).catch(() => {});  // without it banks show by id
 
 // The address on the page is kept for the tab, with what a web search put into the form: after a reload, or on the way
 // back from another page, the same report is read again. The browser brings back what was typed into the form; the
@@ -274,7 +280,7 @@ api("rates/latest").then(snap => {
 try {
   found = JSON.parse(sessionStorage.getItem("found")) || {};
   const kept = JSON.parse(sessionStorage.getItem("address"));
-  if (kept) { $("q").value = kept.full_address; chosen = kept; lookup(kept); }
+  if (kept) { $("q").value = kept.full_address; chosen = kept; lookup(kept, true); }
 } catch {}
 
 $("q").addEventListener("input", () => {
@@ -287,7 +293,7 @@ $("q").addEventListener("input", () => {
     try {
       const found = await api("addresses?q=" + encodeURIComponent(q));
       if (mine !== searchSeq) return;
-      $("status").textContent = found.length ? "" : "No Auckland address starts with that text.";
+      $("status").textContent = found.length ? "" : "No Auckland address starts with that text. Check the spelling, and start with the street number.";
       $("suggestions").innerHTML = "";
       for (const a of found) {
         const li = document.createElement("li"), b = document.createElement("button");
