@@ -127,6 +127,9 @@ class FollowupResponse(BaseModel):
     # rules_rerun_unavailable (mock mode only), generation_degraded, search_unavailable (a Google Search was called
     # for and gave no answer: refused, failed, out of time or no source)
     warnings: list[str] = Field(default_factory=list)
+    # With search_unavailable: "no_result" (the search ran and found nothing usable for this address) or "unavailable"
+    # (it could not run: refused, failed, out of time). web says the first plainly and asks to try later only for the second.
+    search_outcome: Optional[Literal["no_result", "unavailable"]] = None
     web: Optional[WebAnswer] = None  # a Google Search answer: out of scope (with an empty `answer`) or a field search
 
 
@@ -764,7 +767,9 @@ def term_question(question: str) -> bool:
     return bool(_TERM_Q.search(question)) and not _THIS_ONE.search(question)
 
 
-_REPORT_ITEM = re.compile(r"\bthe\b[^?]{0,40}\b(?:maps?|layers?|title type|title|zones?|zoning|overlays?|LIM)\b", re.I)
+# "mapped": the page's own starter, "What do the mapped hazards mean for insurance?"
+_REPORT_ITEM = re.compile(r"\bthe\b[^?]{0,40}\b(?:maps?|mapped|layers?|title type|title|zones?|zoning|overlays?|LIM)\b",
+                          re.I)
 # What a generic diligence question with no named topic is answered from when the model names no fact: the facts
 # about the hazards, the title and the LIM, as their checked drafts.
 DILIGENCE_DEFAULT = "flood hazard title LIM"
@@ -1454,18 +1459,22 @@ def field_search(req: ReportRequest, fields: list[str], question: str, history: 
         return None
     else:
         prompt = fp.field_search_prompt(address, fields, "", [], language or "en")
+        before = clock.searches
         try:
             web = _search(prompt, clock, 0.5)
             if not web:
                 web = _search(prompt, clock, 0.5)
         except gemini.ModelUnavailable as e:
             log.warning("field search unavailable: %s", type(e).__name__)
-            web = None
+            web, info["outcome"] = None, "unavailable"
         info["searches"] = clock.searches
+        if not web and "outcome" not in info:  # a search that ran and named no source found nothing
+            info["outcome"] = "no_result" if clock.searches > before else "unavailable"
+            log.info("field search gave no answer: %s", info["outcome"])
     why_not = web_unusable(web.text, fields=list(fields)) if web else None
     if why_not:
         log.info("field search answer not used: %s", why_not)
-        info["rejected"] = why_not
+        info["rejected"], info["outcome"] = why_not, "no_result"
         web = None
     info["web"] = bool(web)
     if not web:
@@ -1564,6 +1573,22 @@ def skipped_answer(kind: str, found: dict[str, Any], language: str,
     return finish(parts, language, ev, translate, debug, lambda p: True, unavailable)
 
 
+# ---- the search button with no search answer ----------------------------------------------------------------
+BUTTON_FALLBACK = {"cladding": facts_prompt.NO_SOURCE_TEXT["cladding"], "last_sale": facts_prompt.NO_SOURCE_TEXT["last_sale"],
+                   "year_built": "The year built could not be checked from public records."}
+
+
+def button_answer(field: str, language: str, translate: Callable[..., Optional[list[str]]], debug: dict,
+                  unavailable: Callable[[], bool] = lambda: False) -> list[Sentence]:
+    """The fixed sentence for the field the button searched: code-written Chinese (zh_fixed), other languages by the
+    restricted translation under the usual checks (English when they fail)."""
+    text = BUTTON_FALLBACK[field]
+    zh = zh_fixed(text, language) if is_zh(language) else None
+    no_ids: BaseCheck = lambda s, mw: [f for f in check_sentence(s, Evidence(), mw) if f != "no_source_ids"]  # noqa: E731
+    part = Part(Sentence(text=tidy(zh, language) if zh else text, source_ids=[]), native=bool(zh), user=False, base=no_ids)
+    return finish([part], language, Evidence(), translate, debug, unavailable=unavailable)
+
+
 # ---- a loan question the report has no loan facts for ------------------------------------------------------
 # The model is told to say what the facts do show when none answers; with no loan, deposit or income entered the facts
 # are about hazards and the title, so a First Home Loan question got an unrelated sentence. Code decides instead: a
@@ -1641,10 +1666,13 @@ def answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
     model call (allowance used up, REPORT_DEGRADED, prompt too large): the answer then comes from the program's
     facts or fixed sentences, without search, extracted values or translation. A refused Search alone (daily Search
     allowance) adds no warning: the rest of the answer is made as usual."""
+    debug = debug if debug is not None else {}
     with protection.request_scope() as scope:
         resp = _answer_followup(req, refusal_mode, generate, debug, web_search)
     if scope.degraded and protection.GENERATION_DEGRADED not in resp.warnings:
         resp = resp.model_copy(update={"warnings": [*resp.warnings, protection.GENERATION_DEGRADED]})
+    if SEARCH_UNAVAILABLE in resp.warnings:
+        resp = resp.model_copy(update={"search_outcome": debug.get("search_outcome", "unavailable")})
     return resp
 
 
@@ -1751,12 +1779,13 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
     if (mixed or personal_lvr_question(question)) and not is_english(language) and not is_zh(language):
         debug["language"]["used"] = language = "en"
 
-    def no_search() -> None:
+    def no_search(outcome: Optional[str] = None) -> None:
         """A search was called for and gave no answer (refused, failed, quota 429, no key or other setting error, out
         of time, no source): the page can say so. Not when the request is degraded by the allowance:
-        generation_degraded says that."""
+        generation_degraded says that. `outcome` (debug["search_outcome"]): "no_result" or "unavailable"."""
         if not protection.degraded() and SEARCH_UNAVAILABLE not in warnings:
             warnings.append(SEARCH_UNAVAILABLE)
+            debug["search_outcome"] = outcome or "unavailable"
 
     def searched(out_of_scope: bool, why: str) -> Optional[FollowupResponse]:
         """The whole reply from a Google Search (fp.web_prompt): for a question the report does not cover, or one no
@@ -1773,18 +1802,19 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
             debug.setdefault("search_wanted", []).append(why)  # eval runs, strict and mock mode: the route that would search
             return None
         prompt = fp.web_prompt(address, question, history)
+        before, outcome = clock.searches, None
         try:
             web = _search(prompt, clock, 0.6) or _search(prompt, clock, 0.6)
         except gemini.ModelUnavailable as e:
             log.warning("web answer unavailable: %s", type(e).__name__)
-            web = None
+            web, outcome = None, "unavailable"
         why_not = web_unusable(web.text, question) if web else None
         if why_not:  # not shown, and never edited into something else
             log.info("web answer not used: %s", why_not)
             debug["web_rejected"] = why_not
-            web = None
+            web, outcome = None, "no_result"
         if not web:
-            no_search()
+            no_search(outcome or ("no_result" if clock.searches > before else "unavailable"))
             debug.setdefault("search_failed", []).append(why)
             return None
         debug["route"] = "web:" + why
@@ -2159,7 +2189,7 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
         web = field_search(req, fields, question, history, generate, clock, mock, debug,
                            language if button and not req.question.strip() else "")
         if not web:
-            no_search()
+            no_search(debug["field_search"].get("outcome"))
             debug.setdefault("search_failed", []).append("field")
         if web:
             debug["route"] = "field_search"
@@ -2199,6 +2229,16 @@ def _answer_followup(req: FollowupRequest, refusal_mode: str = "exempt",
                 log.info("answer after the field search failed (%s); search answer only", e.code)
                 return only_web
             return out.model_copy(update={"web": web})
+
+    # 1c. the button's search gave no answer: the field's fixed sentence alone, never a model's pick of facts (which
+    #     followed the conversation and added another field's sentence)
+    if button and fields:
+        debug["route"] = "button_fixed"
+        answer = button_answer(button, language, translate, debug, unavailable)
+        fallback = debug.get("fallback")
+        return FollowupResponse(language=fallback["language"] if fallback else language, answer=answer,
+                                out_of_scope=False, user_supplied=supplied, links=links or fallback_links(question, link_ids),
+                                dropped=0, warnings=warnings)
 
     def refuse() -> FollowupResponse:
         """The fixed refusal: English, code-written Chinese, another language by restricted translation (English,

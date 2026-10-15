@@ -171,7 +171,9 @@ stays, and no search, extraction or translation is made after it; with nothing f
 program's facts or fixed sentences; see "Abuse and cost protection") and `search_unavailable` (a Google Search was
 called for and gave no answer: refused by the daily Search allowance, failed, out of time or no source. The reply is
 then made without it: the fixed refusal for an out-of-scope question, otherwise the usual steps without the search
-(the answer from the facts, or the fixed "not enough data" sentence). A provider quota error (429), a missing key
+(the answer from the facts, or the fixed "not enough data" sentence); for web's search button, the searched field's
+fixed sentence alone, with no model call. `search_outcome` then says why: `no_result` (the search ran and named no
+source, or its answer was not usable) or `unavailable` (it could not run). A provider quota error (429), a missing key
 or another setting error counts as a failed search and adds it. Not added when an allowance refusal stopped the
 request: `generation_degraded` says so). `generation_degraded` is also added when the answer call itself failed (5xx,
 timeout, 429, no key) and nothing else answers: the reply is then the fixed "not enough data" sentence.

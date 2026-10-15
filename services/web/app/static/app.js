@@ -105,6 +105,7 @@ function reveal(restored) {
   const mine = lookupSeq, {ctx} = state;
   $("report").hidden = $("readout-row").hidden = false;
   clearTimeout(holding);
+  $("status").textContent = "Writing and checking the summary…";  // the records are in; release() says when the page is
   if (restored) release(); else holding = setTimeout(release, SUMMARY_WAIT_MS);
   $("go").textContent = "Update"; $("change").disabled = false;
   // explanations are open, and our margin notes on show, for the first report in a tab only
@@ -214,6 +215,7 @@ async function ask(question, search_field) {
 const wide = matchMedia("(min-width: 1000px)");
 function panel(open) {
   $("ask-panel").classList.toggle("open", open); $("handle").setAttribute("aria-expanded", open); $("handle").setAttribute("aria-label", open ? "Hide the answers" : "Show the answers");
+  $("handle").hidden = !open && !state.thread.length;  // with nothing asked yet, the handle is only there to close the open panel
 }
 $("handle").addEventListener("click", () => panel(!$("ask-panel").classList.contains("open")));
 $("question").addEventListener("focus", () => panel(true));

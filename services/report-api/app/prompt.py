@@ -309,7 +309,10 @@ def _lending(req: ReportRequest, sel: list[str], ev: Evidence) -> list[_Topic]:
             define = (facts.LVR_DEF if lvr else facts.DTI_DEF) if kb_on else \
                 ("loan-to-value" if lvr else "debt-to-income")
             say = f"Your loan is {term} lending ({define}), which the Reserve Bank lets banks offer only in limited amounts."
-        out.append(t.set(_lvr_slot(t, say), cite, keep=["your loan"]))
+        # the definitions are kept whole: "high-LVR borrowing over 80% and ..." lost "of the price" and read as garbled
+        keep = ["your loan"] + (["of the price"] if lvr and "kb_rbnz_lvr" in sel else []) \
+            + (["times income"] if dti and "kb_rbnz_dti" in sel else [])
+        out.append(t.set(_lvr_slot(t, say), cite, keep=keep))
     elif req.rules_output.get("lvr_pct") is not None:
         out.append(_Topic(O_LENDING, P_LENDING_PLAIN, "lending").set(
             f"Your loan is not Reserve Bank {facts.LVR_PLAIN} or {facts.DTI_PLAIN} lending.", ["rbnz_lvr", "rbnz_dti"],

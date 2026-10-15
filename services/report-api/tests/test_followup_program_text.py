@@ -310,6 +310,16 @@ def test_a_generic_diligence_question_gets_checked_default_drafts(monkeypatch, q
     assert draft_of("case1", "ac_flood_plains") in texts(out)
 
 
+def test_the_pages_insurance_starter_is_answered_from_this_reports_facts(monkeypatch):
+    # web's starter. On a parcel with no flood layer mapped the answer step found nothing and the question went to a
+    # Google Search, although the hazard facts and the insurance notes are on the page.
+    q = "What do the mapped hazards mean for insurance?"
+    assert followup.property_meaning(q) and not followup.definition_question(q)
+    out, fake = run(monkeypatch, q, cls(), answers=[UNANSWERED], search_text="Hazards affect insurance.")
+    assert fake.searches == 0 and "web" not in out and out["out_of_scope"] is False
+    assert draft_of("case1", "ac_flood_plains") in texts(out) and any("insur" in t for t in texts(out))
+
+
 def test_what_the_hazard_maps_mean_is_answered_from_this_reports_facts(monkeypatch):
     q = "What do the hazard maps mean?"
     assert followup.property_meaning(q) and not followup.definition_question(q)

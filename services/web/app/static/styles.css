@@ -199,6 +199,7 @@ ul.plain { padding-left:1.2em; margin:6px 0 }
 #loan .edit { margin:4px 0 20px }
 .problem { padding:12px 14px; margin-top:8px; color:var(--heed); background:var(--heed-wash); border-radius:8px }
 .scroll { overflow-x:auto }
+.scroll + .muted { margin-top:8px }  /* the lenders with no published rate, under their table */
 table { border-collapse:collapse; font-size:.9rem; margin-top:6px }
 th, td { text-align:left; padding:6px 10px; border-bottom:1px solid var(--line); white-space:nowrap }
 .leaflet-container { color:#16202a; font:13px/1.4 system-ui, sans-serif }
@@ -245,6 +246,7 @@ body[data-seen="1"] .first-only { display:none }
 @media (prefers-reduced-motion: reduce) { .thinking i, .verbs span { animation:none } .verbs span:first-child { opacity:1 } }
 .suggest { display:block; width:100%; height:64px; border:0 }
 #ask-form { display:grid; grid-template-columns:auto 1fr auto; gap:6px 8px; padding:10px 16px 14px }
+#ask-form:has(#handle[hidden]) { grid-template-columns:1fr auto }
 #ask-note { grid-column:1 / -1; margin:0 0 2px 4px }  /* our note sits over the box it is about */
 #ask-form button { margin:0; min-height:48px }
 #handle { min-width:48px; padding:0 8px; color:var(--ink); background:none; border:1.5px solid var(--edge) }

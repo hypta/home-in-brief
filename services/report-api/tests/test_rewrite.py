@@ -128,6 +128,16 @@ def test_missing_qualifier_attribution_and_order_are_blocked():
                  "Reserve Bank limits.", ["F3"]).fails  # "LVR" dropped widens the claim
 
 
+def test_the_lending_definitions_are_kept_whole():
+    # live, 44A Liverpool Street: the rewrite dropped "of the price" and read as garbled; it falls back to the draft
+    assert V.MISSING_QUALIFIER in check(
+        "case2", "Your loan is high-LVR borrowing over {{F4.lvr_threshold}} and high-DTI debt over "
+                 "{{F4.dti_multiple}} times income, which the Reserve Bank limits.", ["F4"]).fails
+    assert check("case2", "Your loan is high-LVR (borrowing over {{F4.lvr_threshold}} of the price) and high-DTI "
+                          "(debt over {{F4.dti_multiple}} times income) lending, which the Reserve Bank limits.",
+                 ["F4"]).fails == []
+
+
 def test_added_cause_and_added_says_are_blocked():
     assert V.ADDED_CAUSE in check(
         "case2", "A First Home Loan is shown because your income is within Kāinga Ora's cap, making it is exempt "

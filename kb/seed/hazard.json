@@ -74,10 +74,10 @@
     "source_title": "Managing overland flow paths",
     "source_type": "official",
     "licence": "Copyright Auckland Council; no open licence found",
-    "next_step_en": "Ask the council or a drainage engineer whether the mapped overland flow path crosses this property and what the mapping means for it.",
+    "next_step_en": "Ask the council or a drainage engineer what the mapped overland flow path means for this property.",
     "verified_by": "Ting Wang",
-    "verified_at": "2026-10-13T06:48:30Z",
-    "verified_content_hash": "482fd8ecea3bad6990fff6093e2fc9e9bb63754847b5d3dd6507d8c3d09173d8",
+    "verified_at": "2026-10-15T10:13:39Z",
+    "verified_content_hash": "b2edbc90f112bdb1959347501f7d35d99f810caf3f28cb0841038ba7932a9888",
     "status": "verified",
     "last_check": null
   },

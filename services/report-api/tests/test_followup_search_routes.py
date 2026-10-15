@@ -351,3 +351,19 @@ def test_my_lvr_without_loan_data_says_there_is_not_enough_data_and_does_not_sea
     out, fake = run(monkeypatch, "What is my LVR?", cls(), b=b, answers=[UNANSWERED])
     assert fake.searches == 0 and "web" not in out
     assert out["answer"][0]["text"] == followup.INSUFFICIENT_EN and "not entered" in out["answer"][1]["text"]
+
+
+# ---- the search button with no search answer -------------------------------------------------------------------------
+def test_the_button_with_no_search_answer_gets_its_fields_sentence_only(monkeypatch):
+    # the conversation was about the last sale; the cladding button's reply must not pick that field's sentence too
+    history = [{"role": "user", "text": "Search the web for the last sale"},
+               {"role": "assistant", "text": facts_prompt.NO_SOURCE_TEXT["last_sale"]}]
+    out, fake = run(monkeypatch, "", cls(), history=history, b=body("case1") | {"search_field": "cladding"}, sources=False)
+    assert fake.tasks == ["search", "search"]  # no classify, no answer call
+    assert out["answer"] == [{"text": facts_prompt.NO_SOURCE_TEXT["cladding"], "source_ids": []}]
+    assert out["warnings"] == ["search_unavailable"] and out["search_outcome"] == "no_result"
+
+
+def test_a_search_that_could_not_run_is_named_unavailable(monkeypatch):
+    out, _ = run(monkeypatch, "", cls(), b=body("case1") | {"search_field": "cladding"}, search_error=ProviderError(429))
+    assert out["warnings"] == ["search_unavailable"] and out["search_outcome"] == "unavailable"

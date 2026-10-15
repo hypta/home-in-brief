@@ -50,7 +50,7 @@ classes are the council's own names and grading, not a rating by this tool.
 - **Steps.** "Records", then "Summary and check": how far the page has got, on one line and in the page's own
   type. The step under way says what is being done in the place of its name and with the name's own words ("Reading
   the records…", "Writing and checking the summary…"), and its mark pulses. A step ends when the page sees its request
-  finish, never on a timer. A failed step is dashed.
+  finish, never on a timer. A failed step is dashed. Once both are done the line goes.
 - **Checked sentence.** Highlighted, then one control, "Checked against N sources", that opens the source cards
   in place. A sentence with no source (a fixed sentence from the program) is plain.
 - **Source control.** Every other sourced line ends with "Source" or "N sources", and the control stays where it is
@@ -59,17 +59,18 @@ classes are the council's own names and grading, not a rating by this tool.
   dates are in the full list of the last section; the footer credits LINZ and Auckland Council on every page.
 - **Theme switch.** A plain line icon of the theme it switches to: a moon on a light page, a sun on a dark one.
 - **Next steps.** One tick list on the sheet, folded behind a line that says how many there are and how many are
-  ticked. A note repeats its next step only when the list does not have it.
+  ticked. A next step is said once on the page: not under a note when the list has it, and under the first note only when two notes share it.
 - **Map.** Its credits stay on its lower edge, always in view, in small type.
 - **Hazard layer.** The mark the layer has on the map, its name, what was found, a bar as long as the share of the
   parcel it covers (a measure of area, not of risk), its source. Layers are grouped by what was found, and each group says its caveat once.
 - **Lead figure.** The figure a section opens with, large, with a few words saying what it is; said once.
 - **Fold.** A row that names what is inside and how many: "First Home Loan rules (8 notes)". Notes that are the
-  same for every home, long rule lists and the rest of the council record are folded; a note about this property is not.
+  same for every home, long rule lists and the rest of the council record are folded; a note about this property is not. The note on flood cover stays in view where a flood layer is mapped on the parcel.
 - **Could not be found.** One dashed box that names what the records lack in one line, with the reasons behind it.
   A layer that could not be checked keeps its caveat sentence in view.
 - **Key figures.** Under the summary sentences, a short list the program writes from the records and the calculation:
-  the council valuation (not a market value) and the monthly repayments. Plain text, never highlighted, each with its
+  the council valuation (not a market value), the monthly repayments and, when the loan is above it, the high-DTI
+  threshold for this income. Plain text, never highlighted, each with its
   sources.
 - **Section.** A drawn number, the title, one line of digest from API values (shown while the section is closed), a chevron. Closed by default; the
   hazards section is open when a flood layer is mapped on the parcel. Four sections: hazards, this home, money, sources.
@@ -81,7 +82,8 @@ classes are the council's own names and grading, not a rating by this tool.
 - **Arrival.** After a lookup the sheet shows the steps alone; the sections, the map and the questions come in one piece
   when the summary is written or has failed (at most 20 s). A page restored in the tab, Update and a search that fills
   the form do not hide the page again.
-- **Questions.** One panel: a bar at the bottom of a narrow screen that opens upward, a column beside the results
+- **Questions.** One panel: a bar at the bottom of a narrow screen that opens upward (its handle shows once there is an
+  answer, or while the panel is open), a column beside the results
   from 1000 px. Until something has been asked it offers three questions to start with, and a fourth about this home's
   title type when the records give it; choosing one asks it. The box says "Ask about this home"; over it, in our hand until the first question is asked, "your own language is fine" and an arrow.
 - **Footer.** Two fixed lines, the same with or without results: what the tool is not, and the LINZ and Auckland

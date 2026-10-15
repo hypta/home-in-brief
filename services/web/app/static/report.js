@@ -6,8 +6,11 @@ export const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<
 // noreferrer: DuckDuckGo only jumps to the first result when the click does not name the page it came from
 // a PDF says so: some browsers save it instead of showing it
 export const link = (url, text) => `<a href="${/^https?:\/\//.test(url || "") ? esc(url) : "#"}" target="_blank" rel="noreferrer">${esc(text)}</a>${/\.pdf$/i.test(url || "") ? " (PDF)" : ""}`;
+// "1% chance each year": the layer's own description, "the AEP is the % probability of an event occurring each year"
+// (ArcGIS item e1b4f3e57dc64b6395098a17ac979eeb, its source card). The coastal erosion name keeps the council's codes:
+// its description explains ASCIE but not 2130 or RCP8.5+.
 const LAYERS = {flood_plain:"Flood plains", flood_prone_area:"Flood prone areas", overland_flow_path:"Overland flow paths",
-  coastal_inundation:"Coastal inundation (1% AEP)", landslide_shallow:"Landslide susceptibility - shallow",
+  coastal_inundation:"Coastal inundation (1% chance each year)", landslide_shallow:"Landslide susceptibility - shallow",
   landslide_large_scale:"Landslide susceptibility - large scale", liquefaction:"Liquefaction vulnerability",
   tsunami_evacuation_zone:"Tsunami evacuation zone", coastal_erosion:"Coastal erosion (ASCIE 2130, RCP8.5+)"};
 export const layerName = id => LAYERS[id] || id;
@@ -88,13 +91,15 @@ const noteOf = ({rules, inputs}) => { const told = new Set(rules?.kb_items_from_
 // A note about this property stays in view. Notes that are the same for every home, and the two long lists of lending rules, are folded with a count.
 const FOLDS = {always: "Background for any Auckland home", fhl_eligible: "First Home Loan rules", lvr_over: "Low-deposit lending rules"};
 const foldOf = k => Object.keys(FOLDS).find(rule => rule in (k.applies_when || {}));
+const FLOOD_COVER = "kb_flood_insurance_limit";  // the same for every home, but in view where a flood layer is mapped on the parcel
 // `placed`: topics whose notes another part of the block shows (under the record they explain)
 function notes(state, block, heading, placed = []) {
-  const mine = (state.kb || []).filter(k => (TOPIC_BLOCK[k.topic] || "notes") === block && !(placed.includes(k.topic) && !foldOf(k))
+  const flooded = floodMapped(state.ctx).length > 0, shut = k => !(flooded && k.id === FLOOD_COVER) && foldOf(k);
+  const mine = (state.kb || []).filter(k => (TOPIC_BLOCK[k.topic] || "notes") === block && !(placed.includes(k.topic) && !shut(k))
     && !Object.values(DEFINES).includes(k.id));
-  const note = noteOf(state), open = mine.filter(k => !foldOf(k));
+  const note = noteOf(state), open = mine.filter(k => !shut(k));
   return (open.length ? `<h4>${heading}</h4>${open.map(note).join("")}` : "")
-    + Object.entries(FOLDS).map(([rule, title]) => { const inside = mine.filter(k => foldOf(k) === rule); return fold(`${title} (${count(inside.length, "note")})`, inside.map(note).join("")); }).join("");
+    + Object.entries(FOLDS).map(([rule, title]) => { const inside = mine.filter(k => shut(k) === rule); return fold(`${title} (${count(inside.length, "note")})`, inside.map(note).join("")); }).join("");
 }
 
 // code: [block, text]. A code may carry a layer or bank id after a colon. CODES.md marks the hidden ones as not user-facing;
@@ -171,14 +176,14 @@ function hazards(state) {
   const none = (priority, name) => ctx.hazards.some(h => h.priority === priority) ? "" : `<p class="problem">No ${name} layer was checked. ${NO_RISK_CAVEAT}</p>`;
   // One line says how the layers fell; the layers found come first. Those not shown are named on one line, their caveat with them.
   const isMapped = h => h.status === "intersects" && !classed(h), shown = ctx.hazards.filter(h => h.status === "none"), gaps = ctx.hazards.filter(unchecked);
-  const tally = [[ctx.hazards.filter(isMapped).length, `mapped ${at}`], [ctx.hazards.filter(classed).length, "region-wide layers, where the class is the finding"],
+  const tally = [[ctx.hazards.filter(isMapped).length, `mapped ${at}`], [ctx.hazards.filter(classed).length, "graded across the region"],
     [shown.length, `not shown ${at}`], [gaps.length, "could not be checked"]].filter(([n]) => n).map(([n, what]) => `${n} ${what}`).join("; ");
   return `${ctx.parcel.spatial_method === "parcel" || ctx.address.status !== "found" ? "" : `<p class="problem">No parcel was matched, so the layers were checked at the address point only and parcel coverage is not calculated.</p>`}
     ${none("primary", "flood")}${none("secondary", "other")}
     ${ctx.hazards.length ? `<p class="tally">Of the ${count(ctx.hazards.length, "council layer")} checked: ${tally}.</p>` : ""}
     ${group("Could not be checked", `These layers could not be checked. ${NO_RISK_CAVEAT}`, unchecked, h => esc(REASONS[h.reason] || "") + dev(h.reason || h.status))}
     ${group(`Mapped ${at}`, "", isMapped, h => mapped(h, at))}
-    ${group("Region-wide layers, where the class is the finding", "", classed, h => mapped(h, at))}
+    ${group("Graded across the region", "", classed, h => mapped(h, at))}
     ${shown.length ? `<h4>Not shown ${at}</h4><div class="note">${shown.map(h => esc(layerName(h.layer))).join(", ")}. The council does not show these layers ${at}. ${NO_RISK_CAVEAT}
       ${control(shown.map(h => card(h.source_id, [h.data_date && "Data date " + h.data_date])))}</div>` : ""}
     ${warnings(state, "hazards")}${notes(state, "hazards", "Notes on these hazards and insurance")}`;
@@ -238,14 +243,16 @@ const SCENARIOS = {
     ${stressRow(r, `${money(s.stress_monthly)} per month at the highest of these rates (${money(s.stress_delta_monthly)} more).`)}
     ${table(["Bank", "Rate", "Basis", "Collected"],
       s.per_bank.map(b => [esc(bank(b.bank_id)), pct(b.rate_pct), esc(BASIS[b.basis] || b.basis), esc((b.captured_at || "not recorded").slice(0, 10))])) + warnings({rules: r}, "loan", true)}`),
-  first_home_loan: (s, r) => (s.eligibility === "conditional" ? `<div class="problem">${esc(s.eligibility_note)}</div>` : "")
+  // a lender with neither a rate nor a repayment is named on one line under the table, not as a row of "not published"
+  first_home_loan: (s, r, blank = l => l.rate_pct == null && l.monthly == null) => (s.eligibility === "conditional" ? `<div class="problem">${esc(s.eligibility_note)}</div>` : "")
     + fold(`First Home Loan (${count(s.lenders.length, "lender")})`, `
     <div class="note">${esc(s.lmi_note)} ${cite(s.source_ids)}</div>
     ${row("Repayment every two weeks", span(s.fortnightly_range, money))}
     ${stressRow(r, `${span(s.stress_monthly_range, money)} per month.`)}
     ${row("Insurance premium at the full rate", money(s.lmi_amount) + (s.full_premium_assumed_for.length ? `. The full premium is assumed for ${s.full_premium_assumed_for.map(id => "the lender " + esc(bank(id))).join(", ")}.` : ""))}
     ${table(["Lender", "Rate", "Basis", "Premium passed on", "Monthly", "Every two weeks", `Monthly at +${r.stress_add_pp} points`],
-      s.lenders.map(l => [esc(l.name), or(l.rate_pct, pct), esc(BASIS[l.rate_basis] || l.rate_basis), or(l.lmi_passthrough_pct, pct), or(l.monthly, money), or(l.fortnightly, money), or(l.stress_monthly, money)]))}`),
+      s.lenders.filter(l => !blank(l)).map(l => [esc(l.name), or(l.rate_pct, pct), esc(BASIS[l.rate_basis] || l.rate_basis), or(l.lmi_passthrough_pct, pct), or(l.monthly, money), or(l.fortnightly, money), or(l.stress_monthly, money)]))}
+    ${s.lenders.some(blank) ? `<p class="muted">No published rate for: ${s.lenders.filter(blank).map(l => esc(l.name)).join(", ")}.</p>` : ""}`),
   user_rate: (s, r) => fold(`At the rate you entered (${pct(s.rate_pct)})`, `
     ${row("Repayment every two weeks", money(s.fortnightly))}
     ${stressRow(r, `${money(s.stress_monthly)} per month (${money(s.stress_delta_monthly)} more).`)}`),
@@ -324,14 +331,16 @@ const steps = (at, failed) => `<ol class="steps" aria-label="How far this page h
 // said as such, and nothing is asked again until the reader chooses to.
 const unavailable = (what, err) => err.code === "rate_limited" || err.code === "busy" ? "Too many requests at the moment. Wait a few seconds, then try again."
   : `The ${what} is unavailable right now. The rest of the page is not affected.`;
-// The council valuation and the monthly repayments, written by the program from the records and the calculation: plain
-// text, never highlighted, each with its sources.
+// The council valuation, the monthly repayments and, when the loan is above it, the high-DTI threshold for this income,
+// written by the program from the records and the calculation: plain text, never highlighted, each with its sources.
 function keyFigures(ctx, r) {
   const cv = ctx.property.cv, sc = id => r.scenarios.find(s => s.id === id), own = sc("user_rate"), bank = sc("bank_standard"), fhl = sc("first_home_loan");
   const pay = [own ? [money(own.monthly), `a month at ${pct(own.rate_pct)}, the rate you entered`, own] : bank && [span(bank.monthly_range, money), "a month at the banks' published 1-year rates", bank],
     fhl && [span(fhl.monthly_range, money), "a month with a First Home Loan", fhl]].filter(Boolean);
+  const dti = r.flags.find(f => f.id === "dti_over_6");
   const lines = [cv.status === "found" && `<li>Council valuation ${money(cv.value)}, which is not a market value. ${cite(cv.source_id)}</li>`,
-    ...pay.map(([amount, what, s]) => `<li>${amount} ${what}. ${cite(s.source_ids)}</li>`)].filter(Boolean);
+    ...pay.map(([amount, what, s]) => `<li>${amount} ${what}. ${cite(s.source_ids)}</li>`),
+    dti && r.high_dti_threshold != null && `<li>A loan of ${money(r.high_dti_threshold)}: above it, total debt is more than 6 times this income, the Reserve Bank's high-DTI threshold. ${cite(dti.source_ids)}</li>`].filter(Boolean);
   return lines.length ? `<ul class="keyfigs">${lines.join("")}</ul>` : "";
 }
 
@@ -344,7 +353,7 @@ function summary({ctx, rules, rulesError, kb, report: r, reportError: err, done,
     : `<p class="problem">${unavailable("summary", err)}</p><button type="button" id="retry-summary">Try again</button>`);
   if (!r) return steps(1);
   const items = byId(kb || []), drafts = r.model === "code-draft";  // report-api wrote every sentence itself: no model call could be made
-  return steps(2) + r.summary.map(s => checked(s, items, jump(s, items, ctx))).join("") + keyFigures(ctx, rules)
+  return r.summary.map(s => checked(s, items, jump(s, items, ctx))).join("") + keyFigures(ctx, rules)  // both steps done: the line has said what it had to
     + (drafts ? `<p class="muted">The model was not used for this summary. These sentences are the program's own, written from the same facts.</p>` : "")
     + `<details class="how"${first ? " open" : ""}><summary>How this summary is made</summary><ol>
       <li>The program collects the facts from council and LINZ records, your loan figures and the notes that apply.</li>
@@ -417,7 +426,9 @@ function thread({ctx, rules, rulesError, kb: onPage, thread: turns}) {
       + (a.answer.length ? `<div class="say"${a.language ? ` lang="${esc(a.language)}"` : ""}>${a.answer.map(s => checked(s, items)).join("")}</div>` : "")
       + (a.web ? "" : list(linked(a)))
       + ((a.warnings || []).includes("generation_degraded") ? `<p class="muted rec">The model was not used for this answer. These sentences are the program's own.</p>` : "")
-      + ((a.warnings || []).includes("search_unavailable") ? `<p class="muted rec">A web search for this gave no answer just now. You can ask again later.</p>` : "")
+      // a search that ran and found nothing is said plainly; only one that could not run is worth trying again
+      + ((a.warnings || []).includes("search_unavailable") ? `<p class="muted rec">${a.search_outcome === "no_result"
+        ? "A web search found no answer for this address." : "A web search could not be made just now. You can ask again later."}</p>` : "")
       + addedLine(added, false) + addedLine(added, true);
   return turns.map(t => `<div class="msg you">${esc(t.question)}</div><div class="msg">${answer(t)}</div>`).join("")
     + (!rules && rulesError ? `<p class="problem">Questions are unavailable until the repayment figures can be calculated.</p>` : "");
@@ -435,11 +446,11 @@ function listSources({ctx}) {
 }
 
 // The summary and the answers arrive after the rest and are drawn on their own: redrawing the other blocks would close the sources a reader has opened.
-// A next step on the summary's list is not said again under the note it comes from; without the list, the notes keep theirs.
+// A next step is said once: not under a note when the summary's list has it, and only under the first note that has it.
 function drawSummary(state) {
   draw("summary", summary, state);
-  const listed = new Set((state.report?.next_steps || []).map(s => s.text));
-  for (const el of document.querySelectorAll("[data-step]")) el.hidden = listed.has(el.dataset.step);
+  const said = new Set((state.report?.next_steps || []).map(s => s.text));
+  for (const el of document.querySelectorAll("[data-step]")) { el.hidden = said.has(el.dataset.step); said.add(el.dataset.step); }
   listSources(state);
 }
 // While the reader has the address at the top of the sheet in view, the browser must not hold a record or the footer in
@@ -463,7 +474,9 @@ export function renderThread(state) {
   const title = state.ctx?.property.title_type.value;
   $("starter-title").hidden = !(title && (state.kb || []).some(k => k.topic === "title_type"));
   $("starter-title").textContent = `What does a ${String(title).toLowerCase()} title mean?`;
-  $("handle-count").textContent = state.thread.length; $("thread").scrollTop = $("thread").scrollHeight;  // the newest turn is in view
+  // the phone's handle shows once there is something to show or hide: an answer, or the panel open
+  $("handle-count").textContent = state.thread.length || ""; $("handle").hidden = !state.thread.length && !$("ask-panel").classList.contains("open");
+  $("thread").scrollTop = $("thread").scrollHeight;  // the newest turn is in view
   listSources(state);
 }
 
@@ -522,7 +535,8 @@ export function render(state) {
   held(() => {
   const {ctx} = state;
   sources = state.sources; banks = state.banks; cited = []; noted = {};
-  draw("readout", () => state.inputs ? readout(state) : "<b>Your details</b>");
+  // while the figures are calculated the readout keeps the loan details as typed (renderWait)
+  if (state.inputs || state.rulesError) draw("readout", () => state.inputs ? readout(state) : "<b>Your details</b>");
   try { for (const [id, text] of Object.entries(digests(state))) $("d-" + id).textContent = text; } catch (e) { console.error(e); }
   $("matched").textContent = ctx.address.matched || "Address not found";
   $("meta").textContent = ctx.address.status !== "found" ? gone(ctx.address)
