@@ -50,7 +50,6 @@ DTI_PLAIN = "high-DTI (debt-to-income)"
 # Definition alone, placed after "lending" when only one flag is on.
 LVR_DEF, DTI_DEF = "borrowing over {{$.lvr_threshold}} of the price", "debt over {{$.dti_multiple}} times income"
 
-DEBTS_ASSUMED = "no existing debts were entered, so the DTI assumes none"
 
 # ---- fact list (rewrite design) -------------------------------------------------------------------
 # Code builds a list of facts; Gemini rewrites them freely but writes every value as a placeholder

@@ -85,7 +85,7 @@ CHECKS = {
         ("S", r"not show|do not|does not|show no", PRIMARY4), ("S", r"1990s", ["kb_leaky_build_era"]),
         ("S", PREFIX + r".*monolithic", None),
         ("S", r"same decade|consistent|falls (with)?in|match", None),
-        ("S", r"debts?.*(none|zero|no )|no (other |existing )?debts", None), ("S", r"unit title", None),
+        ("not", r"no (other |existing )?debts"), ("S", r"unit title", None),  # the page says it on the DTI line
         ("year", r"1998"), ("not", r"\bdiffer"), ("not", r"\b65\b"), ("not", r"\b2\.27\b"),
         ("N", "kb_leaky_build_era"), ("N", "kb_monolithic_cladding"),
     ],
