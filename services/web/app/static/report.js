@@ -45,7 +45,7 @@ const span = (r, fmt) => !r ? "not available" : r[0] === r[1] ? fmt(r[0]) : `${f
 const or = (v, fmt) => v == null ? "not published" : fmt(v);
 const list = items => items.length ? `<ul class="plain">${items.map(i => `<li>${i}</li>`).join("")}</ul>` : "";
 const row = (name, detail) => `<div class="row"><b>${name}</b><div class="detail">${detail}</div></div>`;
-const fold = (title, inside) => inside ? `<details class="more"><summary>${title}</summary>${inside}</details>` : "";
+const fold = (title, inside, open) => inside ? `<details class="more"${open ? " open" : ""}><summary>${title}</summary>${inside}</details>` : "";
 const where = ctx => ctx.parcel.spatial_method === "parcel" ? "on this parcel" : "at the address point";
 const unchecked = h => h.status === "unavailable" || h.status === "not_found";
 export const floodMapped = ctx => ctx.hazards.filter(h => h.priority === "primary" && h.status === "intersects");
@@ -361,7 +361,7 @@ function summary({ctx, rules, rulesError, kb, report: r, reportError: err, done,
       <li>Each sentence is checked against the sources it cites. One that fails is replaced by the program's own wording.</li></ol>
       <p class="muted">The check compares wording and figures. It cannot judge everything a sentence means, so open the sources of any sentence that matters to you.</p></details>`
     + (r.next_steps.length ? `<h3>Next steps</h3>${fold(`<span>${count(r.next_steps.length, "thing")} to ask or check<span id="ticked">${ticked(r.next_steps.filter(s => done.has(s.text)).length)}</span></span>`,
-        `<ul class="todo">${r.next_steps.map(s => `<li><label><input type="checkbox"${done.has(s.text) ? " checked" : ""}><span>${esc(s.text)}</span></label>${control(cardsOf(s, items))}</li>`).join("")}</ul>`)}` : "")
+        `<ul class="todo">${r.next_steps.map(s => `<li><label><input type="checkbox"${done.has(s.text) ? " checked" : ""}><span>${esc(s.text)}</span></label>${control(cardsOf(s, items))}</li>`).join("")}</ul>`, true)}` : "")  // open: what to do about each sentence
     + notFound(r.not_found_notes);
 }
 export const ticked = n => n ? `, ${n} ticked` : "";  // said on the folded list's line

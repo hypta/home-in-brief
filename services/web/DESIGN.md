@@ -58,8 +58,8 @@ classes are the council's own names and grading, not a rating by this tool.
   the link and nothing else. The words quoted from it, the date of a hazard layer's data, its credit line, licence and
   dates are in the full list of the last section; the footer credits LINZ and Auckland Council on every page.
 - **Theme switch.** A plain line icon of the theme it switches to: a moon on a light page, a sun on a dark one.
-- **Next steps.** One tick list on the sheet, folded behind a line that says how many there are and how many are
-  ticked. A next step is said once on the page: not under a note when the list has it, and under the first note only when two notes share it.
+- **Next steps.** One tick list on the sheet, open under a line that says how many there are and how many are
+  ticked; the line folds it away. A next step is said once on the page: not under a note when the list has it, and under the first note only when two notes share it.
 - **Map.** Its credits stay on its lower edge, always in view, in small type.
 - **Hazard layer.** The mark the layer has on the map, its name, what was found, a bar as long as the share of the
   parcel it covers (a measure of area, not of risk), its source. Layers are grouped by what was found, and each group says its caveat once.

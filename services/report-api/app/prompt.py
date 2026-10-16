@@ -293,6 +293,14 @@ def _lending(req: ReportRequest, sel: list[str], ev: Evidence) -> list[_Topic]:
     out = []
     flags, warnings = set(req.flags()), set(req.warnings())
     lvr, dti = "lvr_over_80" in flags, "dti_over_6" in flags
+    ht = req.user_inputs.get("household_type")
+    fhl = next((s for s in req.scenarios() if s.get("id") == "first_home_loan"), None)
+    caps = req.rules_output.get("fhl_income_caps") or {}
+    conditional = bool(fhl) and fhl.get("eligibility") == "conditional" and None not in (
+        to_decimal(caps.get("multiple_or_dependants")), to_decimal(caps.get("single")))
+    exempt = [k for k, on, kb_id in (("LVR", lvr, "kb_fhl_lvr_not_restricted"),
+                                     ("DTI", dti, "kb_fhl_dti_not_restricted"))
+              if on and kb_id in sel] if fhl and not conditional else []
     # The page says on the DTI line that no debts were entered; the summary leaves it out, so its five sentences go to
     # the hazards, the loan, the First Home Loan, the title and the build era.
     if lvr or dti:
@@ -301,34 +309,39 @@ def _lending(req: ReportRequest, sel: list[str], ev: Evidence) -> list[_Topic]:
         dti_def = facts.DTI_FLAGGED if "kb_rbnz_dti" in sel else facts.DTI_PLAIN
         cite = (["rbnz_lvr", "kb_rbnz_lvr"] if lvr else []) + (["rbnz_dti", "kb_rbnz_dti"] if dti else [])
         cite = [c for c in cite if not c.startswith("kb_") or c in sel]
-        if lvr and dti:
-            say = f"Your loan is {lvr_def} and {dti_def} lending, which the Reserve Bank limits."
+        if exempt:
+            # A First Home Loan is shown and exempt: the bank loan and the exemption are one sentence. "Your loan is
+            # ... lending, which the Reserve Bank limits" followed by "it is exempt" read as two claims about one loan.
+            # The definitions stay on the page's LVR and DTI rows: 25 words do not hold them and the exemption.
+            flagged = [k for k, on in (("LVR", lvr), ("DTI", dti)) if on]
+            tail = "both" if len(exempt) == 2 else "it" if len(flagged) == 1 else f"the {exempt[0]} limit"
+            say = (f"A standard bank loan here is {' and '.join('high-' + k for k in flagged)} lending, which the "
+                   f"Reserve Bank limits; a First Home Loan is exempt from {tail}.")
+            out.append(t.set(say, cite + [f"kb_fhl_{k.lower()}_not_restricted" for k in exempt],
+                             keep=["standard bank loan", "exempt"]))
         else:
-            kb_on = "kb_rbnz_lvr" in sel if lvr else "kb_rbnz_dti" in sel
-            term = "high-LVR" if lvr else "high-DTI"
-            define = (facts.LVR_DEF if lvr else facts.DTI_DEF) if kb_on else \
-                ("loan-to-value" if lvr else "debt-to-income")
-            say = f"Your loan is {term} lending ({define}), which the Reserve Bank lets banks offer only in limited amounts."
-        # the definitions are kept whole: "high-LVR borrowing over 80% and ..." lost "of the price" and read as garbled
-        keep = ["your loan"] + (["of the price"] if lvr and "kb_rbnz_lvr" in sel else []) \
-            + (["times income"] if dti and "kb_rbnz_dti" in sel else [])
-        out.append(t.set(_lvr_slot(t, say), cite, keep=keep))
+            if lvr and dti:
+                say = f"Your loan is {lvr_def} and {dti_def} lending, which the Reserve Bank limits."
+            else:
+                kb_on = "kb_rbnz_lvr" in sel if lvr else "kb_rbnz_dti" in sel
+                term = "high-LVR" if lvr else "high-DTI"
+                define = (facts.LVR_DEF if lvr else facts.DTI_DEF) if kb_on else \
+                    ("loan-to-value" if lvr else "debt-to-income")
+                say = (f"Your loan is {term} lending ({define}), which the Reserve Bank lets banks offer only in "
+                       "limited amounts.")
+            # the definitions are kept whole: "high-LVR borrowing over 80% and ..." lost "of the price", read as garbled
+            keep = ["your loan"] + (["of the price"] if lvr and "kb_rbnz_lvr" in sel else []) \
+                + (["times income"] if dti and "kb_rbnz_dti" in sel else [])
+            out.append(t.set(_lvr_slot(t, say), cite, keep=keep))
     elif req.rules_output.get("lvr_pct") is not None:
         out.append(_Topic(O_LENDING, P_LENDING_PLAIN, "lending").set(
             f"Your loan is not Reserve Bank {facts.LVR_PLAIN} or {facts.DTI_PLAIN} lending.", ["rbnz_lvr", "rbnz_dti"],
             keep=["your loan"]))
 
-    ht = req.user_inputs.get("household_type")
-    fhl = next((s for s in req.scenarios() if s.get("id") == "first_home_loan"), None)
     if fhl:
         t = _Topic(O_FHL, P_FHL, "first_home_loan")
-        exempt = [k for k, on, kb_id in (("LVR", lvr, "kb_fhl_lvr_not_restricted"),
-                                         ("DTI", dti, "kb_fhl_dti_not_restricted")) if on and kb_id in sel]
         say = "A First Home Loan is shown because your income is within Kāinga Ora's cap"
         cite = ["kainga_ora_fhl"]
-        caps = req.rules_output.get("fhl_income_caps") or {}
-        conditional = fhl.get("eligibility") == "conditional" and None not in (
-            to_decimal(caps.get("multiple_or_dependants")), to_decimal(caps.get("single")))
         if conditional:
             # income between the single and the multiple/dependants caps, household type not entered (rules-api
             # fhl_household_type_unknown): the condition is the fact; no room for the exemption clause in 25 words
@@ -344,16 +357,14 @@ def _lending(req: ReportRequest, sel: list[str], ev: Evidence) -> list[_Topic]:
             out.append(t.set(say, cite + [src_s, src_m], keep=["may be available", "single-buyer", "but within",
                                                                  "multiple buyers or dependants"]))
         elif exempt:
-            say += f"; it is exempt from Reserve Bank {' and '.join(exempt)} limits"
-            cite += [f"kb_fhl_{k.lower()}_not_restricted" for k in exempt]
+            pass  # the exemption is said in the lending sentence
         elif "kb_fhl_deposit_5pct" in sel:
             d = t.slot("min_deposit", facts.FHL_MIN_DEPOSIT_PCT, "pct", "Kāinga Ora's minimum deposit (a percentage)",
                        "kb_fhl_deposit_5pct", before=r"\bat least")
             say += f"; Kāinga Ora requires a deposit of at least {d}"
             cite.append("kb_fhl_deposit_5pct")
-        # "it is exempt" keeps the subject: "your income is within the cap and is exempt" makes the income exempt
         if not conditional:
-            out.append(t.set(say + ".", cite, keep=["because your income"] + (["it is exempt"] if exempt else [])))
+            out.append(t.set(say + ".", cite, keep=["because your income"]))
         if ht in HOUSEHOLD:  # user-input meaning: which cap was used (no amount)
             e = _Topic(O_FHL, P_EXTRA, "user_input")
             hh = e.slot("household", HOUSEHOLD[ht], "text", "the household type you entered", "kainga_ora_fhl")

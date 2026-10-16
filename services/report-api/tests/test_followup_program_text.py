@@ -176,7 +176,7 @@ def test_my_lvr_in_another_language_is_the_english_program_sentence(monkeypatch,
 
 
 # what the Reserve Bank says about a loan that high follows the buyer's own figure: the sentence a source states
-HIGH_LVR = "Your loan is high-LVR lending (borrowing over 80% of the price), which the Reserve Bank lets banks offer only in limited amounts."
+HIGH_LVR = "A standard bank loan here is high-LVR lending, which the Reserve Bank limits; a First Home Loan is exempt from it."
 
 
 def test_my_lvr_in_english_and_chinese_is_unchanged(monkeypatch):

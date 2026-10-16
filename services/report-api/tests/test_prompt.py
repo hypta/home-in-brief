@@ -26,7 +26,8 @@ def test_topics_cite_known_ids_and_stay_within_five(case):
 def test_case1_prompt_has_placeholders_and_no_values():
     text, tops = build("case1")
     facts_part = text.split("CASE DATA")[-1]
-    assert "{{F1.flood_plain_pct}}" in facts_part and "{{F2.lvr_threshold}}" in facts_part
+    assert "{{F1.flood_plain_pct}}" in facts_part
+    assert "{{F3.lvr_threshold}}" in build("case3")[0].split("CASE DATA")[-1]  # case1's lending sentence has no slot
     import re
     values_part = re.sub(r'F\d+|"(?:words|negations)": \d+', "", facts_part)
     assert not any(c.isdigit() for c in values_part)
@@ -133,10 +134,13 @@ def test_rubric_wants_the_users_year_but_never_a_web_search_year(case, user_year
 
 
 def test_known_wording_fixes():
-    tops = {c: " ".join(t["say"] for t in build(c)[1]) for c in ("case1", "case4", "case5")}
-    assert "exempt from Reserve Bank LVR limits" in tops["case1"]
-    assert "borrowing over 80% of the price" in tops["case1"]
-    assert "debt over 6 times income" in tops["case4"]
+    tops = {c: " ".join(t["say"] for t in build(c)[1]) for c in ("case1", "case3", "case4", "case5")}
+    # a First Home Loan is shown and exempt: the bank loan and the exemption are one sentence (no "your loan ... it is
+    # exempt"); without it the definitions are written out
+    assert "A standard bank loan here is high-LVR lending, which the Reserve Bank limits; a First Home Loan is exempt " \
+           "from it." in tops["case1"] and "it is exempt" not in tops["case1"]
+    assert "a First Home Loan is exempt from both." in tops["case4"]
+    assert "borrowing over 80% of the price" in tops["case3"] and "debt over 6 times income" in tops["case3"]
     assert "year built could not be checked" in tops["case4"]
     assert "no existing debts" not in tops["case5"]  # the page says it on the DTI line
     assert "zero" not in tops["case5"]

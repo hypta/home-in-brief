@@ -224,9 +224,9 @@ def test_rewrite_sources_come_from_the_facts_not_from_the_model():
 
 
 def test_rewrite_threshold_cannot_become_a_personal_ratio():
-    assert V.BARE_NUMBER in _rw('case1', 'Your LVR is 80%.', ['F2'])[0].fails
-    r, _ = _rw('case1', 'Your loan has an LVR of {{F2.lvr_threshold}}, which the Reserve Bank lets banks offer only '
-                        'in limited amounts.', ['F2'])
+    assert V.BARE_NUMBER in _rw('case3', 'Your LVR is 80%.', ['F3'])[0].fails
+    r, _ = _rw('case3', 'Your loan has an LVR of {{F3.lvr_threshold}} and a DTI over {{F3.dti_multiple}} times income, '
+                        'which the Reserve Bank limits.', ['F3'])
     assert V.SLOT_CONTEXT in r.fails  # the threshold must follow "over"/"above"
 
 

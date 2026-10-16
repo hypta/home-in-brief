@@ -121,21 +121,24 @@ def test_missing_qualifier_attribution_and_order_are_blocked():
         "case3", "The shallow landslide layer rates this area {{F2.rating}}, though regional ratings do not measure "
                  "risk on individual properties.", ["F2"]).fails
     assert V.QUALIFIER_ORDER in check(
-        "case1", "A First Home Loan, it is exempt from Reserve Bank LVR limits, is shown because your income is "
-                 "within Kāinga Ora's cap.", ["F3"]).fails
+        "case1", "A First Home Loan is exempt from it; a standard bank loan here is high-LVR lending, which the Reserve "
+                 "Bank limits.", ["F2"]).fails
     assert V.MISSING_QUALIFIER in check(
-        "case1", "A First Home Loan is shown because your income is within Kāinga Ora's cap; it is exempt from "
-                 "Reserve Bank limits.", ["F3"]).fails  # "LVR" dropped widens the claim
+        "case1", "A standard bank loan here is high lending, which the Reserve Bank limits; a First Home Loan is "
+                 "exempt from it.", ["F2"]).fails  # "LVR" dropped widens the claim
+    assert V.MISSING_QUALIFIER in check(
+        "case1", "Your loan is high-LVR lending, which the Reserve Bank limits; a First Home Loan is exempt from it.",
+        ["F2"]).fails  # "your loan ... exempt" is the reading the sentence replaces
 
 
 def test_the_lending_definitions_are_kept_whole():
     # live, 44A Liverpool Street: the rewrite dropped "of the price" and read as garbled; it falls back to the draft
     assert V.MISSING_QUALIFIER in check(
-        "case2", "Your loan is high-LVR borrowing over {{F4.lvr_threshold}} and high-DTI debt over "
-                 "{{F4.dti_multiple}} times income, which the Reserve Bank limits.", ["F4"]).fails
-    assert check("case2", "Your loan is high-LVR (borrowing over {{F4.lvr_threshold}} of the price) and high-DTI "
-                          "(debt over {{F4.dti_multiple}} times income) lending, which the Reserve Bank limits.",
-                 ["F4"]).fails == []
+        "case3", "Your loan is high-LVR borrowing over {{F3.lvr_threshold}} and high-DTI debt over "
+                 "{{F3.dti_multiple}} times income, which the Reserve Bank limits.", ["F3"]).fails
+    assert check("case3", "Your loan is high-LVR (borrowing over {{F3.lvr_threshold}} of the price) and high-DTI "
+                          "(debt over {{F3.dti_multiple}} times income) lending, which the Reserve Bank limits.",
+                 ["F3"]).fails == []
 
 
 def test_added_cause_and_added_says_are_blocked():

@@ -321,4 +321,4 @@ def test_my_lvr_is_given_even_when_the_answer_step_says_nothing_answers_it(monke
     out, fake = run(monkeypatch, "What is my LVR?", cls(), answers=[UNANSWERED])
     assert fake.searches == 0 and texts(out) == [
         "Your LVR, the loan as a share of the price, is 90%, calculated from the price and deposit you entered.",
-        "Your loan is high-LVR lending (borrowing over 80% of the price), which the Reserve Bank lets banks offer only in limited amounts."]
+        "A standard bank loan here is high-LVR lending, which the Reserve Bank limits; a First Home Loan is exempt from it."]

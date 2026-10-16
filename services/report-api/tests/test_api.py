@@ -30,8 +30,8 @@ def fake(*answers):
 GOOD = [
     {"text": "Council maps show Flood Plains covering {{F1.flood_plain_pct}} of this parcel, Flood Prone Areas "
              "{{F1.flood_prone_area_pct}}, and an overland flow path crossing it.", "fact_ids": ["F1"]},
-    {"text": "Your loan counts as high-LVR lending (borrowing over {{F2.lvr_threshold}} of the price), which the "
-             "Reserve Bank lets banks offer only in limited amounts.", "fact_ids": ["F2"]},
+    {"text": "A standard bank loan here counts as high-LVR lending, which the Reserve Bank limits; a First Home "
+             "Loan is exempt from it.", "fact_ids": ["F2"]},
     {"text": "LINZ records the title as {{F5.title_type}}; Settled.govt.nz says you own the land and generally "
              "anything built on it.", "fact_ids": ["F5"]},
     {"text": "Your loan would be $720,000.", "fact_ids": ["F2"]},
@@ -39,11 +39,11 @@ GOOD = [
 GOOD_FILLED = [
     "Council maps show Flood Plains covering 51.2% of this parcel, Flood Prone Areas 50.8%, and an overland flow "
     "path crossing it.",
-    "Your loan counts as high-LVR lending (borrowing over 80% of the price), which the Reserve Bank lets banks "
-    "offer only in limited amounts.",
+    "A standard bank loan here counts as high-LVR lending, which the Reserve Bank limits; a First Home Loan is "
+    "exempt from it.",
     "LINZ records the title as Freehold; Settled.govt.nz says you own the land and generally anything built on it.",
 ]
-CASE1_FHL = "A First Home Loan is shown because your income is within Kāinga Ora's cap; it is exempt from Reserve Bank LVR limits."
+CASE1_FHL = "A First Home Loan is shown because your income is within Kāinga Ora's cap."
 CASE1_USE = ("The council valuation describes the improvements as RESERVE LAND and the land use as Recreational - "
              "vacant; the year built could not be checked.")
 
