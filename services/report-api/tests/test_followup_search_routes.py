@@ -104,7 +104,7 @@ def run(monkeypatch, question, classify, case="case1", history=(), b=None, **kw)
 
 # ---- 1. advice is declined before any search, whatever scope classify gave it ----------------------------------------
 @pytest.mark.parametrize("question, classify", [
-    # Codex's first case: classify says in scope and not searchable, the answer step says nothing answers it
+    # First review case: classify says in scope and not searchable, the answer step says nothing answers it
     ("Should I buy this house?", cls(out_of_scope=False, searchable=False)),
     ("Is this a good price?", cls()),
     # (a purchase question that also names a report topic, "... given when it was built?", gets the facts and the
@@ -320,7 +320,7 @@ def test_the_ratio_is_allowed_only_in_the_program_sentence():
 
 
 def test_a_model_sentence_that_gives_the_ratio_another_meaning_is_never_shown(monkeypatch):
-    # Codex's re-review case: the same placeholder twice, the second labelled DTI. Naming the program fact gives its own
+    # Re-review case: the same placeholder twice, the second labelled DTI. Naming the program fact gives its own
     # sentence; citing another fact cannot fill the placeholder; a typed number is a computed value
     f, _ = lvr_fact()
     for text, ids in ((f"Your LVR is {{{{{f.id}.lvr_pct}}}} and your DTI is {{{{{f.id}.lvr_pct}}}}.", [f.id]),

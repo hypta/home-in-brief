@@ -1,6 +1,6 @@
 {
   "case_id": "case3",
-  "address_label": "1/15 Lyttelton Avenue, Forrest Hill, Auckland",
+  "address_label": "1/15 Example Avenue, Example Hill, Auckland",
   "property_context": {
     "property": {
       "cv": {
@@ -102,19 +102,19 @@
         "status": "found",
         "reason": null,
         "source_id": "ac_valuation",
-        "value": "Flat 1 DP 175842, 1/2 SH Lot 28 DP 47933"
+        "value": "Flat 1 DP 999001, 1/2 SH Lot 1 DP 999002"
       },
       "record_of_title": {
         "status": "found",
         "reason": null,
         "source_id": "ac_valuation",
-        "value": "NA108B/48"
+        "value": "NA999A/1"
       },
       "valuation_number": {
         "status": "found",
         "reason": null,
         "source_id": "ac_valuation",
-        "value": "32433-00000000700-A"
+        "value": "99999-00000000001-A"
       },
       "local_board": {
         "status": "found",
@@ -256,37 +256,37 @@
       "reason": null,
       "source_id": "linz_addresses",
       "input": null,
-      "matched": "1/15 Lyttelton Avenue, Forrest Hill, Auckland",
-      "linz_address_id": 1089154,
-      "lat": -36.7684164391,
-      "lng": 174.7425728646
+      "matched": "1/15 Example Avenue, Example Hill, Auckland",
+      "linz_address_id": 9900002,
+      "lat": -36.77,
+      "lng": 174.74
     },
     "parcel": {
       "status": "found",
       "reason": null,
       "source_id": "linz_parcels",
-      "parcel_id": 5011038,
+      "parcel_id": 9900012,
       "spatial_method": "parcel"
     },
     "links": [
       {
         "id": "homes",
         "label": "Homes.co.nz",
-        "url": "https://duckduckgo.com/?q=%5Csite%3Ahomes.co.nz+%221%2F15+Lyttelton+Avenue%22+Forrest+Hill+Auckland",
+        "url": "https://duckduckgo.com/?q=%5Csite%3Ahomes.co.nz+%221%2F15+Example+Avenue%22+Example+Hill+Auckland",
         "prefilled": true,
         "kind": "first_result"
       },
       {
         "id": "oneroof",
         "label": "OneRoof",
-        "url": "https://duckduckgo.com/?q=%5Csite%3Aoneroof.co.nz+%221%2F15+Lyttelton+Avenue%22+Forrest+Hill+Auckland",
+        "url": "https://duckduckgo.com/?q=%5Csite%3Aoneroof.co.nz+%221%2F15+Example+Avenue%22+Example+Hill+Auckland",
         "prefilled": true,
         "kind": "first_result"
       },
       {
         "id": "council_valuation",
         "label": "Auckland Council property search",
-        "url": "https://www.aucklandcouncil.govt.nz/en/property-rates-valuations/find-property-rates-valuation/12340844384.html",
+        "url": "https://www.aucklandcouncil.govt.nz/en/property-rates-valuations/find-property-rates-valuation/12300000002.html",
         "prefilled": true,
         "kind": "direct"
       },
@@ -300,7 +300,7 @@
       {
         "id": "council_geomaps",
         "label": "Auckland Council GeoMaps (zoning, pipes and all council layers)",
-        "url": "https://geomapspublic.aucklandcouncil.govt.nz/viewer/index.html?task=select&entity=rateacckey&values=12340844384",
+        "url": "https://geomapspublic.aucklandcouncil.govt.nz/viewer/index.html?task=select&entity=rateacckey&values=12300000002",
         "prefilled": true,
         "kind": "direct"
       },

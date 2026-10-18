@@ -9,6 +9,7 @@ rewords these facts into a short summary and answers follow-up questions in the 
 summary sentence that states a fact is checked against the sources it cites and links to them.
 
 **Live demo: https://web-380630050242.australia-southeast1.run.app**
+<!-- Demo video: add the public link here -->
 
 It is information only, not financial, legal or insurance advice. It does not rate risk, and it does not replace a
 LIM (Land Information Memorandum) report, a building inspection or advice from your lawyer, lender or insurer.
@@ -41,9 +42,8 @@ Data flow for one address:
    with plain code, and selects which knowledge-base items apply. rules-api never calls a language model.
 3. **report-api** takes the three documents (property context, user inputs, rules output) and produces the summary,
    next steps and follow-up answers (next section).
-4. A Cloud Run **job**, `kb-refresh`, re-checks knowledge-base quotes against their source pages. It is run by hand;
-   the weekly schedule described in `DEPLOY.md` (section 10) is not set up yet. Bank rates are entered by hand (see
-   Data sources).
+4. A Cloud Run **job**, `kb-refresh`, re-checks knowledge-base quotes against their source pages. It is currently
+   run manually. Bank rates are entered by hand (see Data sources).
 
 web is the only public service. property-api, rules-api and report-api are private Cloud Run services; callers use
 Google ID tokens.
@@ -166,7 +166,7 @@ For the page, run property-api and web as in `services/web/README.md` (needs a f
 ## Test
 
 ```bash
-make test    # runs four suites: test-b (rules-api, both jobs, kb), test-property-api, test-web, test-report-api
+make test    # runs five suites: test-b (rules-api, both jobs, kb), test-property-api, test-web, test-report-api, test-relay
 ```
 
 property-api and web tests replay stored real responses and need no network or key. The report-api golden-case
@@ -233,4 +233,18 @@ section 11).
 
 ## Licence
 
-To be decided by the team.
+The source code in this repository is released under the MIT License (`LICENSE`). It covers our code only;
+third-party content keeps its own terms:
+
+- **Knowledge-base quotes** in `kb/seed/` are quoted from their publishers. Each item's `licence` field and
+  `kb/seed/sources.json` give the terms: Real Estate Authority (settled.govt.nz), Reserve Bank of New Zealand,
+  Kāinga Ora, MBIE (unittitles.govt.nz), Auckland Council and the Natural Hazards Commission
+  (naturalhazards.govt.nz, CC BY-NC 4.0).
+- **Test fixtures** (`services/*/tests/fixtures/`, `services/property-api/fixtures/`, `services/report-api/fixtures/`)
+  are stored responses from LINZ (CC BY 4.0) and from Auckland Council open data, GeoMaps and property pages, kept so
+  the tests run offline. In `services/report-api/fixtures/inputs/`, the addresses and property identifiers of private
+  homes are fictional. No names are stored.
+- **Map:** LINZ Basemaps aerial imagery (CC BY 4.0) and OpenStreetMap tiles (© OpenStreetMap contributors), credited
+  on the map. Leaflet 1.9.4 (BSD 2-Clause) is loaded from unpkg, not copied into this repository.
+- **Fonts** in `services/web/app/static/fonts/` (Figtree, DM Mono, Caveat) are under the SIL Open Font License 1.1;
+  the licence texts are next to the font files.

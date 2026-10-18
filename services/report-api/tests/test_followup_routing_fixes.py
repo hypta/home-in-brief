@@ -43,7 +43,7 @@ def draft_of(case, source_id):
 
 # ---- A. the search button and reworded advice -------------------------------------------------------------------------
 def test_the_search_button_sends_the_fields_fixed_query_and_never_shows_a_verdict(monkeypatch):
-    # Codex's re-review case: case1 + search_field=year_built + "Should I buy this house?"
+    # Re-review case: case1 + search_field=year_built + "Should I buy this house?"
     b = body("case1") | {"search_field": "year_built"}
     out, fake = run(monkeypatch, "Should I buy this house?", cls(), b=b, search_text=ADVICE_WEB)
     assert fake.searches >= 1
@@ -138,7 +138,7 @@ def test_an_instruction_in_the_history_is_never_promoted_to_the_question(monkeyp
 
 
 def test_a_reaction_to_a_searched_answer_is_searched_even_when_a_fact_could_be_named(monkeypatch):
-    # Codex's case: a valid LIM next-step fact would have been the reply; the earlier answer was a search answer
+    # Review case: a valid LIM next-step fact would have been the reply; the earlier answer was a search answer
     lim = draft_of("case1", "kb_lim_next_step")
     assert lim
     valid = {"answered": True, "answer": [{"text": "x", "fact_ids": ["F9"]}], "links": []}

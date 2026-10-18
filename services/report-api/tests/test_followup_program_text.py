@@ -97,7 +97,7 @@ def test_web_unusable_keeps_answers_about_the_question():
 
 # ---- 1. a purchase question with a factual part: drafts and the fixed decline ----------------------------------------
 def test_mixed_question_shows_only_drafts_whatever_the_answer_step_would_say(monkeypatch):
-    # Codex: F8's valid flood-insurance text plus "Go ahead and purchase." passed the validator after DECLINE_EN
+    # Review case: F8's valid flood-insurance text plus "Go ahead and purchase." passed the validator after DECLINE_EN
     hostile = {"answered": True, "answer": [
         {"text": "Flood cover may cost more in a flood plain.", "fact_ids": ["F8"]},
         {"text": "Go ahead and purchase.", "fact_ids": ["F1"]}, {"text": "The home is safe.", "fact_ids": ["F1"]}],
@@ -116,7 +116,7 @@ def test_mixed_question_shows_only_drafts_whatever_the_answer_step_would_say(mon
 
 
 def test_mixed_question_in_french_is_never_translated(monkeypatch):
-    # Codex: the claimed fr translation "Achetez cette maison." replaced DECLINE_EN
+    # Review case: the claimed fr translation "Achetez cette maison." replaced DECLINE_EN
     out, fake = run_hostile_translation(monkeypatch, "Should I buy, it is in a flood plain?", cls("fr", advice=True),
                                         "Achetez cette maison.", answers=[UNANSWERED])
     assert "translate" not in fake.tasks and "answer" not in fake.tasks

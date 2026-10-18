@@ -1,6 +1,6 @@
 # Manual check list for knowledge-base sources
 
-The weekly `kb-refresh` job only fetches sources whose `tos_status` in `kb/seed/sources.json`
+The `kb-refresh` job (currently run manually) only fetches sources whose `tos_status` in `kb/seed/sources.json`
 is `allowed`. For every other source the job makes **no request** and records
 `manual_check_required` in the item's `last_check`. A person must open the page and confirm the
 quote. Terms were reviewed on 2026-10-03 (not legal advice; some terms were read from search

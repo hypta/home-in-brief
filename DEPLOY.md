@@ -11,7 +11,7 @@ All services and jobs share this one repo; the submission is a single GitHub lin
 | `services/rules-api/` | private Cloud Run service (section 8) |
 | `services/report-api/` | private Cloud Run service: summary and follow-up answers with Gemini (section 8d) |
 | `jobs/rates-refresh/` | Cloud Run job; deployed but not scheduled (section 10), rates maintained by hand (`RATES_UPDATE.md`) |
-| `jobs/kb-refresh/` | Cloud Run job, weekly |
+| `jobs/kb-refresh/` | Cloud Run job, currently run manually |
 | `shared/`, `kb/`, `data/` | common code, knowledge base, seed data |
 | `scripts/`, `api-requests/` | seed, validation, smoke-test and evaluation scripts; ready-made API requests |
 | `.github/` | deploy workflow (`workflows/deploy.yml`) and its target list (`deploy/targets.json`) |
@@ -459,13 +459,14 @@ Firestore documents (Native mode, default database; created on first use):
 | `protection/control` | `disabled` (bool, set by hand), `event_calls` (int, whole judging period), `event_searches` (int), `updated_at` |
 | `protection/daily-YYYY-MM-DD` | `date`, `calls` (int; Search calls included), `searches` (int), `updated_at`. One per **UTC** day |
 
-Env (the deploy sets the values in `targets.json`; the code defaults are the same):
+Env (the deploy sets the values in `targets.json`; the code defaults are the same, except `GEMINI_DAILY_CALLS`,
+`SEARCH_DAILY_CALLS` and `GEMINI_EVENT_CALLS`, which `targets.json` sets higher for the judging period):
 
 | Env | Default | Meaning |
 |---|---|---|
 | `PROTECTION_BACKEND` | `firestore` on Cloud Run, else `memory` | `firestore`, `memory` (one process: local runs and tests) or `off` |
 | `GEMINI_DAILY_CALLS` | `100` | Gemini calls per UTC day, all instances together (Search included) |
-| `SEARCH_DAILY_CALLS` | `30` | Google Search calls per UTC day (inside the 100). Used up: only the search is skipped |
+| `SEARCH_DAILY_CALLS` | `30` | Google Search calls per UTC day (inside `GEMINI_DAILY_CALLS`). Used up: only the search is skipped |
 | `GEMINI_EVENT_CALLS` | `3000` | Gemini calls in total (`protection/control.event_calls`); daily resets do not renew it |
 | `GENERATION_SLOTS` | `2` | /v1/report and /v1/followup requests at once per instance; more: 503 `busy`, `Retry-After: 5` |
 | `GEMINI_MAX_OUTPUT_TOKENS` | `2048` | `max_output_tokens` on every call (thinking tokens included) |
@@ -534,7 +535,7 @@ Deployed (created or updated) by the workflow, never executed by it:
   needed if a bank is switched to `render: browser`.
 - **kb-refresh**: `--memory=512Mi --max-retries=1 --task-timeout=15m`, `DATA_BACKEND=firestore`. It needs no Gemini
   secret (it reads `DATA_BACKEND`; `KB_ROOT`, `KB_SEED_DIR` and `OUT_DIR` are optional overrides for local runs) and no
-  browser. Scheduled weekly (section 10).
+  browser. Currently run manually.
 
 Smoke test once by hand after the first deploy, then check the Firestore `job_runs` collection (with no bank marked
 `tos_status=allowed`, rates-refresh fetches nothing, writes no snapshot and records `skipped_by_policy` in `job_runs`):

@@ -132,7 +132,7 @@ def test_missing_qualifier_attribution_and_order_are_blocked():
 
 
 def test_the_lending_definitions_are_kept_whole():
-    # live, 44A Liverpool Street: the rewrite dropped "of the price" and read as garbled; it falls back to the draft
+    # live, at a real address: the rewrite dropped "of the price" and read as garbled; it falls back to the draft
     assert V.MISSING_QUALIFIER in check(
         "case3", "Your loan is high-LVR borrowing over {{F3.lvr_threshold}} and high-DTI debt over "
                  "{{F3.dti_multiple}} times income, which the Reserve Bank limits.", ["F3"]).fails

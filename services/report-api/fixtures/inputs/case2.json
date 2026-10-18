@@ -1,6 +1,6 @@
 {
   "case_id": "case2",
-  "address_label": "1 Marine Parade, Cockle Bay, Auckland",
+  "address_label": "1 Example Parade, Example Bay, Auckland",
   "property_context": {
     "property": {
       "cv": {
@@ -258,30 +258,30 @@
       "reason": null,
       "source_id": "linz_addresses",
       "input": null,
-      "matched": "1 Marine Parade, Cockle Bay, Auckland",
-      "linz_address_id": 1267939,
-      "lat": -36.89229395,
-      "lng": 174.9400661667
+      "matched": "1 Example Parade, Example Bay, Auckland",
+      "linz_address_id": 9900001,
+      "lat": -36.89,
+      "lng": 174.94
     },
     "parcel": {
       "status": "found",
       "reason": null,
       "source_id": "linz_parcels",
-      "parcel_id": 5117334,
+      "parcel_id": 9900011,
       "spatial_method": "parcel"
     },
     "links": [
       {
         "id": "homes",
         "label": "Homes.co.nz",
-        "url": "https://duckduckgo.com/?q=%5Csite%3Ahomes.co.nz+%221+Marine+Parade%22+Cockle+Bay+Auckland",
+        "url": "https://duckduckgo.com/?q=%5Csite%3Ahomes.co.nz+%221+Example+Parade%22+Example+Bay+Auckland",
         "prefilled": true,
         "kind": "first_result"
       },
       {
         "id": "oneroof",
         "label": "OneRoof",
-        "url": "https://duckduckgo.com/?q=%5Csite%3Aoneroof.co.nz+%221+Marine+Parade%22+Cockle+Bay+Auckland",
+        "url": "https://duckduckgo.com/?q=%5Csite%3Aoneroof.co.nz+%221+Example+Parade%22+Example+Bay+Auckland",
         "prefilled": true,
         "kind": "first_result"
       },

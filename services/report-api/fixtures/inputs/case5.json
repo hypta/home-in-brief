@@ -1,6 +1,6 @@
 {
   "case_id": "case5",
-  "address_label": "3/9 John Jennings Drive, Oteha, Auckland",
+  "address_label": "3/9 Example Drive, Example Park, Auckland",
   "property_context": {
     "property": {
       "cv": {
@@ -102,19 +102,19 @@
         "status": "found",
         "reason": null,
         "source_id": "ac_valuation",
-        "value": "PU L DP 191608, Aux 12 DP 191608, Aux 31 DP 191608, Aux 32 DP 191608"
+        "value": "PU L DP 999003, Aux 12 DP 999003, Aux 31 DP 999003, Aux 32 DP 999003"
       },
       "record_of_title": {
         "status": "found",
         "reason": null,
         "source_id": "ac_valuation",
-        "value": "NA121A/531"
+        "value": "NA999A/2"
       },
       "valuation_number": {
         "status": "found",
         "reason": null,
         "source_id": "ac_valuation",
-        "value": "31900-00000000180-L"
+        "value": "99999-00000000002-L"
       },
       "local_board": {
         "status": "found",
@@ -255,37 +255,37 @@
       "reason": null,
       "source_id": "linz_addresses",
       "input": null,
-      "matched": "3/9 John Jennings Drive, Oteha, Auckland",
-      "linz_address_id": 1051178,
-      "lat": -36.7143282667,
-      "lng": 174.7201069833
+      "matched": "3/9 Example Drive, Example Park, Auckland",
+      "linz_address_id": 9900003,
+      "lat": -36.71,
+      "lng": 174.72
     },
     "parcel": {
       "status": "found",
       "reason": null,
       "source_id": "linz_parcels",
-      "parcel_id": 4733787,
+      "parcel_id": 9900013,
       "spatial_method": "parcel"
     },
     "links": [
       {
         "id": "homes",
         "label": "Homes.co.nz",
-        "url": "https://duckduckgo.com/?q=%5Csite%3Ahomes.co.nz+%223%2F9+John+Jennings+Drive%22+Oteha+Auckland",
+        "url": "https://duckduckgo.com/?q=%5Csite%3Ahomes.co.nz+%223%2F9+Example+Drive%22+Example Park+Auckland",
         "prefilled": true,
         "kind": "first_result"
       },
       {
         "id": "oneroof",
         "label": "OneRoof",
-        "url": "https://duckduckgo.com/?q=%5Csite%3Aoneroof.co.nz+%223%2F9+John+Jennings+Drive%22+Oteha+Auckland",
+        "url": "https://duckduckgo.com/?q=%5Csite%3Aoneroof.co.nz+%223%2F9+Example+Drive%22+Example Park+Auckland",
         "prefilled": true,
         "kind": "first_result"
       },
       {
         "id": "council_valuation",
         "label": "Auckland Council property search",
-        "url": "https://www.aucklandcouncil.govt.nz/en/property-rates-valuations/find-property-rates-valuation/12341217618.html",
+        "url": "https://www.aucklandcouncil.govt.nz/en/property-rates-valuations/find-property-rates-valuation/12300000003.html",
         "prefilled": true,
         "kind": "direct"
       },
@@ -299,7 +299,7 @@
       {
         "id": "council_geomaps",
         "label": "Auckland Council GeoMaps (zoning, pipes and all council layers)",
-        "url": "https://geomapspublic.aucklandcouncil.govt.nz/viewer/index.html?task=select&entity=rateacckey&values=12341217618",
+        "url": "https://geomapspublic.aucklandcouncil.govt.nz/viewer/index.html?task=select&entity=rateacckey&values=12300000003",
         "prefilled": true,
         "kind": "direct"
       },
