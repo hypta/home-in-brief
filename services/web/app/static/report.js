@@ -417,6 +417,10 @@ function thread({ctx, rules, rulesError, kb: onPage, thread: turns}) {
   // in the conversation a link's label loses its own bracketed description: the line already says what the link opens
   const linked = a => (a.links || []).map(id => ctx.links.find(l => l.id === id)).filter(Boolean)
     .map(l => linkItem({...l, label: l.label.replace(/\s*\([^)]*\)$/, "")}));
+  // An answer that cites a hazard layer the council does not show, or one that could not be checked, ends with the
+  // page's caveat, as the hazards section does: "not shown" is never read as "no risk" (CODES.md).
+  const unseen = new Set(ctx.hazards.filter(h => h.status === "none" || unchecked(h)).map(h => h.source_id));
+  const caveat = a => a.answer.some(s => s.source_ids.some(id => unseen.has(id))) ? `<p class="muted rec">${NO_RISK_CAVEAT}</p>` : "";
   const answer = ({answer: a, error: err, added, kb}, items = byId(kb || onPage || [])) => err ? (err.code === "validation_failed"
       ? `<p class="problem">No answer sentence passed the check against its sources, so none is shown. Try asking in a different way.</p>`
       : `<p class="problem">${unavailable("answer", err)}</p><button type="button" id="retry-answer">Try again</button>`)
@@ -424,6 +428,7 @@ function thread({ctx, rules, rulesError, kb: onPage, thread: turns}) {
     // a search answer stays whole, with its sources and its caveat; what the program says about it comes after
     : (a.web ? webAnswer(a.web, linked(a)) : "")
       + (a.answer.length ? `<div class="say"${a.language ? ` lang="${esc(a.language)}"` : ""}>${a.answer.map(s => checked(s, items)).join("")}</div>` : "")
+      + caveat(a)
       + (a.web ? "" : list(linked(a)))
       + ((a.warnings || []).includes("generation_degraded") ? `<p class="muted rec">The model was not used for this answer. These sentences are the program's own.</p>` : "")
       // a search that ran and found nothing is said plainly; only one that could not run is worth trying again
